@@ -3,6 +3,7 @@ import os
 import numpy as np
 import multiprocessing
 from multiprocessing import Process, Queue
+from wildhunt.surveys import imagingsurvey
 from IPython import embed
 
 # Use single cores (forcing it for numpy operations)
@@ -16,40 +17,36 @@ os.environ["MKL_NUM_THREADS"] = "1"
 # GPS - 102, GCS - 103, DXS - 104, UDS - 105
 numCoords=10000  # number of coords in each bach (do not exceed 20000)
 
-class VsaWsa(object):
+class VsaWsa(imagingsurvey.ImagingSurvey):
 
-    def __init__(self, bands, fov, name, survey):
+    def __init__(self, bands, fov, name, verbosity=1):
         """
         :param bands:
         :param fov:
         :param name:
         """
-        self.name = name
-        self.bands = bands
-        self.fov = fov
-        self.survey = survey
-        if self.survey[0] == 'U':
+        if name[0] == 'U':
             archive='WSA'
-            if self.survey[0:3] == 'UKI':
-                if self.survey[-3::] == 'LAS': programID='101'
-                if self.survey[-3::] == 'GPS': programID = '102'
-                if self.survey[-3::] == 'GCS': programID = '103'
-                if self.survey[-3::] == 'DXS': programID = '104'
-                if self.survey[-3::] == 'UDS': programID = '105'
-                self.survey=self.survey[:-3]
-            if self.survey[0:3] == 'UHS': programID = '107'
+            if name[0:3] == 'UKI':
+                if name[-3::] == 'LAS': programID='101'
+                if name[-3::] == 'GPS': programID = '102'
+                if name[-3::] == 'GCS': programID = '103'
+                if name[-3::] == 'DXS': programID = '104'
+                if name[-3::] == 'UDS': programID = '105'
+                name=name[:-3]
+            if name[0:3] == 'UHS': programID = '107'
         else:
             archive='VSA'
-            if self.survey[0:3]=='VHS': programID='110'
-            if self.survey[0:3] == 'VVV': programID = '120'
-            if self.survey[0:3] == 'VMC': programID = '130'
-            if self.survey[0:3] == 'VIK': programID = '140'
-            if self.survey[0:3] == 'VID': programID = '150'
+            if name[0:3]=='VHS': programID='110'
+            if name[0:3] == 'VVV': programID = '120'
+            if name[0:3] == 'VMC': programID = '130'
+            if name[0:3] == 'VIK': programID = '140'
+            if name[0:3] == 'VID': programID = '150'
 
         self.archive=archive
         self.programID=programID
 
-        super(VsaWsa, self).__init__(bands, fov, survey)
+        super(VsaWsa, self).__init__(bands, fov, name, verbosity)
 
     def download_images(self, ra, dec, image_folder_path, n_jobs):
         """
@@ -75,7 +72,8 @@ class VsaWsa(object):
         '''
 
         # Survey parameters
-        survey_param = {'archive': self.archive, 'database': self.survey, 'programmeID': self.programID, 'bands': self.bands,
+        survey_param = {'archive': self.archive, 'database': self.name, 'programmeID': self.programID,
+                        'bands': self.bands,
                         'idPresent': 'noID', 'userX': '0.5', 'email': '', 'email1': '', 'crossHair': 'n',
                         'mode': 'wget'}
         boundary = "--FILEUPLOAD"  # separator
@@ -124,7 +122,7 @@ class VsaWsa(object):
             print(boundary + '--', file=up)
             up.close()
 
-            if archive=='WSA':
+            if self.archive=='WSA':
                 os.system(
                     "wget --keep-session-cookies --header=\"Content-Type: multipart/form-data;  boundary=FILEUPLOAD\""
                       " --post-file {} http://wsa.roe.ac.uk:8080/wsa/tmpMultiGetImage -O {}".format(uploadFile,
@@ -158,7 +156,7 @@ class VsaWsa(object):
                         print('Skip download')
                     else:
                         band_url = line.index('band=') + len('band=')
-                        name_url = name + '.' + line[band_url] + '.fits.gz'
+                        name_url = name + '.' + line[band_url] + '.fits'
                         sh.write("wget \"{}\" -O {}\n".format(fileURL, name_url))
             out.close()
             sh.close()
@@ -195,14 +193,14 @@ class VsaWsa(object):
             work_queue.put([ii])
 
         for w in range(n_process):
-            p = Process(target=self.download_images, args=(work_queue,))
+            p = Process(target=self.download, args=(work_queue,))
             processes.append(p)
             p.start()
 
         for p in processes:
             p.join()
 
-    def download_images(self, work_queue):
+    def download(self, work_queue):
         '''
         Execute the *_wget.sh files to download the images
         '''
@@ -237,7 +235,7 @@ class VsaWsa(object):
             work_queue.put([ra[ii], dec[ii]])
 
         for w in range(n_process):
-            p = Process(target=unzip_images, args=(work_queue,))
+            p = Process(target=self.unzip_images, args=(work_queue,))
             processes.append(p)
             p.start()
 

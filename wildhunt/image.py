@@ -7,7 +7,7 @@ Main module for downloading and manipulating image data.
 
 
 
-from wildhunt.surveys import panstarrs
+from wildhunt.surveys import panstarrs, vsa_wsa
 
 
 def retrieve_survey(survey_name, bands, fov):
@@ -17,6 +17,10 @@ def retrieve_survey(survey_name, bands, fov):
     if survey_name == 'ps1':
 
         survey = panstarrs.Panstarrs(bands, fov)
+
+    if survey_name[:3] in ['VHS','VVV','VMC','VIK','VID','UKI','UHS']:
+
+        survey = vsa_wsa.VsaWsa(bands, fov, survey_name)
 
 
     if survey == None:
