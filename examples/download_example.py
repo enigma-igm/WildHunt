@@ -15,4 +15,4 @@ image.get_images(df['RA'].values, df['DEC'].values, 'cutouts', survey_dict)
 survey_dict = [{'survey': 'UKIDSSDR11PLUSLAS', 'bands': ['J', 'H'], 'fov':50},
               ]
 
-image.get_images(df['RA'].values, df['DEC'].values, 'cutouts', survey_dict)
+image.get_images(df['RA'].values, df['DEC'].values, 'cutouts', survey_dict, n_jobs=5)

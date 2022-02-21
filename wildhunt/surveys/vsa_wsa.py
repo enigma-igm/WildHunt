@@ -6,16 +6,9 @@ from multiprocessing import Process, Queue
 from wildhunt.surveys import imagingsurvey
 from IPython import embed
 
-# Use single cores (forcing it for numpy operations)
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-
 # List of programmeID: VHS - 110, VVV - 120, VMC - 130, VIKING - 140, VIDEO - 150, UHS - 107, UKIDSS: LAS - 101,
 # GPS - 102, GCS - 103, DXS - 104, UDS - 105
-numCoords=10000  # number of coords in each bach (do not exceed 20000)
+numCoords=10#000  # number of coords in each bach (do not exceed 20000)
 
 class VsaWsa(imagingsurvey.ImagingSurvey):
 
@@ -56,12 +49,18 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
         :param n_jobs:
         :return:
         """
+        # Check if download directory exists. If not, create it
+        if not os.path.exists(image_folder_path):
+            os.makedirs(image_folder_path)
 
-        self.download_links(ra,dec)
+        self.download_links(ra,dec,image_folder_path)
+        self.download_parallel(ra, n_jobs)
+        os.system('rm *_wget.sh')
+        os.system('rm out_*')
+        os.system('rm upload_*')
+        os.system('rm finished_*')
 
-        raise NotImplementedError
-
-    def download_links(self, ra, dec):
+    def download_links(self, ra, dec, path):
         '''
         Download the links to the images and produce all the *_wget.sh files
         :param ra:
@@ -157,7 +156,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                     else:
                         band_url = line.index('band=') + len('band=')
                         name_url = name + '.' + line[band_url] + '.fits'
-                        sh.write("wget \"{}\" -O {}\n".format(fileURL, name_url))
+                        sh.write("wget \"{}\" -O {}/{}\n".format(fileURL, path, name_url))
             out.close()
             sh.close()
             print("Start sleep")
@@ -209,48 +208,6 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
             os.system("bash {}_wget.sh".format(str(nbatch + 1)))
             sh = open('{}_finished.txt'.format(str(nbatch + 1)), 'w')
             sh.close()
-
-    def gzip_parallel(self, ra, dec, n_process=1):
-        '''
-            Unzip images for several sources in parallel
-            Args:
-                coadd_id:
-                ra_id:
-                dec_id:
-                n_process
-        '''
-        n_file = np.size(ra)
-        n_cpu = multiprocessing.cpu_count()
-
-        if n_process > n_cpu:
-            n_process = n_cpu
-
-        if n_process > n_file:
-            n_process = n_file
-
-        work_queue = Queue()
-        processes = []
-
-        for ii in range(n_file):
-            work_queue.put([ra[ii], dec[ii]])
-
-        for w in range(n_process):
-            p = Process(target=self.unzip_images, args=(work_queue,))
-            processes.append(p)
-            p.start()
-
-        for p in processes:
-            p.join()
-
-    def unzip_images(self, work_queue):
-        while not work_queue.empty():
-            ra, dec = work_queue.get()
-            name, namebrief = hms2name(ra, dec)
-            print("Unzipping {} source".format(name))
-            os.system("gzip -d -f {}.Y.fits.gz".format(name))
-            os.system("gzip -d -f {}.H.fits.gz".format(name))
-            os.system("gzip -d -f {}.K.fits.gz".format(name))
-
 
 def deg2hms(ra, dec):
     rah = np.floor(ra / 15.0)
