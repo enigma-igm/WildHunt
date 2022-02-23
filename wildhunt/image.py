@@ -18,7 +18,7 @@ def retrieve_survey(survey_name, bands, fov):
 
         survey = panstarrs.Panstarrs(bands, fov)
 
-    if survey_name[:3] in ['VHS','VVV','VMC','VIK','VID','UKI','UHS']:
+    if survey_name[:3] in ['VHS', 'VVV', 'VMC', 'VIK', 'VID', 'UKI', 'UHS']:
 
         survey = vsa_wsa.VsaWsa(bands, fov, survey_name)
 

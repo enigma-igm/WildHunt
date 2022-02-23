@@ -1,10 +1,12 @@
+#!/usr/bin/env python
+
 import time
 import os
 import numpy as np
-import multiprocessing
-from multiprocessing import Process, Queue
+
 from wildhunt.surveys import imagingsurvey
 from IPython import embed
+
 
 # List of programmeID: VHS - 110, VVV - 120, VMC - 130, VIKING - 140, VIDEO - 150, UHS - 107, UKIDSS: LAS - 101,
 # GPS - 102, GCS - 103, DXS - 104, UDS - 105
@@ -19,7 +21,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
         :param name:
         """
         if name[0] == 'U':
-            archive='WSA'
+            archive = 'WSA'
             if name[0:3] == 'UKI':
                 if name[-3::] == 'LAS': programID='101'
                 if name[-3::] == 'GPS': programID = '102'
@@ -29,8 +31,8 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                 name=name[:-3]
             if name[0:3] == 'UHS': programID = '107'
         else:
-            archive='VSA'
-            if name[0:3]=='VHS': programID='110'
+            archive = 'VSA'
+            if name[0:3] == 'VHS': programID='110'
             if name[0:3] == 'VVV': programID = '120'
             if name[0:3] == 'VMC': programID = '130'
             if name[0:3] == 'VIK': programID = '140'
@@ -41,7 +43,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
 
         super(VsaWsa, self).__init__(bands, fov, name, verbosity)
 
-    def download_images(self, ra, dec, image_folder_path, n_jobs):
+    def download_images(self, ra, dec, image_folder_path, n_jobs=1):
         """
         :param ra:
         :param dec:
@@ -49,18 +51,33 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
         :param n_jobs:
         :return:
         """
-        # Check if download directory exists. If not, create it
-        if not os.path.exists(image_folder_path):
-            os.makedirs(image_folder_path)
 
-        self.download_links(ra,dec,image_folder_path)
-        self.download_parallel(ra, n_jobs)
-        os.system('rm *_wget.sh')
-        os.system('rm out_*')
-        os.system('rm upload_*')
-        os.system('rm finished_*')
+        self.survey_setup(ra, dec, image_folder_path, epoch='J', n_jobs=n_jobs)
 
-    def download_links(self, ra, dec, path):
+        if len(ra) == len(dec) and len(ra) > 0:
+
+            self.retrieve_image_url_list()
+
+            self.check_for_existing_images_before_download()
+
+            if n_jobs > 1:
+                self.mp_download_image_from_url()
+            else:
+                for idx in self.download_table.index:
+                    image_name = self.download_table.loc[idx, 'image_name']
+                    url = self.download_table.loc[idx, 'url']
+                    self.download_image_from_url(url, image_name)
+
+            os.system('rm out_*')
+            os.system('rm upload_*')
+
+        else:
+
+            print('All images already exist.')
+            print('Downloading aborted.')
+
+
+    def retrieve_image_url_list(self):
         '''
         Download the links to the images and produce all the *_wget.sh files
         :param ra:
@@ -70,10 +87,16 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
         :return:
         '''
 
+        ra = self.source_table.loc[:, 'ra'].values
+        dec = self.source_table.loc[:, 'dec'].values
+        obj_names = self.source_table.loc[:,'obj_name'].values
+
         # Survey parameters
-        survey_param = {'archive': self.archive, 'database': self.name, 'programmeID': self.programID,
+        survey_param = {'archive': self.archive, 'database': self.name,
+                        'programmeID': self.programID,
                         'bands': self.bands,
-                        'idPresent': 'noID', 'userX': '0.5', 'email': '', 'email1': '', 'crossHair': 'n',
+                        'idPresent': 'noID', 'userX': '0.5', 'email': '',
+                        'email1': '', 'crossHair': 'n',
                         'mode': 'wget'}
         boundary = "--FILEUPLOAD"  # separator
 
@@ -83,23 +106,28 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
             nbatch = 1
 
         loop = 0
+
         for i in range(nbatch):
+
             startID = numCoords * loop
             loop += 1
             uploadFile = "upload_" + str(loop) + ".txt"
             outFile = "out_" + str(loop) + ".txt"
             up = open(uploadFile, 'w+')
 
-            for j in survey_param:
-                if j == 'bands':
-                    for band in (survey_param[j]):
+            for param in survey_param:
+                if param == 'bands':
+                    for band in (survey_param[param]):
                         print(boundary, file=up)
-                        print('Content-Disposition: form-data; name=\"band\"\n', file=up)
+                        print('Content-Disposition: form-data; name=\"band\"\n',
+                              file=up)
                         print(band + ' ', file=up)
                 else:
                     print(boundary, file=up)
-                    print('Content-Disposition: form-data; name=\"{}\"\n'.format(j), file=up)
-                    print(str(survey_param[j]) + ' ', file=up)
+                    print(
+                        'Content-Disposition: form-data; name=\"{}\"\n'.format(
+                            param), file=up)
+                    print(str(survey_param[param]) + ' ', file=up)
             print(boundary, file=up)
             print('Content-Disposition: form-data; name=\"startID\"\n', file=up)
             print(str(startID) + ' ', file=up)
@@ -112,38 +140,51 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                 n = numCoords
             else:
                 n = len(ra) - startID
-            for j in range(n):
-                if dec[startID + j] >= 0:
-                    print('{:>15},{:>15}'.format('+' + str(ra[startID + j]), '+' + str(dec[startID + j])), file=up)
+            for jdx in range(n):
+                if dec[startID + jdx] >= 0:
+                    print('{:>15},{:>15}'.format('+' + str(ra[startID + jdx]),
+                                                 '+' + str(dec[startID + jdx])),
+                          file=up)
                 else:
-                    print('{:>15},{:>15}'.format('+' + str(ra[startID + j]), str(dec[startID + j])), file=up)
+                    print('{:>15},{:>15}'.format('+' + str(ra[startID + jdx]),
+                                                 str(dec[startID + jdx])),
+                          file=up)
+
             print('\n', file=up)
             print(boundary + '--', file=up)
+
             up.close()
 
-            if self.archive=='WSA':
+            if self.archive == 'WSA':
+
                 os.system(
                     "wget --keep-session-cookies --header=\"Content-Type: multipart/form-data;  boundary=FILEUPLOAD\""
-                      " --post-file {} http://wsa.roe.ac.uk:8080/wsa/tmpMultiGetImage -O {}".format(uploadFile,
-                                                                                                    outFile))
+                    " --post-file {} http://wsa.roe.ac.uk:8080/wsa/tmpMultiGetImage -O {}".format(
+                        uploadFile,
+                        outFile))
+            elif self.archive == 'VSA':
+                os.system(
+                    "wget --keep-session-cookies --header=\"Content-Type: multipart/form-data;  boundary=FILEUPLOAD\""
+                    " --post-file {} http://horus.roe.ac.uk:8080/vdfs/MultiGetImage -O {}".format(
+                        uploadFile,
+                        outFile))
             else:
-                os.system(
-                    "wget --keep-session-cookies --header=\"Content-Type: multipart/form-data;  boundary=FILEUPLOAD\""
-                    " --post-file {} http://horus.roe.ac.uk:8080/vdfs/MultiGetImage -O {}".format(uploadFile,
-                                                                                                  outFile))
+                raise NotImplementedError('Specified archive {} not '
+                                          'understood. Can be "VSA" or '
+                                          '"WSA".'.format(self.archive))
 
             out = open(outFile, 'r')
-            Lines = out.readlines()
 
-            dlFile = str(loop) + '_wget.sh'
-            sh = open(dlFile, 'w')
+            lines = out.readlines()
 
             j = 0
             n_bands = 1
-            for line in Lines:
+            for line in lines:
                 record = '--http'
+
                 if (record in line):
-                    name, namebrief = hms2name(ra[startID + j], dec[startID + j])  # Name of the images to download
+
+                    obj_name = obj_names[startID + j]
                     if n_bands == len(survey_param['bands']):
                         j += 1
                         n_bands = 0
@@ -155,100 +196,17 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                         print('Skip download')
                     else:
                         band_url = line.index('band=') + len('band=')
-                        name_url = name + '.' + line[band_url] + '.fits'
-                        sh.write("wget \"{}\" -O {}/{}\n".format(fileURL, path, name_url))
+                        # Create image name
+                        image_name = obj_name + "_" + self.name + "_" + \
+                                     line[band_url] + "_fov" + '{:d}'.format(self.fov)
+
+                        self.download_table = self.download_table.append(
+                            {'image_name': image_name,
+                             'url': fileURL},
+                            ignore_index=True)
+
             out.close()
-            sh.close()
+
             print("Start sleep")
             time.sleep(5)
             print("End sleep")
-
-    def download_parallel(self, ra, n_process=1):
-        '''
-            Download many sources in parallel
-            Args:
-                coadd_id:
-                ra_id:
-                dec_id:
-                n_process
-        '''
-        if np.size(ra) > numCoords:
-            nbatch = int(np.ceil(np.size(ra) / numCoords))
-        else:
-            nbatch = 1
-        n_file = nbatch
-        n_cpu = multiprocessing.cpu_count()
-
-        if n_process > n_cpu:
-            n_process = n_cpu
-
-        if n_process > n_file:
-            n_process = n_file
-
-        work_queue = Queue()
-        processes = []
-
-        for ii in range(n_file):
-            work_queue.put([ii])
-
-        for w in range(n_process):
-            p = Process(target=self.download, args=(work_queue,))
-            processes.append(p)
-            p.start()
-
-        for p in processes:
-            p.join()
-
-    def download(self, work_queue):
-        '''
-        Execute the *_wget.sh files to download the images
-        '''
-        while not work_queue.empty():
-            nbatch = work_queue.get()[0]
-            os.system("bash {}_wget.sh".format(str(nbatch + 1)))
-            sh = open('{}_finished.txt'.format(str(nbatch + 1)), 'w')
-            sh.close()
-
-def deg2hms(ra, dec):
-    rah = np.floor(ra / 15.0)
-    ram = np.floor((ra / 15.0 - rah) * 60.0)
-    ras = ((ra / 15.0 - rah) * 60.0 - ram) * 60.0
-    if dec < 0:
-        dec = np.abs(dec)
-        decd = 0 - np.floor(dec)
-        decm = np.floor((dec + decd) * 60.0)
-        decs = ((dec + decd) * 60.0 - decm) * 60.0
-    else:
-        decd = np.floor(dec)
-        decm = np.floor((dec - decd) * 60.0)
-        decs = ((dec - decd) * 60.0 - decm) * 60.0
-    ra = [rah, ram, ras]
-    dec = [decd, decm, decs]
-    return ra, dec
-
-def hms2name(ra, dec):
-    rahms, decdms = deg2hms(ra, dec)
-    rahd = int(rahms[0])
-    ramd = int(rahms[1])
-    rasd = round(rahms[2], 3)
-
-    rastr = ('{rahs:02d}''{rams:02d}''{rass:6.3f}')
-    ras = rastr.format(rahs=rahd, rams=ramd, rass=rasd)
-    rass = ras.replace(' ', '0')
-
-    dechd = int(np.abs(decdms[0]))
-    decmd = int(decdms[1])
-    decsd = round(decdms[2], 3)
-
-    decstr = ('{dechs:02d}''{decms:02d}''{decss:6.3f}')
-    decs = decstr.format(dechs=dechd, decms=decmd, decss=decsd)
-    decss = decs.replace(' ', '0')
-    if dec < 0:
-        decss = '-' + decss
-    else:
-        decss = '+' + decss
-
-    name = 'J' + rass + decss
-    namebrief = name[0:5] + name[11:-6]
-    return name, namebrief
-

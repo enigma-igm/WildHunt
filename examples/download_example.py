@@ -7,12 +7,12 @@ from wildhunt import image
 
 df = pd.read_csv('UKIDSS_sources.csv')
 
-survey_dict = [{'survey': 'ps1', 'bands': ['g', 'r'], 'fov':50},
-              ]
+survey_dict = [
+               {'survey': 'ps1', 'bands': ['g', 'r', 'i', 'z', 'y'], 'fov':50},
+               {'survey': 'UKIDSSDR11PLUSLAS', 'bands': ['Y', 'J', 'H', 'K'],
+                'fov':50}
+                ]
 
-image.get_images(df['RA'].values, df['DEC'].values, 'cutouts', survey_dict)
-
-survey_dict = [{'survey': 'UKIDSSDR11PLUSLAS', 'bands': ['J', 'H'], 'fov':50},
-              ]
-
-image.get_images(df['RA'].values, df['DEC'].values, 'cutouts', survey_dict, n_jobs=5)
+image.get_images(df['RA'].values[:20], df['DEC'].values[:20], 'cutouts',
+                 survey_dict,
+                 n_jobs=400)
