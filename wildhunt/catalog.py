@@ -60,11 +60,6 @@ astroquery_dict = {
                                'ra': 'ra', 'dec': 'dec',
                                'data_release': 'VIKINGDR5', 'mag_name': 'VHS_J',
                                'mag': 'jAperMag3', 'distance': 'distance'}
-    # ,
-    #                 'sdss': {'service': 'sdss', 'catalog': 'VIKING',
-    #                            'ra': 'ra', 'dec': 'dec',
-    #                            'data_release': 'VIKINGDR5', 'mag_name': 'VHS_J',
-    #                            'mag': 'jAperMag3', 'distance': 'distance'}
                   }
 
 datalab_offset_dict = {'des_dr1.main': {'ra': 'ra', 'dec': 'dec',
@@ -111,12 +106,11 @@ def query_region_astroquery(ra, dec, radius, service, catalog,
         result = Vsa.query_region(target_coord, radius=radius * u.arcsecond,
                                    programme_id=catalog, database=data_release)
     elif service == 'UKIDSS':
-
         result = Ukidss.query_region(target_coord, radius=radius * u.arcsecond,
                                    programme_id=catalog, database=data_release)
     else:
         raise KeyError('Astroquery class not recognized. Implemented classes '
-                       'are: Vizier, Irsa, VSA')
+                       'are: Vizier, Irsa, VSA, Ukidss')
 
     return result.to_pandas()
 
@@ -204,13 +198,6 @@ def get_astroquery_offset(target_name, target_ra, target_dec, radius, catalog,
         pos_angles = offset_coords.position_angle(target_coords).to(u.deg)
         separations = offset_coords.separation(target_coords).to(u.arcsecond)
         dra, ddec = offset_coords.spherical_offsets_to(target_coords)
-        # UNTIL HERE
-
-        if verbosity > 1:
-            print('Offset delta ra: {}'.format(dra))
-            print('Offset delta dec: {}'.format(ddec))
-            print('Offset separation: {}'.format(separations))
-            print('Offset position angle: {}'.format(pos_angles))
 
         offset_df.loc[:, 'separation'] = separations.value
         offset_df.loc[:, 'pos_angle'] = pos_angles.value

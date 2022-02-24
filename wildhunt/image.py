@@ -14,7 +14,7 @@ def retrieve_survey(survey_name, bands, fov):
 
     survey = None
 
-    if survey_name == 'ps1':
+    if survey_name == 'PS1':
 
         survey = panstarrs.Panstarrs(bands, fov)
 

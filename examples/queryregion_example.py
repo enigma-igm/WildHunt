@@ -32,4 +32,4 @@ t = cat.query_region_astroquery(ra, dec, radius, service, catalog,
 # for col in t.columns:
 #     print(col)
 
-print(t.shape)
+print(t)
