@@ -101,7 +101,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
         survey_param = {'archive': self.archive, 'database': self.database,
                         'programmeID': self.programID,
                         'bands': self.bands,
-                        'idPresent': 'noID', 'userX': '0.5', 'email': '',
+                        'idPresent': 'noID', 'userX': self.fov/60, 'email': '',
                         'email1': '', 'crossHair': 'n',
                         'mode': 'wget'}
         boundary = "--FILEUPLOAD"  # separator
