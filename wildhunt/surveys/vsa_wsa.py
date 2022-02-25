@@ -10,7 +10,7 @@ from IPython import embed
 
 # List of programmeID: VHS - 110, VVV - 120, VMC - 130, VIKING - 140, VIDEO - 150, UHS - 107, UKIDSS: LAS - 101,
 # GPS - 102, GCS - 103, DXS - 104, UDS - 105
-numCoords=10#000  # number of coords in each bach (do not exceed 20000)
+numCoords=10000  # number of coords in each bach (do not exceed 20000)
 
 class VsaWsa(imagingsurvey.ImagingSurvey):
 
@@ -20,6 +20,9 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
         :param fov:
         :param name:
         """
+
+        self.database = name
+
         if name[0] == 'U':
             archive = 'WSA'
             if name[0:3] == 'UKI':
@@ -28,7 +31,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                 if name[-3::] == 'GCS': programID = '103'
                 if name[-3::] == 'DXS': programID = '104'
                 if name[-3::] == 'UDS': programID = '105'
-                name=name[:-3]
+                self.database = name[:-3]
             if name[0:3] == 'UHS': programID = '107'
         else:
             archive = 'VSA'
@@ -37,6 +40,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
             if name[0:3] == 'VMC': programID = '130'
             if name[0:3] == 'VIK': programID = '140'
             if name[0:3] == 'VID': programID = '150'
+            self.database = name
 
         self.archive=archive
         self.programID=programID
@@ -57,6 +61,8 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
         if len(ra) == len(dec) and len(ra) > 0:
 
             self.retrieve_image_url_list()
+
+            print(self.download_table)
 
             self.check_for_existing_images_before_download()
 
@@ -92,7 +98,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
         obj_names = self.source_table.loc[:,'obj_name'].values
 
         # Survey parameters
-        survey_param = {'archive': self.archive, 'database': self.name,
+        survey_param = {'archive': self.archive, 'database': self.database,
                         'programmeID': self.programID,
                         'bands': self.bands,
                         'idPresent': 'noID', 'userX': '0.5', 'email': '',
