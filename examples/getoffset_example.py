@@ -17,8 +17,17 @@ catalog = 'ukidssdr11'
 
 quality_query = 'distance > 3/60. and 10 < jAperMag3 < 18.5 and jppErrBits==0'
 
-t = cat.get_astroquery_offset(target_name, target_ra, target_dec, radius,
-                              catalog,
-                              quality_query=quality_query, n=3, verbosity=2)
+# t = cat.get_astroquery_offset(target_name, target_ra, target_dec, radius,
+#                               catalog,
+#                               quality_query=quality_query, n=3, verbosity=2)
+#
+# print(t)
+
+
+where = 'mag_z > 15 AND mag_z < 19 and type="PSF"'
+
+t = cat.get_datalab_offset(target_name, target_ra, target_dec, radius,
+                           survey='ls_dr9', table='tractor', where=where,
+                           verbosity=1)
 
 print(t)

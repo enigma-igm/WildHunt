@@ -62,9 +62,12 @@ astroquery_dict = {
                                'mag': 'jAperMag3', 'distance': 'distance'}
                   }
 
-datalab_offset_dict = {'des_dr1.main': {'ra': 'ra', 'dec': 'dec',
-                                          'mag': 'mag_auto_z',
-                                          'mag_name': 'mag_auto_z'}}
+example_datalab_dict = {'survey': 'ls_dr9',
+                        'table': 'tractor',
+                        'ra': 'ra',
+                        'dec': 'dec',
+                        'mag': 'mag_z',
+                        'mag_name': 'lsdr9_z'}
 
 # ------------------------------------------------------------------------------
 #  Supported surveys, data releases, bands
@@ -266,10 +269,20 @@ def get_offset_stars_astroquery(df, target_name_column, target_ra_column,
 
 
 def get_offset_stars_datalab(df, target_name_column, target_ra_column,
-                     target_dec_column, radius, survey='des_dr1', table='main',
-                             n=3, where=None, verbosity=0):
+                     target_dec_column, radius, datalab_dict,
+                             n=3, where=None, minimum_distance=
+                             3./60, verbosity=0):
     """Get offset stars for all targets in the input DataFrame using the
     NOAO datalab.
+
+    Example of a datalab_dict
+
+    dict = {'survey': 'ls_dr9',
+            'table': 'tractor',
+            'ra': 'ra',
+            'dec': 'dec',
+            'mag': 'mag_z',
+            'mag_name': 'lsdr9_z'}
 
     :param df: pandas.core.frame.DataFrame
         Dataframe with targets to retrieve offset stars for
@@ -305,8 +318,9 @@ def get_offset_stars_datalab(df, target_name_column, target_ra_column,
         target_dec = df.loc[idx, target_dec_column]
 
         temp_df = get_datalab_offset(target_name, target_ra, target_dec, radius,
-                                     survey, table, columns=None,
+                                     datalab_dict, columns=None,
                                      where=where, n=n,
+                                     minimum_distance=minimum_distance,
                                      verbosity=verbosity)
 
         offset_df = offset_df.append(temp_df, ignore_index=True)
@@ -318,8 +332,9 @@ def get_offset_stars_datalab(df, target_name_column, target_ra_column,
     return offset_df
 
 
-def get_datalab_offset(target_name, target_ra, target_dec, radius, survey,
-                       table, columns=None, where=None, n=3, verbosity=0):
+def get_datalab_offset(target_name, target_ra, target_dec, radius,
+                       datalab_dict, columns=None, where=None, n=3,
+                       minimum_distance=3, verbosity=0):
     """Return the n nearest offset stars specified by the quality criteria
     around a given target using the NOAO datalab.
 
@@ -347,15 +362,16 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius, survey,
         target.
     """
 
-    df = query_region_datalab(target_ra, target_dec, radius, survey=survey,
-                              table=table, columns=columns, where=where,
-                              verbosity=verbosity)
+    df = query_region_datalab(target_ra, target_dec, radius,
+                              datalab_dict=datalab_dict,
+                              columns=columns, where=where,
+                              verbosity=verbosity,
+                              minimum_distance=minimum_distance)
 
-    catalog = survey+'.'+table
-    ra = datalab_offset_dict[catalog]['ra']
-    dec = datalab_offset_dict[catalog]['dec']
-    mag = datalab_offset_dict[catalog]['mag']
-    mag_name = datalab_offset_dict[catalog]['mag_name']
+    ra = datalab_dict['ra']
+    dec = datalab_dict['dec']
+    mag = datalab_dict['mag']
+    mag_name = datalab_dict['mag_name']
 
     # distance column is in arcminutes!!
 
@@ -363,7 +379,7 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius, survey,
         # Sort DataFrame by match distance
         df.sort_values('distance', ascending=True, inplace=True)
         # Keep only the first three entries
-        offset_df = df[:n]
+        offset_df = df.iloc[:n, :]
 
         # Build the offset DataFrame
         offset_df.loc[:, 'target_name'] = target_name
@@ -371,6 +387,7 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius, survey,
         offset_df.loc[:, 'target_dec'] = target_dec
         offset_df.loc[:, 'offset_ra'] = df[ra]
         offset_df.loc[:, 'offset_dec'] = df[dec]
+
         for jdx, idx in enumerate(offset_df.index):
             abc_dict = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E'}
 
@@ -420,8 +437,9 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius, survey,
         return pd.DataFrame()
 
 
-def query_region_datalab(ra, dec, radius, survey='des_dr1', table='main',
-                         columns=None, where=None, verbosity=0):
+def query_region_datalab(ra, dec, radius, datalab_dict,
+                         columns=None, where=None,
+                         minimum_distance=3, verbosity=0):
     """ Returns the catalog data of sources within a given radius of a defined
     position using the NOAO datalab.
 
@@ -445,6 +463,11 @@ def query_region_datalab(ra, dec, radius, survey='des_dr1', table='main',
     """
 
     radius_deg = radius / 3600.
+
+    minimum_distance = minimum_distance / 3600.
+
+    survey = datalab_dict['survey']
+    table = datalab_dict['table']
 
     # Build SQL query
     if columns is not None:
@@ -473,6 +496,8 @@ def query_region_datalab(ra, dec, radius, survey='des_dr1', table='main',
 
     # Open temporary file in a dataframe and delete the temporary file
     df = pd.read_csv('temp.csv')
+
+    df.query('distance > {}'.format(minimum_distance), inplace=True)
 
     os.remove('temp.csv')
 

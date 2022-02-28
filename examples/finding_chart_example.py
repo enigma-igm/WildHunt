@@ -6,27 +6,30 @@ from wildhunt import utils
 
 def single_chart_example():
 
-    df = pd.read_csv('UKIDSS_sources.csv')
+    df = pd.read_csv('LRIS_VI_candidates_220304.csv')
 
     ra = df.iloc[0]['RA']
     dec = df.iloc[0]['DEC']
 
-    survey = 'PS1'
+
+    survey = 'DELSDR9'
     band = 'z'
     aperture = 2
-    fov = 50
+    fov = 120
+
     image_folder_path = './cutouts'
 
+    offsets = pd.read_csv('offset_stars.csv')
 
     fig = fc.make_finding_chart(ra, dec, survey, band, aperture, fov,
                            image_folder_path,
-                           offset_df=None,
+                           offset_df=offsets,
                            offset_id=0,
                            offset_focus=False,
-                           offset_ra_column_name=None,
-                           offset_dec_column_name=None,
-                           offset_mag_column_name=None,
-                           offset_id_column_name=None,
+                           offset_ra_column_name='offset_ra',
+                           offset_dec_column_name='offset_dec',
+                           offset_mag_column_name='mag_z',
+                           offset_id_column_name='offset_shortname',
                            label_position='bottom',
                            slit_width=None, slit_length=None,
                            position_angle=0, verbosity=0)
@@ -56,4 +59,6 @@ def charts_from_table_example():
                            auto_download=False)
 
 
-charts_from_table_example()
+
+single_chart_example()
+# charts_from_table_example()

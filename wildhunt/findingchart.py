@@ -23,6 +23,15 @@ from wildhunt import utils as utils
 from wildhunt import image
 
 
+# Define some colors
+red = (238/255., 102/255., 119/255.)
+red = 'red'
+blue = (0/255., 68/255., 136/255.)
+blue = 'blue'
+cyan = (51/255., 187/255., 238/255.)
+teal = (0, 153/255., 136/255.)
+green = (34/255., 136/255., 51/255.)
+
 def make_finding_charts(table, ra_column_name, dec_column_name,
                         target_column_name, survey, band,
                         aperture, fov, image_folder_path,
@@ -141,6 +150,7 @@ def make_finding_charts(table, ra_column_name, dec_column_name,
         if offset_target is not None:
             offset_target.reset_index(inplace=True, drop=True)
 
+        print(offset_target)
 
         # if auto_download:
         #     if offset_focus:
@@ -203,8 +213,8 @@ def make_finding_chart(ra, dec, survey, band, aperture, fov,
                        offset_mag_column_name=None,
                        offset_id_column_name=None,
                        label_position='bottom',
-                       slit_width=None, slit_length=None,
-                       position_angle=None, verbosity=0):
+                       slit_width=5, slit_length=60,
+                       position_angle=None, verbosity=2):
 
     """Make the finding chart figure and return it.
 
@@ -255,7 +265,6 @@ def make_finding_chart(ra, dec, survey, band, aperture, fov,
     """
 
 
-
     if offset_focus:
         im_ra = offset_df.loc[offset_id, offset_ra_column_name]
         im_dec = offset_df.loc[offset_id, offset_dec_column_name]
@@ -274,32 +283,32 @@ def make_finding_chart(ra, dec, survey, band, aperture, fov,
                                       image_folder_path,
                                       verbosity=verbosity)
 
-    # Reproject data if position angle is specified
-    if position_angle != 0:
-        hdr['CRPIX1'] = int(hdr['NAXIS1'] / 2.)
-        hdr['CRPIX2'] = int(hdr['NAXIS2'] / 2.)
-        hdr['CRVAL1'] = im_ra
-        hdr['CRVAL2'] = im_dec
-
-        new_hdr = hdr.copy()
-
-        pa_rad = np.deg2rad(position_angle)
-
-        # TODO: Note that the rotation definition here reflects one axis
-        # TODO: to make sure that it is a rotated version of north up east left
-        # TODO: both 001 components have a negative sign!
-        new_hdr['PC001001'] = -np.cos(pa_rad)
-        new_hdr['PC001002'] = np.sin(pa_rad)
-        new_hdr['PC002001'] = np.sin(pa_rad)
-        new_hdr['PC002002'] = np.cos(pa_rad)
-
-        from reproject import reproject_interp
-
-        data, footprint = reproject_interp((data, hdr),
-                                           new_hdr,
-                                           shape_out=[hdr['NAXIS1'],
-                                                      hdr['NAXIS2']])
-        hdr = new_hdr
+    # # Reproject data if position angle is specified
+    # if position_angle != 0:
+    #     hdr['CRPIX1'] = int(hdr['NAXIS1'] / 2.)
+    #     hdr['CRPIX2'] = int(hdr['NAXIS2'] / 2.)
+    #     hdr['CRVAL1'] = im_ra
+    #     hdr['CRVAL2'] = im_dec
+    #
+    #     new_hdr = hdr.copy()
+    #
+    #     pa_rad = np.deg2rad(position_angle)
+    #
+    #     # TODO: Note that the rotation definition here reflects one axis
+    #     # TODO: to make sure that it is a rotated version of north up east left
+    #     # TODO: both 001 components have a negative sign!
+    #     new_hdr['PC001001'] = -np.cos(pa_rad)
+    #     new_hdr['PC001002'] = np.sin(pa_rad)
+    #     new_hdr['PC002001'] = np.sin(pa_rad)
+    #     new_hdr['PC002002'] = np.cos(pa_rad)
+    #
+    #     from reproject import reproject_interp
+    #
+    #     data, footprint = reproject_interp((data, hdr),
+    #                                        new_hdr,
+    #                                        shape_out=[hdr['NAXIS1'],
+    #                                                   hdr['NAXIS2']])
+    #     hdr = new_hdr
 
     if data is not None:
         # Plotting routine from here on.
@@ -321,8 +330,9 @@ def make_finding_chart(ra, dec, survey, band, aperture, fov,
 
         fig.add_scalebar(fov/4/3600., '{:.1f} arcmin'.format(fov/4/60.),
                          color='black',
-                         font='serif',
-                         linewidth=4)
+                         # font='serif',
+                         linewidth=4
+                         )
 
         if slit_length is not None and slit_width is not None:
 
@@ -332,7 +342,6 @@ def make_finding_chart(ra, dec, survey, band, aperture, fov,
             else:
                 _plot_slit(fig, im_ra, im_dec, slit_length, slit_width,
                            0)
-
 
         if offset_df is not None and offset_ra_column_name is not None and \
             offset_dec_column_name is not None and offset_mag_column_name is \
@@ -350,7 +359,8 @@ def make_finding_chart(ra, dec, survey, band, aperture, fov,
             _plot_info_box(fig, ra, dec, offset_df, offset_ra_column_name,
                            offset_dec_column_name, offset_mag_column_name)
 
-        fig.show_circles(xw=ra, yw=dec, radius=aperture / 3600., edgecolor='red',
+        fig.show_circles(xw=ra, yw=dec, radius=aperture / 3600.,
+                         edgecolor=red,
                          alpha=1, lw=3)
 
         fig.axis_labels.set_xtext('Right Ascension')
@@ -402,42 +412,45 @@ def _plot_offset_stars(fig, ra, dec, offset_df, fov, offset_id,
     fig.show_circles(xw=offset_df.loc[offset_id, ra_column_name],
                      yw=offset_df.loc[offset_id, dec_column_name],
                      radius=radius * 0.5,
-                     edgecolor='blue',
+                     edgecolor=blue,
                      lw=3)
 
-    fig.show_rectangles(offset_df.drop(offset_id)[ra_column_name],
-                        offset_df.drop(offset_id)[dec_column_name],
-                        radius, radius, edgecolor='blue', lw=1)
+    # fig.show_rectangles(offset_df.drop(offset_id)[ra_column_name],
+    #                     offset_df.drop(offset_id)[dec_column_name],
+    #                     radius, radius, edgecolor=blue, lw=1)
 
     abc_dict = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E'}
 
     for num, idx in enumerate(offset_df.index):
-        ra_off = offset_df.loc[idx, ra_column_name]
-        dec_off = offset_df.loc[idx, dec_column_name]
 
-        target_coords = SkyCoord(ra=ra, dec=dec,
-                                 unit=(u.deg, u.deg),
-                                 frame='icrs')
-        offset_coords = SkyCoord(ra=ra_off,
-                                 dec=dec_off, unit=(u.deg, u.deg),
-                                 frame='icrs')
+        if idx == 0:
 
-        separation = offset_coords.separation(target_coords).to(u.arcsecond)
+            ra_off = offset_df.loc[idx, ra_column_name]
+            dec_off = offset_df.loc[idx, dec_column_name]
 
-        label = '{}'.format(abc_dict[num])
+            target_coords = SkyCoord(ra=ra, dec=dec,
+                                     unit=(u.deg, u.deg),
+                                     frame='icrs')
+            offset_coords = SkyCoord(ra=ra_off,
+                                     dec=dec_off, unit=(u.deg, u.deg),
+                                     frame='icrs')
 
-        if separation.value <= fov/2.:
-            if idx == offset_id:
-                fig.add_label(ra_off + ra_pos * 5 / 3600. / 3.,
-                              dec_off + dec_pos * 5 / 3600. / 3., label,
-                              color='blue', size='x-large',
+            separation = offset_coords.separation(target_coords).to(u.arcsecond)
+
+            label = '{}'.format(abc_dict[num])
+
+            if separation.value <= fov/2.:
+                if idx == offset_id:
+                    fig.add_label(ra_off + ra_pos * 5 / 3600. / 3.,
+                                  dec_off + dec_pos * 5 / 3600. / 3., label,
+                                  color=blue, size='x-large',
+                                  verticalalignment='center', family='serif')
+
+                else:
+                    fig.add_label(ra_off + ra_pos * radius/5., dec_off + dec_pos *
+                              radius/5., label,
+                              color=blue, size='large',
                               verticalalignment='center', family='serif')
-
-            else:
-                fig.add_label(ra_off + ra_pos * radius/5., dec_off + dec_pos *
-                          radius/5., label,
-                          color='blue', size='large',
-                          verticalalignment='center', family='serif')
 
 
 
@@ -452,35 +465,39 @@ def _plot_info_box(fig, ra, dec, offset_df, ra_column_name, dec_column_name,
     abc_dict = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4:'E'}
 
     for num, idx in enumerate(offset_df.index):
-        ra_off = offset_df.loc[idx, ra_column_name]
-        dec_off = offset_df.loc[idx, dec_column_name]
 
-        target_coords = SkyCoord(ra=ra, dec=dec,
-                                 unit=(u.deg, u.deg),
-                                 frame='icrs')
-        offset_coords = SkyCoord(ra=ra_off,
-                                 dec=dec_off, unit=(u.deg, u.deg),
-                                 frame='icrs')
-        # Calculate position angles and separations (East of North)
-        pos_angles = offset_coords.position_angle(target_coords).to(u.deg)
-        separations = offset_coords.separation(target_coords).to(u.arcsecond)
-        dra, ddec = offset_coords.spherical_offsets_to(target_coords)
+        if idx == 0:
 
-        mag = offset_df.loc[idx, mag_column_name]
-        info = '{}:\t RA={:.4f}, DEC={:.4f}, {}={:.2f}, PosAngle={' \
-               ':.2f}'.format(abc_dict[num],
-                                                          ra_off,
-                                                  dec_off, mag_column_name,
-                                                                             mag, pos_angles)
-        info_off = 'Sep={:.2f}, Dra={:.2f}, ' \
-                   'Ddec={:.2f}'.format(separations, dra.to(
-            'arcsecond'), ddec.to('arcsecond'))
-        info_list.append(info)
-        info_list.append(info_off)
+
+            ra_off = offset_df.loc[idx, ra_column_name]
+            dec_off = offset_df.loc[idx, dec_column_name]
+
+            target_coords = SkyCoord(ra=ra, dec=dec,
+                                     unit=(u.deg, u.deg),
+                                     frame='icrs')
+            offset_coords = SkyCoord(ra=ra_off,
+                                     dec=dec_off, unit=(u.deg, u.deg),
+                                     frame='icrs')
+            # Calculate position angles and separations (East of North)
+            pos_angles = offset_coords.position_angle(target_coords).to(u.deg)
+            separations = offset_coords.separation(target_coords).to(u.arcsecond)
+            dra, ddec = offset_coords.spherical_offsets_to(target_coords)
+
+            mag = offset_df.loc[idx, mag_column_name]
+            info = '{}:\t RA={:.4f}, DEC={:.4f}, {}={:.2f}, PosAngle={' \
+                   ':.2f}'.format(abc_dict[num],
+                                                              ra_off,
+                                                      dec_off, mag_column_name,
+                                                                                 mag, pos_angles)
+            info_off = 'Sep={:.2f}, Dra={:.2f}, ' \
+                       'Ddec={:.2f}'.format(separations, dra.to(
+                'arcsecond'), ddec.to('arcsecond'))
+            info_list.append(info)
+            info_list.append(info_off)
 
 
     ax = plt.gca()
-    boxdict = dict(facecolor='white', alpha=0.5, edgecolor='none')
+    boxdict = dict(facecolor='white', alpha=1.0, edgecolor='none')
     ax.text(.02, 0.02, "\n".join(info_list), transform=ax.transAxes,
             fontsize='small',
             bbox=boxdict)

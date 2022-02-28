@@ -9,27 +9,42 @@ df = pd.read_csv('UKIDSS_sources.csv')
 ra = df.loc[0, 'RA']
 dec = df.loc[0, 'DEC']
 
-service = 'VSA'
-catalog = 'VIKING'
-data_release = 'VIKINGDR5'
 
-radius = 5
+# VIKING example
+# service = 'VSA'
+# catalog = 'VIKING'
+# data_release = 'VIKINGDR5'
+#
+# radius = 5
+#
+# t = cat.query_region_astroquery(ra, dec, radius, service, catalog,
+#                             data_release=data_release)
+#
+# # UKIDSS example
+#
+# service = 'UKIDSS'
+# catalog = 'LAS'
+# data_release = 'UKIDSSDR11PLUS'
+#
+# t = cat.query_region_astroquery(ra, dec, radius, service, catalog,
+#                             data_release=data_release)
+#
+# print(t)
+#
 
-t = cat.query_region_astroquery(ra, dec, radius, service, catalog,
-                            data_release=data_release)
+# NOIRLAB Datalab Legacy Survey DR9 example
 
-# for col in t.columns:
-#     print(col)
-print(t)
+where = 'mag_z > 15 AND mag_z < 21'
+ra = 168.1936986
+dec = -3.6324306
+radius = 30
 
-service = 'UKIDSS'
-catalog = 'LAS'
-data_release = 'UKIDSSDR11PLUS'
+datalab_dict = {'survey': 'ls_dr9',
+                'table': 'tractor'}
 
-t = cat.query_region_astroquery(ra, dec, radius, service, catalog,
-                            data_release=data_release)
+t = cat.query_region_datalab(ra, dec, radius, datalab_dict,
+                         columns=None, where=None,
+                             minimum_distance=3./60, verbosity=0)
 
-# for col in t.columns:
-#     print(col)
 
 print(t)
