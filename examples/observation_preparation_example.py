@@ -30,12 +30,12 @@ radius = 100
 where = "mag_z > 15 AND mag_z < 19 and type='PSF'"
 
 # Get the offset star table
-# offsets = whcat.get_offset_stars_datalab(candidates, 'Name', 'RA', 'DEC',
-#                                          radius,
-#                                          datalab_dict, where=where,
-#                                          verbosity=2)
-#
-# offsets.to_csv('offset_stars.csv')
+offsets = whcat.get_offset_stars_datalab(candidates, 'Name', 'RA', 'DEC',
+                                         radius,
+                                         datalab_dict, where=where,
+                                         verbosity=2)
+
+offsets.to_csv('offset_stars.csv')
 
 # Download the cutouts
 survey_dict = [
