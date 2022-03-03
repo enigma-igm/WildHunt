@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
-
+import os
 import requests
 import numpy as np
 from io import StringIO
 from astropy.table import Table
+from astropy.io import fits
 
 from wildhunt.surveys import imagingsurvey
 
@@ -114,6 +115,36 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
                         {'image_name': image_name,
                          'url': urlbase + filename},
                         ignore_index=True)
+
+    def data_setup(self, obj_name, band, image_folder_path):
+        '''
+            Set the parameters that are used in the aperture_photometry to perform forced photometry based on the
+            PS1 survey
+            Args:
+            Args:
+                obj_name:
+                band:
+                image_folder_path:
+            '''
+
+        zpt = {"g": 25.0, "r": 25.0, "i": 25.0, "z": 25.0, "y": 25.0,}
+
+        # Read in the data and header
+        image_name = obj_name + "_" + self.name + "_" + band + "_fov" + '{:d}'.format(self.fov)
+        fitsname = os.path.join(image_folder_path, image_name + '.fits')
+
+        par = fits.open(fitsname)
+        self.data = par[0].data.copy()
+        self.hdr = par[0].header
+        self.exp = par[0].header['EXPTIME']
+        self.extCorr = 0.0
+        self.back = 'no_back'
+        self.zpt = zpt[band]
+
+        del par[0].data
+
+        return self
+
 
 
     # def retrieve_image_url_list(self):

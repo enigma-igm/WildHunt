@@ -1,10 +1,10 @@
 
-
-
+from astropy import units as u
+from astropy.coordinates import Angle
 
 import numpy as np
 
-
+'''
 def decra_to_hms(dra):
     """Convert Right Ascension in decimal degrees to hours, minutes, seconds.
 
@@ -61,7 +61,7 @@ def decdecl_to_dms(ddecl):
                         "np.ndarray)".format(type(ddecl)))
 
     return decl_degrees, decl_minutes, decl_seconds
-
+'''
 
 def coord_to_name(dra, dd, epoch='J'):
     """Return an object name based on its Right Ascension and Declination.
@@ -77,20 +77,36 @@ def coord_to_name(dra, dd, epoch='J'):
         String based on the targets coordings [epoch][RA in HMS][Dec in DMS]
     """
 
-    ra_hours, ra_minutes, ra_seconds = decra_to_hms(dra)
-    decl_degrees, decl_minutes, decl_seconds = decdecl_to_dms(dd)
+    #ra_hours, ra_minutes, ra_seconds = decra_to_hms(dra)
+    #decl_degrees, decl_minutes, decl_seconds = decdecl_to_dms(dd)
 
     coord_name_list = []
 
-    for idx in range(len(dra)):
+    if type(dra) is np.float64:
+        hms_ra = Angle(dra, u.degree).to_string(u.hour, sep='', precision=2, pad=True)
+        if dd >= 0:
+            sing = '+'
+        else:
+            sing = '-'
+        hms_dec = Angle(abs(dd), u.degree).to_string(u.hour, sep='', precision=2, pad=True)
 
-        coord_name_list.append('{0:1}{1:02g}{2:02g}{3:05.2f}{4:+03g}{5:02g}{'
-                               '6:05.2f}'.format(epoch,
-                                             ra_hours[idx],
-                                             ra_minutes[idx],
-                                             ra_seconds[idx],
-                                             decl_degrees[idx],
-                                             decl_minutes[idx],
-                                             decl_seconds[idx]))
+        coord_name_list.append('{:}{:}{:}{:}'.format(epoch,
+                                                     hms_ra,
+                                                     sing,
+                                                     hms_dec))
+    else:
+        for idx in range(len(dra)):
+
+            hms_ra = Angle(dra, u.degree).to_string(u.hour,sep='', precision=2,pad=True)
+            if dd[idx]>=0:
+                sing='+'
+            else:
+                sing='-'
+            hms_dec = Angle(abs(dd), u.degree).to_string(u.hour,sep='', precision=2,pad=True)
+
+            coord_name_list.append('{:}{:}{:}{:}'.format(epoch,
+                                                 hms_ra[idx],
+                                                 sing,
+                                                 hms_dec[idx]))
 
     return coord_name_list

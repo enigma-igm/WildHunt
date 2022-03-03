@@ -2,6 +2,7 @@
 
 import time
 import os
+import warnings
 import numpy as np
 
 from wildhunt.surveys import imagingsurvey
@@ -216,3 +217,55 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
             print("Start sleep")
             time.sleep(5)
             print("End sleep")
+
+    def data_setup(self, obj_name, band, image_folder_path):
+        '''
+
+            Set the parameters that are used in the aperture_photometry to perform forced photometry based on the
+            WSA/VSA survey
+            Args:
+                obj_name:
+                band:
+                image_folder_path:
+            '''
+
+        if self.name[0] == 'U':
+            # Read in the data and header
+            image_name = obj_name + "_" + self.name + "_" + band + "_fov" + '{:d}'.format(self.fov)
+            fitsname = os.path.join(image_folder_path, image_name + '.fits')
+
+            par = fits.open(fitsname)
+            self.data = par['WSAIMAGE'].data.copy()
+            self.hdr = par['WSAIMAGE'].header
+            self.exp = par['PRIMARY'].header["EXP_TIME"]
+            # skylevel = par['WSAIMAGE'].header['SKYLEVEL']
+            amstart = par['PRIMARY'].header['AMSTART']
+            amend = par['PRIMARY'].header['AMEND']
+            self.extCorr = 0.05 * ((amstart + amend) / 2 - 1)
+            self.zpt = par['WSAIMAGE'].header['MAGZPT']
+            ## astropy seems can not close the file and release the memory properly.
+            del par['WSAIMAGE'].data
+
+        else:
+            par = fits.open(fitsname)
+            self.data = par['GETIMAGE'].data.copy()
+            self.hdr = par['GETIMAGE'].header
+            self.exp = par['GETIMAGE'].header["EXPTIME"]
+            # skylevel = par['GETIMAGE'].header['SKYLEVEL']
+            try:
+                # some of the header does not have AIRMASS information
+                amstart = par['GETIMAGE'].header['ESO TEL AIRM START']
+                amend = par['GETIMAGE'].header['ESO TEL AIRM END']
+                self.extCorr = 0.05 * ((amstart + amend) / 2 - 1)
+            except:
+                warnings.warn('Header doest not have AIRMASS information.')
+                self.extCorr = 0.0
+            try:
+                self.zpt = par['GETIMAGE'].header['MAGZPT']
+            except:
+                self.zpt = 26.7  # this is a hack for VIKING J-band
+            del par['GETIMAGE'].data
+
+        self.back = 'back'
+
+        return self
