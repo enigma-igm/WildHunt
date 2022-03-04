@@ -4,6 +4,7 @@ import time
 import os
 import warnings
 import numpy as np
+from astropy.io import fits
 
 from wildhunt.surveys import imagingsurvey
 from IPython import embed
