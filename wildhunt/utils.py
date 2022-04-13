@@ -88,12 +88,12 @@ def coord_to_name(dra, dd, epoch='J'):
             sing = '+'
         else:
             sing = '-'
-        hms_dec = Angle(abs(dd), u.degree).to_string(u.hour, sep='', precision=2, pad=True)
+        deg_dec = Angle(abs(dd), u.degree).to_string(u.deg, sep='', precision=2, pad=True)
 
         coord_name_list.append('{:}{:}{:}{:}'.format(epoch,
                                                      hms_ra,
                                                      sing,
-                                                     hms_dec))
+                                                     deg_dec))
     else:
         for idx in range(len(dra)):
 
@@ -102,11 +102,11 @@ def coord_to_name(dra, dd, epoch='J'):
                 sing='+'
             else:
                 sing='-'
-            hms_dec = Angle(abs(dd), u.degree).to_string(u.hour,sep='', precision=2,pad=True)
+            deg_dec = Angle(abs(dd), u.degree).to_string(u.deg,sep='', precision=2,pad=True)
 
             coord_name_list.append('{:}{:}{:}{:}'.format(epoch,
                                                  hms_ra[idx],
                                                  sing,
-                                                 hms_dec[idx]))
+                                                 deg_dec[idx]))
 
     return coord_name_list

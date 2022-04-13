@@ -12,15 +12,15 @@ from IPython import embed
 
 # List of programmeID: VHS - 110, VVV - 120, VMC - 130, VIKING - 140, VIDEO - 150, UHS - 107, UKIDSS: LAS - 101,
 # GPS - 102, GCS - 103, DXS - 104, UDS - 105
-numCoords=10000  # number of coords in each bach (do not exceed 20000)
 
 class VsaWsa(imagingsurvey.ImagingSurvey):
 
-    def __init__(self, bands, fov, name, verbosity=1):
+    def __init__(self, bands, fov, name, batch_size=10000, verbosity=1):
         """
         :param bands:
         :param fov:
         :param name:
+        :param batch_size:
         """
 
         self.database = name
@@ -47,7 +47,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
         self.archive=archive
         self.programID=programID
 
-        super(VsaWsa, self).__init__(bands, fov, name, verbosity)
+        super(VsaWsa, self).__init__(bands, fov, name, batch_size, verbosity)
 
     def download_images(self, ra, dec, image_folder_path, n_jobs=1):
         """
@@ -108,8 +108,8 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                         'mode': 'wget'}
         boundary = "--FILEUPLOAD"  # separator
 
-        if np.size(ra) > numCoords:
-            nbatch = int(np.ceil(np.size(ra) / numCoords))
+        if np.size(ra) > self.batch_size:
+            nbatch = int(np.ceil(np.size(ra) / self.batch_size))
         else:
             nbatch = 1
 
@@ -117,7 +117,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
 
         for i in range(nbatch):
 
-            startID = numCoords * loop
+            startID = self.batch_size * loop
             loop += 1
             uploadFile = "upload_" + str(loop) + ".txt"
             outFile = "out_" + str(loop) + ".txt"
@@ -145,7 +145,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                     uploadFile), file=up)
 
             if i != (nbatch - 1):
-                n = numCoords
+                n = self.batch_size
             else:
                 n = len(ra) - startID
             for jdx in range(n):
@@ -230,11 +230,10 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                 image_folder_path:
             '''
 
+        # Read in the data and header
+        image_name = obj_name + "_" + self.name + "_" + band + "_fov" + '{:d}'.format(self.fov)
+        fitsname = os.path.join(image_folder_path, image_name + '.fits')
         if self.name[0] == 'U':
-            # Read in the data and header
-            image_name = obj_name + "_" + self.name + "_" + band + "_fov" + '{:d}'.format(self.fov)
-            fitsname = os.path.join(image_folder_path, image_name + '.fits')
-
             par = fits.open(fitsname)
             self.data = par['WSAIMAGE'].data.copy()
             self.hdr = par['WSAIMAGE'].header

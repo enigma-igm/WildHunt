@@ -21,18 +21,20 @@ class ImagingSurvey(object):
     Survey class for downloading imaging data
     """
 
-    def __init__(self, bands, fov, name, verbosity=1):
+    def __init__(self, bands, fov, name, batch_size=10000, verbosity=1):
         """
 
         :param bands:
         :param fov:
         :param name:
+        :param batch_size:
         """
 
         self.name = name
         self.bands = bands
         self.fov = fov
         self.verbosity = verbosity
+        self.batch_size = batch_size
 
         # Set to none and overwritten by survey setup
         self.image_folder_path = None
@@ -53,7 +55,7 @@ class ImagingSurvey(object):
 
         raise NotImplementedError
 
-    def survey_setup(self, ra, dec, image_folder_path, epoch='J', n_jobs=1):
+    def survey_setup(self, ra, dec, image_folder_path, epoch='J', n_jobs=1, check_image=False):
 
         # Check if image_folder_exists, if not create
         if not os.path.exists(image_folder_path):
@@ -69,7 +71,8 @@ class ImagingSurvey(object):
 
         # Check for pre-exisiting images and remove sources if all
         # images in the specified bands already exist
-        self.pre_check_for_existing_images()
+        if check_image == True:
+            self.pre_check_for_existing_images()
 
         # # Check n_jobs value
         cpu_cores = mp.cpu_count()
