@@ -205,7 +205,7 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
         self.hdr = par[0].header
         self.exp = par[0].header['EXPTIME']
         self.extCorr = 0.0
-        self.back = 'no_back'
+        self.back = 'back'
         self.zpt = zpt[band]
 
         del par[0].data
