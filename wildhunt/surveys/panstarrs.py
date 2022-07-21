@@ -40,148 +40,91 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
 
         if len(ra) == len(dec) and len(ra) > 0:
 
-            #self.retrieve_image_url_list(imagetypes="stack")
-            self.retrieve_batch_image_url_list(imagetypes="stack")
+            self.batch_setup()
 
-            self.check_for_existing_images_before_download()
+            for i in range(self.nbatch):
+                self.retrieve_image_url_list(imagetypes="stack", batch_number = i)
 
-            if self.n_jobs > 1:
-                self.mp_download_image_from_url()
-            else:
-                for idx in self.download_table.index:
-                    image_name = self.download_table.loc[idx, 'image_name']
-                    url = self.download_table.loc[idx, 'url']
-                    self.download_image_from_url(url, image_name)
+                self.check_for_existing_images_before_download()
+
+                if self.n_jobs > 1:
+                    self.mp_download_image_from_url()
+                else:
+                    for idx in self.download_table.index:
+                        image_name = self.download_table.loc[idx, 'image_name']
+                        url = self.download_table.loc[idx, 'url']
+                        self.download_image_from_url(url, image_name)
 
         else:
 
             print('All images already exist.')
             print('Downloading aborted.')
 
-    def retrieve_batch_image_url_list(self, imagetypes="stack"):
+    def batch_setup(self,):
 
-        # Convert field of view in arcsecond to pixel size (1 pixel = 0.25 arcseconds)
-        size = self.fov * 4
-
-        ra = self.source_table.loc[:, 'ra'].values
-        dec = self.source_table.loc[:, 'dec'].values
-
-        bands = ''.join(self.bands)
+        self.ra = self.source_table.loc[:, 'ra'].values
+        self.dec = self.source_table.loc[:, 'dec'].values
 
         # Compute the number of batches to retrieve the urls
-        if np.size(ra) > self.batch_size:
-            nbatch = int(np.ceil(np.size(ra) / self.batch_size))
+        if np.size(self.ra) > self.batch_size:
+            self.nbatch = int(np.ceil(np.size(self.ra) / self.batch_size))
         else:
-            nbatch = 1
+            self.nbatch = 1
 
-        # Retrieve bulk file table
-        url_ps1filename = 'http://ps1images.stsci.edu/cgi-bin/ps1filenames.py?'
-
-        for i in range(nbatch):
-            ra_batch = ra[i * self.batch_size : i * self.batch_size + self.batch_size]
-            dec_batch = dec[i * self.batch_size : i * self.batch_size + self.batch_size]
-            # Put the positions in an in-memory file object
-            cbuf = StringIO()
-            cbuf.write(
-                '\n'.join(
-                    ["{} {}".format(ra_idx, dec_idx) for (ra_idx, dec_idx) in zip(
-                        ra_batch, dec_batch)]))
-            cbuf.seek(0)
-
-            # Use requests.post to pass in positions as a file
-            r = requests.post(url_ps1filename,
-                              data=dict(filters=bands, type=imagetypes),
-                              files=dict(file=cbuf))
-            r.raise_for_status()
-            # Convert retrieved file table to pandas DataFrame
-            df = Table.read(r.text, format="ascii").to_pandas()
-
-            # Group table by filter and do not sort!
-            groupby = df.groupby(by='filter', sort=False)
-
-            for idx in range(len(ra_batch)):
-
-                obj_name = self.source_table.iloc[i * self.batch_size + idx]['obj_name']
-
-                for jdx, (key, group) in enumerate(groupby):
-                        band = group.loc[jdx, 'filter']
-                        filename = df.loc[jdx+idx*len(self.bands), 'filename']
-
-                        # Create image name
-                        image_name = obj_name + "_" + self.name + "_" + \
-                                         band + "_fov" + '{:d}'.format(self.fov)
-
-                        url = ("https://ps1images.stsci.edu/cgi-bin/fitscut.cgi?"
-                                   "ra={}&dec={}&size={}&format=fits").format(ra_batch[idx],
-                                                                              dec_batch[idx],
-                                                                              size)
-                        urlbase = url + "&red="
-
-                        self.download_table = self.download_table.append(
-                                {'image_name': image_name,
-                                 'url': urlbase + filename},
-                                ignore_index=True)
-        self.download_table.to_csv('PS1_dowload_urls.csv')
-
-    def retrieve_image_url_list(self, imagetypes="stack"):
+    def retrieve_image_url_list(self, batch_number = 0, imagetypes="stack"):
 
         # Convert field of view in arcsecond to pixel size (1 pixel = 0.25 arcseconds)
-        size = self.fov * 4
-
-        ra = self.source_table.loc[:, 'ra'].values
-        dec = self.source_table.loc[:, 'dec'].values
+        self.size = self.fov * 4
 
         bands = ''.join(self.bands)
 
-
         # Retrieve bulk file table
         url_ps1filename = 'http://ps1images.stsci.edu/cgi-bin/ps1filenames.py?'
 
+        ra_batch = self.ra[batch_number * self.batch_size : batch_number * self.batch_size + self.batch_size]
+        dec_batch = self.dec[batch_number * self.batch_size : batch_number * self.batch_size + self.batch_size]
         # Put the positions in an in-memory file object
         cbuf = StringIO()
         cbuf.write(
-            '\n'.join(
-                ["{} {}".format(ra_idx, dec_idx) for (ra_idx, dec_idx) in zip(
-                    ra, dec)]))
+                '\n'.join(
+                    ["{} {}".format(ra_idx, dec_idx) for (ra_idx, dec_idx) in zip(
+                        ra_batch, dec_batch)]))
         cbuf.seek(0)
 
         # Use requests.post to pass in positions as a file
         r = requests.post(url_ps1filename,
-                          data=dict(filters=bands, type=imagetypes),
-                          files=dict(file=cbuf))
+                              data=dict(filters=bands, type=imagetypes),
+                              files=dict(file=cbuf))
         r.raise_for_status()
         # Convert retrieved file table to pandas DataFrame
         df = Table.read(r.text, format="ascii").to_pandas()
 
-        # Group table by ra and do not sort!
-        groupby = df.groupby(by='ra', sort=False)
+        # Group table by filter and do not sort!
+        groupby = df.groupby(by='filter', sort=False)
 
-        for idx, (key, group) in enumerate(groupby):
+        for idx in range(len(ra_batch)):
 
-            obj_name = self.source_table.iloc[idx]['obj_name']
-            ra_idx = self.source_table.iloc[idx]['ra']
-            dec_idx = self.source_table.iloc[idx]['dec']
+            obj_name = self.source_table.iloc[batch_number * self.batch_size + idx]['obj_name']
 
-            if key == ra_idx:
-
-                for jdx in group.index:
+            for jdx, (key, group) in enumerate(groupby):
                     band = group.loc[jdx, 'filter']
-                    filename = group.loc[jdx, 'filename']
+                    filename = df.loc[jdx+idx*len(self.bands), 'filename']
 
                     # Create image name
                     image_name = obj_name + "_" + self.name + "_" + \
-                                 band + "_fov" + '{:d}'.format(self.fov)
+                                    band + "_fov" + '{:d}'.format(self.fov)
 
                     url = ("https://ps1images.stsci.edu/cgi-bin/fitscut.cgi?"
-                           "ra={}&dec={}&size={}&format=fits").format(ra_idx,
-                                                                      dec_idx,
-                                                                      size)
+                                   "ra={}&dec={}&size={}&format=fits").format(ra_batch[idx],
+                                                                              dec_batch[idx],
+                                                                              self.size)
                     urlbase = url + "&red="
 
                     self.download_table = self.download_table.append(
-                        {'image_name': image_name,
-                         'url': urlbase + filename},
-                        ignore_index=True)
+                                {'image_name': image_name,
+                                 'url': urlbase + filename},
+                                ignore_index=True)
+        self.download_table.to_csv('{}_PS1_dowload_urls.csv'.format(str(batch_number)))
 
     def data_setup(self, obj_name, band, image_folder_path):
         '''
