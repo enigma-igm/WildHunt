@@ -46,15 +46,26 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
             for i in range(self.nbatch):
                 self.retrieve_image_url_list(imagetypes="stack", batch_number = i)
 
-                self.check_for_existing_images_before_download()
+                for row in self.download_table:
+                    fname = row['image_name']
+                    url = row["url"]
 
-                if self.n_jobs > 1:
-                    self.mp_download_image_from_url()
-                else:
-                    for idx in self.download_table.index:
-                        image_name = self.download_table.loc[idx, 'image_name']
-                        url = self.download_table.loc[idx, 'url']
-                        self.download_image_from_url(url, image_name)
+                    try:
+                        r = requests.get(url)
+                        open(fname, "wb").write(r.content)
+                        print('Downloaded image {}'.format(fname))
+                    except:
+                        print('Cannot download image {}'.format(fname))
+
+                #self.check_for_existing_images_before_download()
+
+                #if self.n_jobs > 1:
+                #    self.mp_download_image_from_url()
+                #else:
+                #    for idx in self.download_table.index:
+                #        image_name = self.download_table.loc[idx, 'image_name']
+                #        url = self.download_table.loc[idx, 'url']
+                #        self.download_image_from_url(url, image_name)
 
         else:
 
@@ -125,7 +136,7 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
                                 {'image_name': image_name,
                                  'url': urlbase + filename},
                                 ignore_index=True)
-        self.download_table.to_csv('{}_PS1_dowload_urls.csv'.format(str(batch_number)))
+        self.download_table.to_csv('{}_PS1_download_urls.csv'.format(str(batch_number)))
 
         print("Start sleep")
         time.sleep(5)
