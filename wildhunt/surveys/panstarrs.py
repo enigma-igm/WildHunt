@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import time
 import os
 import requests
 import numpy as np
@@ -125,6 +126,10 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
                                  'url': urlbase + filename},
                                 ignore_index=True)
         self.download_table.to_csv('{}_PS1_dowload_urls.csv'.format(str(batch_number)))
+
+        print("Start sleep")
+        time.sleep(5)
+        print("End sleep")
 
     def data_setup(self, obj_name, band, image_folder_path):
         '''
