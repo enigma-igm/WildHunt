@@ -4,6 +4,8 @@ import os
 
 import itertools
 
+import requests
+
 import multiprocessing as mp
 
 from urllib.request import urlopen  # python3
@@ -143,21 +145,26 @@ class ImagingSurvey(object):
 
         # Try except clause for downloading the image
         try:
-            datafile = urlopen(url)
 
-            check_ok = datafile.msg == 'OK'
+            r = requests.get(url)
+            open(image_name, "wb").write(r.content)
+            print("[INFO] Download of {} to {} completed".format(image_name, self.image_folder_path))
 
-            if check_ok:
+            #datafile = urlopen(url)
 
-                file = datafile.read()
+            #check_ok = datafile.msg == 'OK'
 
-                output = open(self.image_folder_path + '/' + image_name +
-                              '.fits', 'wb')
-                output.write(file)
-                output.close()
-                if self.verbosity > 0:
-                    print("[INFO] Download of {} to {} completed".format(
-                        image_name, self.image_folder_path))
+            #if check_ok:
+
+            #    file = datafile.read()
+
+            #    output = open(self.image_folder_path + '/' + image_name +
+            #                  '.fits', 'wb')
+            #    output.write(file)
+            #    output.close()
+            #    if self.verbosity > 0:
+            #        print("[INFO] Download of {} to {} completed".format(
+            #            image_name, self.image_folder_path))
 
         except (IncompleteRead, HTTPError, AttributeError, ValueError) as err:
             print(err)
