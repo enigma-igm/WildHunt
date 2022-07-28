@@ -147,8 +147,10 @@ class ImagingSurvey(object):
         try:
 
             r = requests.get(url)
-            open(image_name, "wb").write(r.content)
-            print("[INFO] Download of {} to {} completed".format(image_name, self.image_folder_path))
+            open(self.image_folder_path + '/' + image_name + '.fits', "wb").write(r.content)
+
+            if self.verbosity > 0:
+                print("[INFO] Download of {} to {} completed".format(image_name, self.image_folder_path))
 
             #datafile = urlopen(url)
 
@@ -156,15 +158,15 @@ class ImagingSurvey(object):
 
             #if check_ok:
 
-            #    file = datafile.read()
+                #file = datafile.read()
 
-            #    output = open(self.image_folder_path + '/' + image_name +
-            #                  '.fits', 'wb')
-            #    output.write(file)
-            #    output.close()
-            #    if self.verbosity > 0:
-            #        print("[INFO] Download of {} to {} completed".format(
-            #            image_name, self.image_folder_path))
+                #output = open(self.image_folder_path + '/' + image_name +
+                #              '.fits', 'wb')
+                #output.write(file)
+                #output.close()
+                #if self.verbosity > 0:
+                #    print("[INFO] Download of {} to {} completed".format(
+                #        image_name, self.image_folder_path))
 
         except (IncompleteRead, HTTPError, AttributeError, ValueError) as err:
             print(err)
