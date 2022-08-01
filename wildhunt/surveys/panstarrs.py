@@ -15,7 +15,7 @@ from IPython import embed
 
 class Panstarrs(imagingsurvey.ImagingSurvey):
 
-    def __init__(self, bands, fov, batch_size=10000, verbosity=1):
+    def __init__(self, bands, fov, name='PS1', verbosity=1):
         """
 
         :param bands:
@@ -24,7 +24,9 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
         :param batch_size:
         """
 
-        super(Panstarrs, self).__init__(bands, fov, 'PS1', batch_size, verbosity)
+        self.batch_size=10000
+
+        super(Panstarrs, self).__init__(bands, fov, name, verbosity)
 
     def download_images(self, ra, dec, image_folder_path, n_jobs=1):
         """

@@ -18,7 +18,7 @@ def retrieve_survey(survey_name, bands, fov):
 
     if survey_name == 'PS1':
 
-        survey = panstarrs.Panstarrs(bands, fov)
+        survey = panstarrs.Panstarrs(bands, fov, survey_name)
 
     if survey_name[:3] in ['VHS', 'VVV', 'VMC', 'VIK', 'VID', 'UKI', 'UHS']:
 
