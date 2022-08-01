@@ -97,7 +97,7 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
         r = requests.post(url_ps1filename,
                               data=dict(filters=bands, type=imagetypes),
                               files=dict(file=cbuf))
-        r.raise_for_status()
+        #r.raise_for_status()
         # Convert retrieved file table to pandas DataFrame
         df = Table.read(r.text, format="ascii").to_pandas()
 
