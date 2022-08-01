@@ -77,9 +77,6 @@ def coord_to_name(dra, dd, epoch='J'):
         String based on the targets coordings [epoch][RA in HMS][Dec in DMS]
     """
 
-    #ra_hours, ra_minutes, ra_seconds = decra_to_hms(dra)
-    #decl_degrees, decl_minutes, decl_seconds = decdecl_to_dms(dd)
-
     coord_name_list = []
 
     if type(dra) is np.float64:

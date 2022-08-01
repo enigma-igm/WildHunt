@@ -12,17 +12,17 @@ from astropy.io import fits
 from wildhunt.surveys import panstarrs, vsa_wsa, legacysurvey
 
 
-def retrieve_survey(survey_name, bands, fov, batch_size=10000):
+def retrieve_survey(survey_name, bands, fov):
 
     survey = None
 
     if survey_name == 'PS1':
 
-        survey = panstarrs.Panstarrs(bands, fov, batch_size)
+        survey = panstarrs.Panstarrs(bands, fov, survey_name)
 
     if survey_name[:3] in ['VHS', 'VVV', 'VMC', 'VIK', 'VID', 'UKI', 'UHS']:
 
-        survey = vsa_wsa.VsaWsa(bands, fov, survey_name, batch_size)
+        survey = vsa_wsa.VsaWsa(bands, fov, survey_name)
 
     if survey_name[:4] == 'DELS':
 
@@ -35,7 +35,7 @@ def retrieve_survey(survey_name, bands, fov, batch_size=10000):
     return survey
 
 
-def get_images(ra, dec, image_folder_path, survey_dict, n_jobs=1, batch_size=10000, verbosity=1):
+def get_images(ra, dec, image_folder_path, survey_dict, n_jobs=1, verbosity=1):
     """
 
     :param ra:
@@ -43,7 +43,6 @@ def get_images(ra, dec, image_folder_path, survey_dict, n_jobs=1, batch_size=100
     :param image_folder_path:
     :param survey_dict:
     :param n_jobs:
-    :param batch_size:
     :param verbosity:
     :return:
     """
@@ -51,7 +50,7 @@ def get_images(ra, dec, image_folder_path, survey_dict, n_jobs=1, batch_size=100
 
     for dict in survey_dict:
 
-        survey = retrieve_survey(dict['survey'], dict['bands'], dict['fov'], batch_size)
+        survey = retrieve_survey(dict['survey'], dict['bands'], dict['fov'])
 
         survey.download_images(ra, dec, image_folder_path, n_jobs)
 

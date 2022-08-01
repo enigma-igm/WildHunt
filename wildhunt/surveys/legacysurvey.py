@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 
-import os
 import numpy as np
 from astropy.table import Table
-from astropy.io import fits
 
 from wildhunt.surveys import imagingsurvey
+
+
+from IPython import embed
+
 
 class LegacySurvey(imagingsurvey.ImagingSurvey):
 
@@ -83,36 +85,3 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
                 self.download_table = self.download_table.append(
                     {'image_name': image_name,'url': url},
                     ignore_index=True)
-
-    def data_setup(self, obj_name, band, image_folder_path):
-        '''
-            Set the parameters that are used in the aperture_photometry to perform forced photometry based on the
-            LS survey
-            Args:
-                obj_name:
-                band:
-                image_folder_path:
-            '''
-
-        zpt = {"g": 22.5, "r": 22.5, "z": 22.5, "1": 22.5, "2": 22.5}
-        aboffset={"1": 2.699, "2": 3.339}
-
-        # Read in the data and header
-        image_name = obj_name + "_" + self.name + "_" + band + "_fov" + '{:d}'.format(self.fov)
-        fitsname = os.path.join(image_folder_path, image_name + '.fits')
-
-        par = fits.open(fitsname)
-        if band in ['1','2']:
-            self.data = par[0].data.copy() * 10 ** (-aboffset[band] / 2.5)
-        else:
-            self.data = par[0].data.copy()
-
-        self.hdr = par[0].header
-        self.exp = 1
-        self.extCorr = 0.0
-        self.back = 'no_back'
-        self.zpt = zpt[band]
-
-        del par[0].data
-
-        return self
