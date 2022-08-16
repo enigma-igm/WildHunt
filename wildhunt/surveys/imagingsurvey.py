@@ -174,3 +174,24 @@ class ImagingSurvey(object):
 
         with mp.Pool(processes=self.n_jobs) as pool:
             pool.starmap(self.download_image_from_url, mp_args)
+
+
+    # def mp_download_image_from_url(self):
+    #
+    #     url_list = self.download_table.loc[:, 'url'].values
+    #     image_names = self.download_table.loc[:, 'image_name'].values
+    #
+    #     pool = mp.Pool(processes=self.n_jobs)
+    #     results = [pool.apply_async(self.download_image_from_url,
+    #                                 (url_list[idx],
+    #                                  image_names[idx],))
+    #                for idx, url in enumerate(url_list)]
+    #
+    #     pool.close()
+    #
+    #     pool.join()
+    #
+
+
+    # def _dowload_image_worker
+
