@@ -44,6 +44,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
 
         self.archive=archive
         self.programID=programID
+        self.batch_size=10000
 
         super(VsaWsa, self).__init__(bands, fov, name, verbosity)
 
