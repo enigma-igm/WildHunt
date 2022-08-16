@@ -15,7 +15,7 @@ from IPython import embed
 
 class VsaWsa(imagingsurvey.ImagingSurvey):
 
-    def __init__(self, bands, fov, name, batch_size=10000, verbosity=1):
+    def __init__(self, bands, fov, name, verbosity=1):
         """
         :param bands:
         :param fov:
@@ -46,8 +46,9 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
 
         self.archive=archive
         self.programID=programID
+        self.batch_size=10000
 
-        super(VsaWsa, self).__init__(bands, fov, name, batch_size, verbosity)
+        super(VsaWsa, self).__init__(bands, fov, name, verbosity)
 
     def download_images(self, ra, dec, image_folder_path, n_jobs=1):
         """
