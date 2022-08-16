@@ -2,9 +2,7 @@
 
 import time
 import os
-import warnings
 import numpy as np
-from astropy.io import fits
 
 from wildhunt.surveys import imagingsurvey
 from IPython import embed
@@ -12,6 +10,7 @@ from IPython import embed
 
 # List of programmeID: VHS - 110, VVV - 120, VMC - 130, VIKING - 140, VIDEO - 150, UHS - 107, UKIDSS: LAS - 101,
 # GPS - 102, GCS - 103, DXS - 104, UDS - 105
+numCoords=10000  # number of coords in each bach (do not exceed 20000)
 
 class VsaWsa(imagingsurvey.ImagingSurvey):
 
@@ -20,7 +19,6 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
         :param bands:
         :param fov:
         :param name:
-        :param batch_size:
         """
 
         self.database = name
@@ -109,8 +107,8 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                         'mode': 'wget'}
         boundary = "--FILEUPLOAD"  # separator
 
-        if np.size(ra) > self.batch_size:
-            nbatch = int(np.ceil(np.size(ra) / self.batch_size))
+        if np.size(ra) > numCoords:
+            nbatch = int(np.ceil(np.size(ra) / numCoords))
         else:
             nbatch = 1
 
@@ -118,7 +116,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
 
         for i in range(nbatch):
 
-            startID = self.batch_size * loop
+            startID = numCoords * loop
             loop += 1
             uploadFile = "upload_" + str(loop) + ".txt"
             outFile = "out_" + str(loop) + ".txt"
@@ -146,7 +144,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                     uploadFile), file=up)
 
             if i != (nbatch - 1):
-                n = self.batch_size
+                n = numCoords
             else:
                 n = len(ra) - startID
             for jdx in range(n):
@@ -219,54 +217,3 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
             print("Start sleep")
             time.sleep(5)
             print("End sleep")
-
-    def data_setup(self, obj_name, band, image_folder_path):
-        '''
-
-            Set the parameters that are used in the aperture_photometry to perform forced photometry based on the
-            WSA/VSA survey
-            Args:
-                obj_name:
-                band:
-                image_folder_path:
-            '''
-
-        # Read in the data and header
-        image_name = obj_name + "_" + self.name + "_" + band + "_fov" + '{:d}'.format(self.fov)
-        fitsname = os.path.join(image_folder_path, image_name + '.fits')
-        if self.name[0] == 'U':
-            par = fits.open(fitsname)
-            self.data = par['WSAIMAGE'].data.copy()
-            self.hdr = par['WSAIMAGE'].header
-            self.exp = par['PRIMARY'].header["EXP_TIME"]
-            # skylevel = par['WSAIMAGE'].header['SKYLEVEL']
-            amstart = par['PRIMARY'].header['AMSTART']
-            amend = par['PRIMARY'].header['AMEND']
-            self.extCorr = 0.05 * ((amstart + amend) / 2 - 1)
-            self.zpt = par['WSAIMAGE'].header['MAGZPT']
-            ## astropy seems can not close the file and release the memory properly.
-            del par['WSAIMAGE'].data
-
-        else:
-            par = fits.open(fitsname)
-            self.data = par['GETIMAGE'].data.copy()
-            self.hdr = par['GETIMAGE'].header
-            self.exp = par['GETIMAGE'].header["EXPTIME"]
-            # skylevel = par['GETIMAGE'].header['SKYLEVEL']
-            try:
-                # some of the header does not have AIRMASS information
-                amstart = par['GETIMAGE'].header['ESO TEL AIRM START']
-                amend = par['GETIMAGE'].header['ESO TEL AIRM END']
-                self.extCorr = 0.05 * ((amstart + amend) / 2 - 1)
-            except:
-                warnings.warn('Header doest not have AIRMASS information.')
-                self.extCorr = 0.0
-            try:
-                self.zpt = par['GETIMAGE'].header['MAGZPT']
-            except:
-                self.zpt = 26.7  # this is a hack for VIKING J-band
-            del par['GETIMAGE'].data
-
-        self.back = 'back'
-
-        return self
