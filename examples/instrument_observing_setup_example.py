@@ -11,4 +11,4 @@ instrument_observations_setup('keck_lris', table = 'observation_starlist_catalog
                               target_column_name = 'Name', mag_column_name = 'mag', offset_ra_column_name = 'offset_ra',
                               offset_dec_column_name = 'offset_dec', offset_mag_column_name = 'offset_mag',
                               output_starlist = 'test_starlist', pos_angle_column_name = None, survey = 'DELSDR9',
-                              band = 'r', aperture = 2, fov = 110, image_folder_path = './cutouts', n_jobs = 4)
+                              band = 'r', aperture = 2, fov = 120, image_folder_path = './cutouts', n_jobs = 5)

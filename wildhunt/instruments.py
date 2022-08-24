@@ -19,8 +19,44 @@ from IPython import embed
 
 def instrument_observations_setup(instrument, table, ra_column_name, dec_column_name, target_column_name,
                                   mag_column_name, offset_ra_column_name, offset_dec_column_name,
-                                  offset_mag_column_name, output_starlist, pos_angle_column_name, survey, band,
-                                  aperture = 2, fov = 110, image_folder_path = './cutouts', n_jobs = 4):
+                                  offset_mag_column_name, output_starlist, pos_angle_column_name = None,
+                                  survey = 'DELSDR9', band = 'r', aperture = 2, fov = 120,
+                                  image_folder_path = './cutouts', n_jobs = 1):
+    """ Calls the different functions that generate the required files (finding charts, starlist, OBs...) to observe
+    with a specific telescope
+        :param instrument: string
+            the telescope/instrument that is used in the observation
+        :param table: string
+            Name of the table catalog
+        :param ra_column_name: string
+            Column name for the right ascension of the targets in decimal degrees
+        :param dec_column_name: string
+            Column name for the declination of the targets in decimal degrees
+        :param mag_column_name: string
+            Column name for the magnitude of the targets
+        :param offset_ra_column_name: string
+            Offset star dataframe right ascension column name
+        :param offset_dec_column_name: string
+            Offset star dataframe declination column name
+        :param offset_mag_column_name: string
+            Offset star dataframe magnitude column name
+        :param output_starlist: string
+            Name of the output starlist
+        :param pos_angle_column_name: string
+            Column name of the position angle between the target (at the center) and the star in degrees
+        :param survey: string
+            Survey name
+        :param band: string
+            Passband name
+        :param aperture: float
+            Size of the plotted aperture in arcseconds
+        :param fov: float
+            Field of view in arcseconds
+        :param image_folder_path: string
+            Path to where the image will be stored
+        :param n_jobs: int
+            Number of jobs to perform parallel download of the images for the FCs
+        """
 
     if instrument == 'keck_lris':
         keck_lris(table, ra_column_name, dec_column_name, target_column_name, mag_column_name,
@@ -34,8 +70,40 @@ def instrument_observations_setup(instrument, table, ra_column_name, dec_column_
 
 def keck_lris(table, ra_column_name, dec_column_name, target_column_name, mag_column_name,
               offset_ra_column_name, offset_dec_column_name, offset_mag_column_name, output_starlist,
-              pos_angle_column_name = None, survey = 'DELSDR9', band = 'r', aperture = 2, fov = 110,
-              image_folder_path = './cutouts', n_jobs = 4):
+              pos_angle_column_name = None, survey = 'DELSDR9', band = 'r', aperture = 2, fov = 120,
+              image_folder_path = './cutouts', n_jobs = 1):
+    """ Function that generates finding charts and the starlist to observe with Keck/LRIS
+            :param table: string
+                Name of the table catalog
+            :param ra_column_name: string
+                Column name for the right ascension of the targets in decimal degrees
+            :param dec_column_name: string
+                Column name for the declination of the targets in decimal degrees
+            :param mag_column_name: string
+                Column name for the magnitude of the targets
+            :param offset_ra_column_name: string
+                Offset star dataframe right ascension column name
+            :param offset_dec_column_name: string
+                Offset star dataframe declination column name
+            :param offset_mag_column_name: string
+                Offset star dataframe magnitude column name
+            :param output_starlist: string
+                Name of the output starlist
+            :param pos_angle_column_name: string
+                Column name of the position angle between the target (at the center) and the star in degrees
+            :param survey: string
+                Survey name
+            :param band: string
+                Passband name
+            :param aperture: float
+                Size of the plotted aperture in arcseconds
+            :param fov: float
+                Field of view in arcseconds
+            :param image_folder_path: string
+                Path to where the image will be stored
+            :param n_jobs: int
+                Number of jobs to perform parallel download of the images for the FCs
+            """
 
     # Open the candidates catalog
     df = pd.read_csv(table)
