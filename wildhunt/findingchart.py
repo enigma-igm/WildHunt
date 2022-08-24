@@ -116,7 +116,7 @@ def make_finding_charts(table, ra_column_name, dec_column_name,
         target_name = table.loc[idx, target_column_name]
 
         if offset_table is not None:
-            offset_target = offset_table.query('target_name=="{}"'.format(
+            offset_target = offset_table.query('{}=="{}"'.format(target_column_name,
                             target_name))
 
             # Set position angle
