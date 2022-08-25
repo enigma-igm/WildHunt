@@ -222,23 +222,24 @@ def vlt(instrument, table, ra_column_name, dec_column_name, mag_column_name,
         os.mkdir(path + '/{}_OBs'.format(instrument))
 
     for i, angle in enumerate(pos_angles):
+
         if angle >= 180:
             pos_angles[i] = angle - 360
 
-            with open('ob_example.obx', 'r') as file:
-                filedata = file.read()
+        with open('ob_example.obx', 'r') as file:
+            filedata = file.read()
 
-            # Replace the target string
-            filedata = filedata.replace('Longslit_observations', name_targ[i])
-            filedata = filedata.replace('Name_target', name_targ[i])
-            filedata = filedata.replace('RA_HMS', rahms_star[i])
-            filedata = filedata.replace('DEC_DMS', decdms_star[i])
-            filedata = filedata.replace('mag_band', band + '=' + str(round(mag_star[i], 2)))
-            filedata = filedata.replace('rot_angle', str(pos_angles[i]))
+        # Replace the target string
+        filedata = filedata.replace('Longslit_observations', name_targ[i])
+        filedata = filedata.replace('Name_target', name_targ[i])
+        filedata = filedata.replace('RA_HMS', rahms_star[i])
+        filedata = filedata.replace('DEC_DMS', decdms_star[i])
+        filedata = filedata.replace('mag_band', band + '=' + str(round(mag_star[i], 2)))
+        filedata = filedata.replace('rot_angle', str(pos_angles[i]))
 
-            # Write the file out again
-            with open('{}_OBs/{}.obx'.format(instrument, name_targ[i]), 'w') as file:
-                file.write(filedata)
+        # Write the file out again
+        with open('{}_OBs/{}.obx'.format(instrument, name_targ[i]), 'w') as file:
+            file.write(filedata)
 
     return df
 
