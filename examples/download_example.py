@@ -30,4 +30,3 @@ if __name__ == "__main__":
     print("{:.1f} s: ".format(time.time() - t0))
 
 
-

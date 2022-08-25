@@ -1,0 +1,42 @@
+
+
+
+Functionality:
+
+- Observation preparation: Input catalogs for instruments/telescopes [ ]
+- Observation preparation: Getting offset stars [x]
+- Observation preparation: Making finding charts [x]
+
+- Image downloads [x] - Review [ ]
+- Forced Photometry [x] - Review [ ]
+- Online cross-matches [ ]
+- Disk cross-matches [ ]
+
+
+
+
+
+
+Core classes:
+
+
+
+ImagingSurvey [x]
+- Download images
+
+Catalog [ ]
+- Online cross-match
+- Disk cross-match (match_coordinates_sky)
+- Get images (ImagingSurvey)
+- Do forced photometry (Image)
+- Get offset stars (related to online cross-match)
+- Generate finding charts (Image, ImagingSurvey)
+
+Image [ ]
+- Calculate forced photometry
+- Plot cutout images (for visual inspection)
+- Plot finding charts
+
+Instrument [ ]
+- All info related to specific instruments
+- Instrument specific input tables
