@@ -450,7 +450,7 @@ class Catalog(object):
                     where=where, n=n, minimum_distance=minimum_distance,
                     verbosity=self.verbose)
 
-                offset_df = offset_df.append(temp_df, ignore_index=True)
+                offset_df = pd.concat([offset_df, temp_df], ignore_index=True)
 
                 offset_df.to_csv('temp_offset_df.csv', index=False)
 
@@ -458,12 +458,15 @@ class Catalog(object):
             os.remove('temp_offset_df.csv')
 
             if self.df.npartitions > 1:
-                offset_df.to_csv('offset_catalog_part_{}.csv'.format(idx))
+                offset_df.to_csv('{}_{}_OFFSETS_part_{}.csv'.format(
+                    self.name, datalab_dict['table'].split('.')[0], idx))
             else:
-                offset_df.to_csv('offset_catalog.csv'.format(idx))
+                offset_df.to_csv('{}_{}_OFFSETS.csv'.format(
+                    self.name, datalab_dict['table'].split('.')[0]))
 
     def get_offset_stars_astroquery(self, match_distance, catalog='tmass',
-                                    n=3, quality_query=None):
+                                    n=3, quality_query=None,
+                                    minimum_distance=3):
         """Get offset stars for all targets in the catalog using astroquery.
 
         Although this routine works with large catalogs, it will be slow in
@@ -510,17 +513,22 @@ class Catalog(object):
                     target_name, target_ra, target_dec,
                     match_distance, catalog,
                     quality_query=quality_query, n=n,
+                    minimum_distance=minimum_distance,
                     verbosity=self.verbose)
 
-                offset_df = offset_df.append(temp_df, ignore_index=True)
+                offset_df = pd.concat([offset_df, temp_df], ignore_index=True)
+
+                offset_df.to_csv('temp_offset_df.csv', index=False)
 
             # Remove temporary backup file
             os.remove('temp_offset_df.csv')
 
             if self.df.npartitions > 1:
-                offset_df.to_csv('offset_catalog_part_{}.csv'.format(idx))
+                offset_df.to_csv('{}_{}_OFFSETS_part_{}.csv'.format(
+                    self.name, catalog, idx))
             else:
-                offset_df.to_csv('offset_catalog.csv'.format(idx))
+                offset_df.to_csv('{}_{}_OFFSETS.csv'.format(
+                    self.name, catalog))
 
     def get_offset_stars_ps1(self, radius, data_release='dr2',
                              catalog='mean', quality_query=None, n=3):

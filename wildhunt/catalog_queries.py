@@ -19,6 +19,10 @@ from astroquery.ukidss import Ukidss
 
 from dl import queryClient as qc
 
+from wildhunt import pypmsgs
+
+msgs = pypmsgs.Messages()
+
 # def get_offset_stars(target_df, ra_column_name, dec_column_name,
 #                      offset_survey='UKIDSSDR11PLUSLAS', offset_columns,
 #                      n_star=3):
@@ -69,7 +73,7 @@ example_datalab_dict = {'table': 'ls_dr9.tractor',
 # ------------------------------------------------------------------------------
 
 
-def query_region_astroquery(ra, dec, radius, service, catalog,
+def query_region_astroquery(ra, dec, match_distance, service, catalog,
                             data_release=None):
     """ Returns the catalog data of sources within a given radius of a defined
     position using astroquery.
@@ -78,7 +82,7 @@ def query_region_astroquery(ra, dec, radius, service, catalog,
         Right ascension
     :param dec: float
         Declination
-    :param radius: float
+    :param match_distance: float
         Region search radius in arcseconds
     :param service: string
         Astroquery class used to query the catalog of choice
@@ -93,19 +97,19 @@ def query_region_astroquery(ra, dec, radius, service, catalog,
     target_coord = SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg), frame='icrs')
 
     if service == 'VIZIER':
-        result = Vizier.query_region(target_coord, radius=radius * u.arcsecond,
+        result = Vizier.query_region(target_coord, radius=match_distance * u.arcsecond,
                                      catalog=catalog, spatial='Cone')
         result = result[0]
 
     elif service == 'IRSA':
-        result = Irsa.query_region(target_coord, radius=radius * u.arcsecond,
+        result = Irsa.query_region(target_coord, radius=match_distance * u.arcsecond,
                                    catalog=catalog, spatial='Cone')
     elif service == 'VSA':
-        result = Vsa.query_region(target_coord, radius=radius * u.arcsecond,
-                                   programme_id=catalog, database=data_release)
+        result = Vsa.query_region(target_coord, radius=match_distance * u.arcsecond,
+                                  programme_id=catalog, database=data_release)
     elif service == 'UKIDSS':
-        result = Ukidss.query_region(target_coord, radius=radius * u.arcsecond,
-                                   programme_id=catalog, database=data_release)
+        result = Ukidss.query_region(target_coord, radius=match_distance * u.arcsecond,
+                                     programme_id=catalog, database=data_release)
     else:
         raise KeyError('Astroquery class not recognized. Implemented classes '
                        'are: Vizier, Irsa, VSA, Ukidss')
@@ -113,8 +117,9 @@ def query_region_astroquery(ra, dec, radius, service, catalog,
     return result.to_pandas()
 
 
-def get_astroquery_offset(target_name, target_ra, target_dec, radius, catalog,
-                          quality_query=None, n=3, verbosity=0):
+def get_astroquery_offset(target_name, target_ra, target_dec, match_distance, catalog,
+                          quality_query=None, n=3,
+                          minimum_distance=3, verbosity=0):
     """Return the nth nearest offset stars specified by the quality criteria
     around a given target using astroquery.
 
@@ -124,7 +129,7 @@ def get_astroquery_offset(target_name, target_ra, target_dec, radius, catalog,
         Target right ascension
     :param target_dec:
         Target Declination
-    :param radius: float
+    :param match_distance: float
         Maximum search radius in arcseconds
     :param catalog: string
         Catalog (and data release) to retrieve the offset star data from. See
@@ -150,18 +155,21 @@ def get_astroquery_offset(target_name, target_ra, target_dec, radius, catalog,
     distance = astroquery_dict[catalog]['distance']
     dr = astroquery_dict[catalog]['data_release']
 
-    df = query_region_astroquery(target_ra, target_dec, radius, service, cat,
-                                 dr).copy()
+    df = query_region_astroquery(target_ra, target_dec, match_distance,
+                                 service, cat, dr).copy()
 
     if quality_query is not None:
         df.query(quality_query, inplace=True)
 
+    # Querying for a minimum distance (converted to arcminutes here)
+    df.query('{} > {}'.format(distance, minimum_distance/60.), inplace=True)
+
     if df.shape[0] > 0:
         # Sort DataFrame by match distance
+
         df.sort_values(distance, ascending=True, inplace=True)
         # Keep only the first three entries
-        offset_df = df[:n]
-
+        offset_df = df[:n].copy()
 
         # Build the offset DataFrame
         offset_df.loc[:, 'target_name'] = target_name
@@ -329,7 +337,7 @@ def get_astroquery_offset(target_name, target_ra, target_dec, radius, catalog,
 def get_datalab_offset(target_name, target_ra, target_dec, radius,
                        datalab_dict, columns=None, where=None, n=3,
                        minimum_distance=3, verbosity=0):
-    """Return the n nearest offset stars specified by the quality criteria
+    """Return the nth nearest offset stars specified by the quality criteria
     around a given target using the NOAO datalab.
 
     :param target_name: string
@@ -373,7 +381,7 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius,
         # Sort DataFrame by match distance
         df.sort_values('distance', ascending=True, inplace=True)
         # Keep only the first three entries
-        offset_df = df.iloc[:n, :]
+        offset_df = df.iloc[:n, :].copy()
 
         # Build the offset DataFrame
         offset_df.loc[:, 'target_name'] = target_name
@@ -470,7 +478,7 @@ def query_region_datalab(ra, dec, radius, datalab_dict,
 
     sql_query += ', q3c_dist(ra, dec, {}, {}) as distance '.format(ra, dec)
 
-    sql_query += 'FROM } WHERE '.format(table)
+    sql_query += 'FROM {} WHERE '.format(table)
 
     sql_query += 'q3c_radial_query(ra, dec, {}, {}, {}) '.format(ra, dec,
                                                                 radius_deg)
@@ -478,8 +486,8 @@ def query_region_datalab(ra, dec, radius, datalab_dict,
         sql_query += 'AND {}'.format(where)
 
     # Query DataLab and write result to temporary file
-    if verbosity > 0:
-        print("SQL QUERY: {}".format(sql_query))
+    if verbosity > 1:
+        msgs.info("SQL QUERY: {}".format(sql_query))
 
     result = qc.query(sql=sql_query)
 

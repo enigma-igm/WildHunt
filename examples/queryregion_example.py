@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from wildhunt import catalog_queries as cat
+from wildhunt import catalog_queries as whcq
 
 df = pd.read_csv('UKIDSS_sources.csv')
 
@@ -42,9 +42,7 @@ radius = 30
 datalab_dict = {'survey': 'ls_dr9',
                 'table': 'tractor'}
 
-t = cat.query_region_datalab(ra, dec, radius, datalab_dict,
+t = whcq.query_region_datalab(ra, dec, radius, datalab_dict,
                          columns=None, where=None,
                              minimum_distance=3./60, verbosity=0)
 
-
-print(t)
