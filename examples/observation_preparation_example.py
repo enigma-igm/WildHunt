@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from wildhunt import catalog as whcat
+from wildhunt import catalog_queries as whcat
 from wildhunt import findingchart as whfc
 from wildhunt import image as whim
 

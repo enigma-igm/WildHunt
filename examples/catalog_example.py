@@ -2,7 +2,7 @@
 
 
 
-from wildhunt import catalog_new
+from wildhunt import catalog
 
 
 

@@ -60,13 +60,3 @@ def charts_from_table_example():
 
 
 
-
-def new_charts_from_table_example():
-
-
-    cat = Catalog(filename, ra_colname, dec_colnam, id_colname)
-
-    cat.make_finding_charts(target_colname, survey, band, aperture ...)
-
-single_chart_example()
-# charts_from_table_example()

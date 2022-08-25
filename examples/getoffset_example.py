@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from wildhunt import catalog as cat
+from wildhunt import catalog_queries as cat
 from wildhunt import utils
 
 
