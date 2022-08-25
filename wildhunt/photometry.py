@@ -223,10 +223,9 @@ class Forced_photometry(imagingsurvey.ImagingSurvey):
         master_table = Table.from_pandas(pd_table)
 
         if remove == True: os.remove('process_' + str(0) + '_forced_photometry.csv')
-        if n_jobs != 1:
-            for i in range(1, n_jobs):
-                pd_table = pd.read_csv('process_' + str(i) + '_forced_photometry.csv')
-                par = Table.from_pandas(pd_table)
-                master_table = vstack((master_table, par))
-                if remove == True: os.remove('process_' + str(i) + '_forced_photometry.csv')
+        for i in range(1, n_jobs):
+            pd_table = pd.read_csv('process_' + str(i) + '_forced_photometry.csv')
+            par = Table.from_pandas(pd_table)
+            master_table = vstack((master_table, par))
+            if remove == True: os.remove('process_' + str(i) + '_forced_photometry.csv')
         master_table.write(table_name + '_forced_photometry.csv', format='csv', overwrite=True)
