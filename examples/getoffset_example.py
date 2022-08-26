@@ -36,7 +36,8 @@ if __name__ == '__main__':
     # Create offset star catalog with astroquery
     quality_query = 'distance > 3/60. and 10 < jAperMag3 < 18.5 and jppErrBits==0'
 
-    cat.get_offset_stars_astroquery(100, catalog='ukidssdr11')
+    cat.get_offset_stars_astroquery(100, catalog='ukidssdr11',
+                                    minimum_distance=5)
 
     df = pd.read_csv('{}_{}_OFFSETS.csv'.format(
         'ukidss_example', 'ukidssdr11'))

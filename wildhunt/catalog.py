@@ -45,8 +45,6 @@ class Catalog(object):
     in folders with N parquet files according to the number of dask
     dataframe partitions.
 
-    In the case of
-
     """
 
     def __init__(self, name, ra_column_name, dec_column_name,
@@ -204,7 +202,7 @@ class Catalog(object):
             # Create match pandas dataframe from partition
             match_df = match_catalog.df.compute()
 
-            # # Usual astropy procedure
+            # Usual astropy procedure
             source_coord = SkyCoord(
                 source[self.ra_colname].values * u.deg,
                 source[self.dec_colname].values * u.deg)
@@ -221,7 +219,7 @@ class Catalog(object):
             source['{}_distance'.format(column_prefix)] = separation.to(
                 'arcsec').value
 
-            # Generate columsn for merge
+            # Generate columns for merge
             source.loc[:, '{}_match'.format(column_prefix)] = False
             cat_idx = source.query('{}_distance < {}'.format(column_prefix,
                                                               match_distance)).index
@@ -314,6 +312,7 @@ class Catalog(object):
         # Save merged dataframe
         msgs.info('Saving cross-matched dataframe to {}'.format(
             cross_match.name))
+
         merge.to_parquet('{}'.format(cross_match.name))
 
         # Remove the temporary folder (default)
@@ -335,6 +334,7 @@ class Catalog(object):
         match_distance = match_distance/3600.
 
         # Loading default column values
+        # TODO expand this to more catalogs and take care of columns = None
         if datalab_table == 'ls_dr9.tractor' and columns == 'default':
             columns = whcd.ls_dr9_default_columns
             match_name = '{}_x_ls_dr9_tractor'.format(self.name)
