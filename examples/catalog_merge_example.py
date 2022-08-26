@@ -6,8 +6,6 @@ from wildhunt import catalog
 
 from IPython import embed
 
-print("Hallo")
-
 if __name__ == '__main__':
 
 
@@ -35,7 +33,5 @@ if __name__ == '__main__':
                               dec_column_name='wise_dec_x',
                               id_column_name='wise_designation',
                               dtype=dtype)
-    print(obs.df.columns)
-    merged = candidates.catalog_cross_match(obs, 5, column_prefix='obs')
 
-    embed()
+    candidates.catalog_cross_match(obs, 5, column_prefix='obs')
