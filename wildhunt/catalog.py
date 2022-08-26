@@ -192,6 +192,13 @@ class Catalog(object):
         msgs.warn('In consequence the full match dataframe is loaded in '
                   'memory.')
 
+        # Create output directory
+        output_dir = '{}_{}_merged'.format(self.name,
+                                                  match_catalog.name)
+        if not os.path.exists(output_dir):
+            os.mkdir(output_dir)
+            msgs.info('Creating output directory')
+
         for idx, partition in enumerate(self.df.partitions):
 
             msgs.info('Matching partition {} out of {}'.format(
@@ -245,8 +252,9 @@ class Catalog(object):
                                            left_on='match_index',
                                            right_index=True)
 
-            filename = '{}/{}_{}'.format(self.temp_dir, merged_cat_name,
-                                         idx)
+            filename = '{}_{}_merged/part.{}.parquet'.format(self.name,
+                                                  match_catalog.name,
+                                                  idx)
             df_merged.to_parquet(filename)
 
     def cross_match(self, survey='DELS', columns='default',
