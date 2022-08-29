@@ -137,74 +137,78 @@ class Forced_photometry(imagingsurvey.ImagingSurvey):
         if survey != None:
             for band in filters:
 
-                image_params = survey.data_setup(obj_name,band,image_folder_path)
-                hdr = image_params.hdr
-                data = image_params.data
-                exp = image_params.exp
-                extCorr = image_params.extCorr
-                back = image_params.back
-                zpt = image_params.zpt
-                photo_table['{:}_ZP_{:}'.format(self.name, band)] = [zpt]
-
                 try:
-                    # define WCS
-                    wcs_img = wcs.WCS(hdr)
-                    # define coordinates and apertures
-                    position = SkyCoord(ra * u.deg, dec * u.deg, frame='fk5')
-                    aperture = [SkyCircularAperture(position, r=r * u.arcsec) for r in radii]
-                    pix_aperture = [aperture[i].to_pixel(wcs_img) for i in range(len(radii))]
-                    back_aperture = SkyCircularAnnulus(position, r_in=radius_in * u.arcsec, r_out=radius_out * u.arcsec)
+                    image_params = survey.data_setup(obj_name,band,image_folder_path)
+                    hdr = image_params.hdr
+                    data = image_params.data
+                    exp = image_params.exp
+                    extCorr = image_params.extCorr
+                    back = image_params.back
+                    zpt = image_params.zpt
+                    photo_table['{:}_ZP_{:}'.format(self.name, band)] = [zpt]
 
-                    # estimate background
-                    if back == "no_back":
-                        background = np.zeros(len(radii))
-                    else:
-                        f_back = aperture_photometry(data, back_aperture, wcs=wcs_img)
-                        background = [float(f_back['aperture_sum']) / (radius_out ** 2 - radius_in ** 2) * radii[i] ** 2 for i in
-                                      range(len(radii))]
-                    # compute the std from the whole image
-                    ## ToDo: we might need to improve this part (remove source in the image or use variance image): look at Eduardo's method
-                    mean, median, std = stats.sigma_clipped_stats(data, sigma=3.0, maxiters=5)
+                    try:
+                        # define WCS
+                        wcs_img = wcs.WCS(hdr)
+                        # define coordinates and apertures
+                        position = SkyCoord(ra * u.deg, dec * u.deg, frame='fk5')
+                        aperture = [SkyCircularAperture(position, r=r * u.arcsec) for r in radii]
+                        pix_aperture = [aperture[i].to_pixel(wcs_img) for i in range(len(radii))]
+                        back_aperture = SkyCircularAnnulus(position, r_in=radius_in * u.arcsec, r_out=radius_out * u.arcsec)
 
-                    # measure the flux
-                    f = aperture_photometry(data, aperture, wcs=wcs_img)
-                    flux = [float(f['aperture_sum_' + str(i)]) for i in range(len(radii))]
-                    # Estimate the SNR
-                    SN = [(flux[i] - background[i]) / (std * np.sqrt(pix_aperture[i].area)) for i in range(len(radii))]
-                    # Measure fluxes/magnitudes
-                    ## ToDo: for VSA/WSA/PS1 forced photometry we compute the native fluxes and the magnitudes in Vega, while we probably want nanomaggies and AB
-                    for i in range(len(radii)):
-                        radii_namei = str(radii[i] * 2.0).replace('.', 'p')
-                        photo_table['{:}_flux_aper_{:}'.format(band, radii_namei)] = (flux[i] - background[i]) / exp
-                        photo_table['{:}_flux_aper_err_{:}'.format(band, radii_namei)] = std * np.sqrt(pix_aperture[i].area)\
-                                                                                         / exp
-                        photo_table['{:}_snr_aper_{:}'.format(band, radii_namei)] = SN[i]
-                        if (flux[i] - background[i]) > 0.:
-                            photo_table['{:}_mag_aper_{:}'.format(band, radii_namei)] = -2.5 * np.log10(
-                                photo_table['{:}_flux_aper_{:}'.format(band, radii_namei)]) + \
-                                                                                        photo_table['{:}_ZP_{:}'.format(self.name, band)]\
-                                                                                        - extCorr
-                            photo_table['{:}_magaper_err_{:}'.format(band, radii_namei)] = (2.5 / np.log(10)) * (1.0 / SN[i])
+                        # estimate background
+                        if back == "no_back":
+                            background = np.zeros(len(radii))
                         else:
+                            f_back = aperture_photometry(data, back_aperture, wcs=wcs_img)
+                            background = [float(f_back['aperture_sum']) / (radius_out ** 2 - radius_in ** 2) * radii[i] ** 2 for i in
+                                          range(len(radii))]
+                        # compute the std from the whole image
+                        ## ToDo: we might need to improve this part (remove source in the image or use variance image): look at Eduardo's method
+                        mean, median, std = stats.sigma_clipped_stats(data, sigma=3.0, maxiters=5)
+
+                        # measure the flux
+                        f = aperture_photometry(data, aperture, wcs=wcs_img)
+                        flux = [float(f['aperture_sum_' + str(i)]) for i in range(len(radii))]
+                        # Estimate the SNR
+                        SN = [(flux[i] - background[i]) / (std * np.sqrt(pix_aperture[i].area)) for i in range(len(radii))]
+                        # Measure fluxes/magnitudes
+                        ## ToDo: for VSA/WSA/PS1 forced photometry we compute the native fluxes and the magnitudes in Vega, while we probably want nanomaggies and AB
+                        for i in range(len(radii)):
+                            radii_namei = str(radii[i] * 2.0).replace('.', 'p')
+                            photo_table['{:}_flux_aper_{:}'.format(band, radii_namei)] = (flux[i] - background[i]) / exp
+                            photo_table['{:}_flux_aper_err_{:}'.format(band, radii_namei)] = std * np.sqrt(pix_aperture[i].area)\
+                                                                                             / exp
+                            photo_table['{:}_snr_aper_{:}'.format(band, radii_namei)] = SN[i]
+                            if (flux[i] - background[i]) > 0.:
+                                photo_table['{:}_mag_aper_{:}'.format(band, radii_namei)] = -2.5 * np.log10(
+                                    photo_table['{:}_flux_aper_{:}'.format(band, radii_namei)]) + \
+                                                                                            photo_table['{:}_ZP_{:}'.format(self.name, band)]\
+                                                                                            - extCorr
+                                photo_table['{:}_magaper_err_{:}'.format(band, radii_namei)] = (2.5 / np.log(10)) * (1.0 / SN[i])
+                            else:
+                                photo_table['{:}_mag_aper_{:}'.format(band, radii_namei)] = np.NAN
+                                photo_table['{:}_magaper_err_{:}'.format(band, radii_namei)] = np.NAN
+                            print('The {:}-band magnitude is {:}+/-{:}'.format(band, float(
+                                photo_table['{:}_mag_aper_{:}'.format(band, radii_namei)]),
+                                                                               float(photo_table['{:}_magaper_err_{:}'.format(band,
+                                                                                radii_namei)])))
+                        photo_table['success_{:}'.format(band)] = 1
+
+                    except:
+                        photo_table['{:}_ZP_{:}'.format(self.name, band)] = np.NAN
+                        warnings.warn('Photometry on image ' + str(obj_name) + '.' + str(band) + '.fits failed')
+                        for i in range(len(radii)):
+                            radii_namei = str(radii[i] * 2.0).replace('.', 'p')
+                            photo_table['{:}_flux_aper_{:}'.format(band, radii_namei)] = np.NAN
+                            photo_table['{:}_flux_aper_err_{:}'.format(band, radii_namei)] = np.NAN
+                            photo_table['{:}_snr_aper_{:}'.format(band, radii_namei)] = np.NAN
                             photo_table['{:}_mag_aper_{:}'.format(band, radii_namei)] = np.NAN
                             photo_table['{:}_magaper_err_{:}'.format(band, radii_namei)] = np.NAN
-                        print('The {:}-band magnitude is {:}+/-{:}'.format(band, float(
-                            photo_table['{:}_mag_aper_{:}'.format(band, radii_namei)]),
-                                                                           float(photo_table['{:}_magaper_err_{:}'.format(band,
-                                                                            radii_namei)])))
-                    photo_table['success_{:}'.format(band)] = 1
+                        photo_table['success_{:}'.format(band)] = 0
 
                 except:
-                    photo_table['{:}_ZP_{:}'.format(self.name, band)] = np.NAN
-                    warnings.warn('Photometry on image ' + str(obj_name) + '.' + str(band) + '.fits failed')
-                    for i in range(len(radii)):
-                        radii_namei = str(radii[i] * 2.0).replace('.', 'p')
-                        photo_table['{:}_flux_aper_{:}'.format(band, radii_namei)] = np.NAN
-                        photo_table['{:}_flux_aper_err_{:}'.format(band, radii_namei)] = np.NAN
-                        photo_table['{:}_snr_aper_{:}'.format(band, radii_namei)] = np.NAN
-                        photo_table['{:}_mag_aper_{:}'.format(band, radii_namei)] = np.NAN
-                        photo_table['{:}_magaper_err_{:}'.format(band, radii_namei)] = np.NAN
-                    photo_table['success_{:}'.format(band)] = 0
+                    warnings.warn('The image {} is corrupted and cannot be opened'.format(obj_name))
 
         else:
             warnings.warn('The survey {:} is not yet supported!'.format(self.name))
