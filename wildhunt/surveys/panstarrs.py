@@ -144,7 +144,7 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
         image_name = obj_name + "_" + self.name + "_" + band + "_fov" + '{:d}'.format(self.fov)
         fitsname = os.path.join(image_folder_path, image_name + '.fits')
 
-        par = fits.open(fitsname)
+        par = fits.open(fitsname, ignore_missing_end=True)
         self.data = par[0].data.copy()
         self.hdr = par[0].header
         self.exp = par[0].header['EXPTIME']
