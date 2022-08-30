@@ -18,6 +18,7 @@ dependencies:
 - h5py
 - sphinx>=1.4
 - ipykernel
+- astropy astroquery
 - pip:
   - nbsphinx
   - nbsphinx-link
