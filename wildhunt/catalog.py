@@ -279,9 +279,11 @@ class Catalog(object):
 
         # For datalab surveys log in to datalb
         if survey in ['DELS']:
-            msgs.info('Log in to NOIRLAB Astro Data Lab')
-            token = ac.login(input('Enter user name (+ENTER): '),
-                             getpass.getpass('Enter password (+ENTER): '))
+            response = ac.whoAmI()
+            if response == 'anonymous':
+                msgs.info('Log in to NOIRLAB Astro Data Lab')
+                token = ac.login(input('Enter user name (+ENTER): '),
+                                 getpass.getpass('Enter password (+ENTER): '))
             msgs.info('Astro Data Lab USER: {}'.format(ac.whoAmI()))
             msgs.info('Astro Data Lab TABLES: {}'.format(qc.mydb_list()))
 
