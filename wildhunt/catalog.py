@@ -283,7 +283,7 @@ class Catalog(object):
             token = ac.login(input('Enter user name (+ENTER): '),
                              getpass.getpass('Enter password (+ENTER): '))
             msgs.info('Astro Data Lab USER: {}'.format(ac.whoAmI()))
-            msgs.info('Astro Data Lab TABLES: {}'.format( qc.mydb_list()))
+            msgs.info('Astro Data Lab TABLES: {}'.format(qc.mydb_list()))
 
         # Serialized cross-match over partitions
         for idx, partition in enumerate(self.df.partitions):
@@ -302,9 +302,16 @@ class Catalog(object):
             # Save cross-matched chunk to temporary folder
             filename = '{}/{}_{}'.format(self.temp_dir, cross_match.name,
                                          idx)
-            cross_match.save_catalog(filename)
+            cross_match_df = cross_match.df.compute()
+            cross_match_df.to_parquet(filename)
             msgs.info('Downloaded cross match {} to temporary '
                       'folder'.format(idx))
+
+        # Log out of datalab
+        if survey in ['DELS']:
+            logout_status = ac.logout()
+            msgs.info('Log out of NOIRLAB Astro Data Lab'
+                      ' - Status: {}'.format(logout_status))
 
         # Merge downloaded tables with source table
         match = dd.read_parquet(self.temp_dir)
