@@ -6,9 +6,23 @@ Main module for downloading and manipulating image data.
 """
 
 import glob
+import numpy as np
+
+import aplpy
+from astropy import wcs
+import astropy.units as u
 from astropy.io import fits
+from astropy.nddata.utils import Cutout2D
+from astropy.visualization import ZScaleInterval
+from astropy.coordinates import SkyCoord
+
+import matplotlib.pyplot as plt
+
+from wildhunt import utils
+from wildhunt import pypmsgs
 
 
+msgs = pypmsgs.Messages()
 
 def mp_get_forced_photometry(ra, dec, survey_dict):
     # Get aperture photometry for one source but all bands/surveys
@@ -18,21 +32,126 @@ def mp_get_forced_photometry(ra, dec, survey_dict):
     # ra/dec table
     pass
 
+def plot_source_images(ra, dec, survey_dict, fov, auto_download=True):
+    """Plot image cutouts for all specified surveys/bands for a single
+    source defined by ra, dec, with auto_download."""
+    pass
 
+class Image(object):
 
-class image(object):
+    def __init__(self, ra, dec, survey, band, image_folder_path, fov):
+        self.source_name = utils.coord_to_name(np.array([ra]),
+                                               np.array([dec]),
+                                               epoch="J")[0]
+        self.survey = survey
+        self.band = band
+        self.ra = ra
+        self.dec = dec
+        self.image_folder_path = image_folder_path
+        self.fov = fov
 
-    def __init__(self):
-        self.data = None  # image data
+        self.data = None
         self.header = None
-        pass
 
-    def open(self, filename):
-        hdul = fits.open(filename)
-        self.header = hdul[0].header
-        self.data = hdul[1].data
+        # Open image
+        self.open()
 
-        pass
+
+    def open(self):
+        """Open the image.
+
+        :return: None
+        """
+
+        # Filepath
+        filepath = self.image_folder_path + '/' + self.source_name + "_" + \
+                   self.survey + "_" + self.band + "*fov*.fits"
+
+        filenames_available = glob.glob(filepath)
+        file_found = False
+        open_file_fov = None
+        file_path = None
+        if len(filenames_available) > 0:
+            for filename in filenames_available:
+
+                try:
+                    file_fov = int(filename.split("_")[3].split(".")[0][3:])
+                except:
+                    file_fov = 9999999
+
+                if self.fov <= file_fov:
+                    data, hdr = fits.getdata(filename, header=True)
+                    file_found = True
+                    file_path = filename
+                    open_file_fov = file_fov
+
+        if file_found:
+            msgs.info("Opened {} with a fov of {} "
+                      "arcseconds".format(file_path, open_file_fov))
+
+            self.data = data
+            self.header = hdr
+
+        else:
+            msgs.error("{} {}-band image of source {} in\ folder {} not "
+                      "found.".format(self.survey, self.band,
+                                      self.source_name,
+                                      self.image_folder_path))
+
+    def show(self, fov=None, n_sigma=3, color_map='viridis'):
+        fig = plt.figure(figsize=(5, 5))
+
+        subplot = (1, 1, 1)
+
+        self._plot_axis(fig, subplot, fov=fov, n_sigma=n_sigma,
+                       color_map=color_map)
+
+        plt.show()
+
+    def _plot_axis(self, fig, subplot, fov=None, n_sigma=3,
+                  color_map='viridis'):
+
+        if fov is not None:
+            cutout_data = self.get_cutout(fov=fov)
+        else:
+            cutout_data = None
+
+        if cutout_data is not None:
+            img_data = cutout_data
+        else:
+            img_data = self.data
+
+        hdu = fits.ImageHDU(data=img_data, header=self.header)
+
+        axs = aplpy.FITSFigure(hdu, figure=fig,
+                               subplot=subplot,
+                               north=True)
+
+        # Sigma-clipping of the color scale
+        mean = np.mean(img_data[~np.isnan(img_data)])
+        std = np.std(img_data[~np.isnan(img_data)])
+        upp_lim = mean + n_sigma * std
+        low_lim = mean - n_sigma * std
+        axs.show_colorscale(vmin=low_lim, vmax=upp_lim,
+                            cmap=color_map)
+
+        axs.set_title(self.survey+' '+self.band)
+
+    def get_cutout(self, fov):
+
+        wcs_img = wcs.WCS(self.header)
+
+        pixcrd = wcs_img.wcs_world2pix(self.ra, self.dec, 0)
+        positions = (np.float(pixcrd[0]), np.float(pixcrd[1]))
+
+        try:
+            cutout_data = Cutout2D(self.data, positions, size=fov * u.arcsec,
+                                   wcs=wcs_img).data
+        except:
+            msgs.warn("Source not in image.")
+            cutout_data = None
+
+        return cutout_data
 
 
     def get_aperture_photometry(self, ra, dec, survey, band):

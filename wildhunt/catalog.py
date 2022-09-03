@@ -1,26 +1,20 @@
 #!/usr/bin/env python
 
 import os
-
+import glob
 import getpass
 import shutil
 import numpy as np
 import pandas as pd
 
-import glob
-import dask
 import dask.dataframe as dd
 
 import astropy.units as u
 from astropy.table import Table
 from astropy.coordinates import SkyCoord, match_coordinates_sky
-from astropy.io import ascii, fits
-
 
 from dl import authClient as ac, queryClient as qc, storeClient as sc
 from dl.helpers.utils import convert
-
-
 
 from IPython import embed
 
@@ -31,9 +25,8 @@ from wildhunt import utils
 from wildhunt.surveys import panstarrs, vsa_wsa, legacysurvey
 msgs = pypmsgs.Messages()
 
-# Potentially instantiate a derived class, called SegmentedCatalog
 def retrieve_survey(survey_name, bands, fov, verbosity=1):
-    """
+    """ Retrieve survey class according to the survey name.
 
     :param survey_name:
     :param bands:
@@ -44,20 +37,16 @@ def retrieve_survey(survey_name, bands, fov, verbosity=1):
     survey = None
 
     if survey_name == 'PS1':
-
         survey = panstarrs.Panstarrs(bands, fov, verbosity=verbosity)
 
     if survey_name[:3] in ['VHS', 'VVV', 'VMC', 'VIK', 'VID', 'UKI', 'UHS']:
-
         survey = vsa_wsa.VsaWsa(bands, fov, survey_name, verbosity=verbosity)
 
     if survey_name[:4] == 'DELS':
-
         survey = legacysurvey.LegacySurvey(bands, fov, survey_name,
                                            verbosity=verbosity)
 
-
-    if survey == None:
+    if survey is None:
         print('ERROR')
 
     return survey
@@ -234,14 +223,14 @@ class Catalog(object):
 
         msgs.info('Catalog dataframe initialized.')
 
-    def save_catalog(self, filepath: str = None,
-                     file_format: str = 'parquet') -> None:
+    def save_catalog(self, filepath=None, file_format='parquet'):
         """ Save catalog to filepath
 
         :param filepath: Filepath to save the catalog
         :type filepath: string
         :param file_format: Format to save the catalog in
         :type file_format: string (default: parquet)
+        :return: None
         """
 
         if filepath is None:
