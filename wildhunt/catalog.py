@@ -94,7 +94,7 @@ class Catalog(object):
             single file or in a folder.
         :type datapath: string
         :param table_data: Table data as a pandas dataframe.
-        :type table_data: pandas.DataFrame
+        :type table_data: pandas.core.frame.DataFrame
         :param clear_temp_dir:  Erase the temporary directory after each
             operation in which it would be created.
         :type clear_temp_dir: bool
@@ -611,9 +611,7 @@ class Catalog(object):
             on potential offset stars around the target.
         :param minimum_distance: Minimum distance to the target in arcsec
         :type minimum_distance: float
-        :return: pandas.core.frame.DataFrame
-            Returns the dataframe with the retrieved offset stars for all
-            targets in the input dataframe.
+        :return: None
         """
         msgs.info('Retrieving offset stars for catalog using astroquery.')
 
@@ -754,7 +752,6 @@ class Catalog(object):
                 ra = partition.compute()[self.ra_colname]
                 dec = partition.compute()[self.dec_colname]
                 survey.download_images(ra, dec, image_folder_path, n_jobs)
-
 
     def get_forced_photometry(self, image_folder_path, survey_dict, n_jobs=1):
 

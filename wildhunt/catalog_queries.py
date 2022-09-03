@@ -4,13 +4,9 @@ import os
 import pandas as pd
 
 import astropy.units as u
-from astropy.table import Table
 from astropy.coordinates import SkyCoord
-from astropy.io import ascii, fits
 
 from urllib.request import urlopen  # python3
-from urllib.error import HTTPError
-from http.client import IncompleteRead
 
 from astroquery.vizier import Vizier
 from astroquery.irsa import Irsa
@@ -78,18 +74,19 @@ def query_region_astroquery(ra, dec, match_distance, service, catalog,
     """ Returns the catalog data of sources within a given radius of a defined
     position using astroquery.
 
-    :param ra: float
-        Right ascension
-    :param dec: float
-        Declination
-    :param match_distance: float
-        Region search radius in arcseconds
-    :param service: string
-        Astroquery class used to query the catalog of choice
-    :param catalog: string
-        Catalog to query
-    :param data_release:
-        If needed by astroquery the specified data release (e.g. needed for VSA)
+    :param ra: Right ascension in decimal degrees.
+    :type ra: float
+    :param dec: Declination in decimal degrees.
+    :type dec: float
+    :param match_distance: Cone search radius in arcseconds
+    :type match_distance: float
+    :param service: Astroquery class used to query the catalog of choice
+    :type service: string
+    :param catalog: Astroquery catalog to query
+    :type catalog: string
+    :param data_release:  If needed by astroquery the specified data release
+        (e.g. needed for VSA)
+    :type data_release: string
     :return: pandas.core.frame.DataFrame
         Returns the dataframe with the returned matches
     """
@@ -117,33 +114,35 @@ def query_region_astroquery(ra, dec, match_distance, service, catalog,
     return result.to_pandas()
 
 
-def get_astroquery_offset(target_name, target_ra, target_dec, match_distance, catalog,
-                          quality_query=None, n=3,
+def get_astroquery_offset(target_name, target_ra, target_dec, match_distance,
+                          catalog,  quality_query=None, n=3,
                           minimum_distance=3, verbosity=0):
     """Return the nth nearest offset stars specified by the quality criteria
     around a given target using astroquery.
 
-    :param target_name: string
-        Identifier for the target
-    :param target_ra: float
-        Target right ascension
-    :param target_dec:
-        Target Declination
-    :param match_distance: float
-        Maximum search radius in arcseconds
-    :param catalog: string
-        Catalog (and data release) to retrieve the offset star data from. See
+    :param target_name:  Identifier for the target
+    :type target_name: string
+    :param target_ra: Target right ascension in decimal degrees.
+    :type target_ra: float
+    :param target_dec: Target Declination in decimal degrees.
+    :type target_dec: float
+    :param match_distance: Maximum search radius in arcseconds
+    :type match_distance: float
+    :param catalog: Catalog (and data release) to retrieve the offset star data from. See
         astroquery_dict for implemented catalogs.
-    :param quality_query: string
-        A string written in pandas query syntax to apply quality criteria on
-        potential offset stars around the target.
-    :param n: int
-        Number of offset stars to retrieve. (Maximum: n=5)
+    :type: string
+    :param quality_query:  A string written in pandas query syntax to apply
+        quality criteria on potential offset stars around the target.
+    :type quality_query: string
+    :param n: Number of offset stars to retrieve. (Maximum: n=5)
+    :type n: int
+    :param minimum_distance: Minimum distance to the target in arcsec
+    :type minimum_distance: float
     :param verbosity:
         Verbosity > 0 will print verbose statements during the execution.
-    :return: pandas.core.frame.DataFrame
-        Returns the dataframe with the retrieved offset stars for the given
+    :return: Returns the dataframe with the retrieved offset stars for the given
         target.
+    :rtype: pandas.core.frame.DataFrame
     """
 
     service = astroquery_dict[catalog]['service']
@@ -187,7 +186,6 @@ def get_astroquery_offset(target_name, target_ra, target_dec, match_distance, ca
             offset_df.loc[
                 idx, 'offset_shortname'] = target_name + '_offset_' + letter
 
-
             offset_df.loc[:, mag_name] = df[mag]
 
         # GET THIS INTO A SEPARATE FUNCTION
@@ -197,7 +195,6 @@ def get_astroquery_offset(target_name, target_ra, target_dec, match_distance, ca
         offset_coords = SkyCoord(ra=offset_df.offset_ra.values,
                                  dec=offset_df.offset_dec, unit=(u.deg, u.deg),
                                  frame='icrs')
-
 
         # Calculate position angles and separations (East of North)
         pos_angles = offset_coords.position_angle(target_coords).to(u.deg)
@@ -225,28 +222,31 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius,
     """Return the nth nearest offset stars specified by the quality criteria
     around a given target using the NOAO datalab.
 
-    :param target_name: string
-        Identifier for the target
-    :param target_ra: float
-        Target right ascension
-    :param target_dec:
-        Target Declination
-    :param radius: float
-        Maximum search radius in arcseconds
-    :param survey: string
-        Survey keyword for the datalab query.
-    :param table: string
-        Table keyword for the datalab query.
-    :param where: string
-        A string written in ADQL syntax to apply quality criteria on
+    :param target_name:  Identifier for the target
+    :type target_name: string
+    :param target_ra: Target right ascension in decimal degrees.
+    :type target_ra: float
+    :param target_dec: Target Declination in decimal degrees.
+    :type target_dec: float
+    :param radius: Maximum search radius in arcseconds
+    :type radius: float
+    :param datalab_dict: Survey dictionary for the datalab query.
+    :type datalab_dict: dict
+    :param columns: Columns names returned from datalab table.
+    :type columns: list
+    :param where: A string written in ADQL syntax to apply quality criteria on
         potential offset stars around the target.
-    :param n: int
-        Number of offset stars to retrieve. (Maximum: n=5)
-    :param verbosity:
-        Verbosity > 0 will print verbose statements during the execution.
-    :return: pandas.core.frame.DataFrame
-        Returns the dataframe with the retrieved offset stars for the given
-        target.
+    :type where: string
+    :param n: Number of offset stars to retrieve. (Maximum: n=5)
+    :type n: int
+    :param minimum_distance: Minimum distance to the target in arcsec
+    :type minimum_distance: float
+    :param verbosity: Verbosity > 0 will print verbose statements during the
+        execution.
+    :type verbosity: int
+    :return:  Returns the dataframe with the retrieved offset stars for the
+        given target.
+    :rtype: pandas.core.frame.DataFrame
     """
 
     df = query_region_datalab(target_ra, target_dec, radius,
@@ -299,7 +299,6 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius,
         pos_angles = offset_coords.position_angle(target_coords).to(u.deg)
         separations = offset_coords.separation(target_coords).to(u.arcsecond)
         dra, ddec = offset_coords.spherical_offsets_to(target_coords)
-        # UNTIL HERE
 
         if verbosity > 1:
             print('Offset delta ra: {}'.format(dra))
@@ -330,23 +329,24 @@ def query_region_datalab(ra, dec, radius, datalab_dict,
     """ Returns the catalog data of sources within a given radius of a defined
     position using the NOIRLAB astro data lab.
 
-    :param ra: float
-        Right ascension
-    :param dec: float
-        Declination
-    :param radius: float
-        Region search radius in arcseconds
-    :param survey: string
-        Survey keyword for the datalab query.
-    :param table: string
-        Table keyword for the datalab query.
-    :param columns:
-        The names of the columns that should be returned.
-    :param where: string
-        A string written in ADQL syntax to apply quality criteria on
+    :param ra: Right ascension in decimal degrees.
+    :type ra: float
+    :param dec: Declination in decimal degrees.
+    :type dec: float
+    :param radius: Cone search radius in arcseconds
+    :type radius: float
+    :type datalab_dict: dict
+    :param columns: Columns names returned from datalab table.
+    :type columns: list
+    :param where: A string written in ADQL syntax to apply quality criteria on
         potential offset stars around the target.
-    :return: pandas.core.frame.DataFrame
-        Returns the dataframe with the returned matches
+    :param minimum_distance: Minimum distance to the target in arcsec
+    :type minimum_distance: float
+    :param verbosity: Verbosity > 0 will print verbose statements during the
+        execution.
+    :type verbosity: int
+    :return: Returns the dataframe with the returned matches
+    :rtype:  pandas.core.frame.DataFrame
     """
 
     radius_deg = radius / 3600.
@@ -395,21 +395,22 @@ def query_region_ps1(ra, dec, radius, survey='dr2', catalog='mean',
     """ Returns the catalog data of sources within a given radius of a defined
     position using the MAST website.
 
-    :param ra: float
-        Right ascension
-    :param dec: float
-        Declination
-    :param radius: float
-        Region search radius in degrees
-    :param survey: string
-        Survey keyword for the PanSTARRS MAST query.
-    :param catalog: string
-        Catalog keyword for the PanSTARRS MAST query.
-    :param columns:
-        The names of the columns that should be returned.
-    :param  add_criteria: string
-        A string with conditions to apply additional quality criteria on
-        potential offset stars around the target.
+    :param ra: Right ascension in decimal degrees.
+    :type ra: float
+    :param dec: Declination in decimal degrees.
+    :type dec: float
+    :param radius: Cone search radius in arcseconds
+    :type radius: float
+    :param survey: Survey keyword for the PanSTARRS MAST query.
+    :type survey: string
+    :param catalog: Catalog keyword for the PanSTARRS MAST query.
+    :type catalog: string
+    :param add_criteria:  A string with conditions to apply additional
+        quality criteria on potential offset stars around the target.
+    :type add_criteria: string
+    :param verbosity: Verbosity > 0 will print verbose statements during the
+        execution.
+    :type verbosity: int
     :return: pandas.core.frame.DataFrame
         Returns the dataframe with the returned matches
     """
@@ -455,28 +456,29 @@ def get_ps1_offset_star(target_name, target_ra, target_dec, radius=300,
     It will always retrieve the z-band magnitude for the offset star. This is
     hardcoded. Depending on the catalog it will be the mean of stack magnitude.
 
-    :param target_name: string
-        Identifier for the target
-    :param target_ra: float
-        Target right ascension
-    :param target_dec:
-        Target Declination
-    :param radius: float
-        Maximum search radius in arcseconds
-    :param catalog: string
-        Catalog to retrieve the offset star data from. (e.g. 'mean', 'stack')
-    :param data_release: string
-        The specific PanSTARRS data release
-    :param quality_query: string
-        A string written in pandas query syntax to apply quality criteria on
-        potential offset stars around the target.
-    :param n: int
-        Number of offset stars to retrieve. (Maximum: n=5)
-    :param verbosity:
-        Verbosity > 0 will print verbose statements during the execution.
+    :param target_name:  Identifier for the target
+    :type target_name: string
+    :param target_ra: Target right ascension in decimal degrees.
+    :type target_ra: float
+    :param target_dec: Target Declination in decimal degrees.
+    :type target_dec: float
+    :param radius: Cone search radius in arcseconds
+    :type radius: float
+    :param catalog:  Catalog to retrieve the offset star data from.
+        (e.g. 'mean', 'stack')
+    :type catalog: string
+    :param data_release: The specific PanSTARRS data release
+    :type data_release: string
+    :param quality_query:  A string written in pandas query syntax to apply
+        quality criteria on potential offset stars around the target.
+    :type quality_query: string
+    :param n: Number of offset stars to retrieve. (Maximum: n=5)
+    :type n: int
+    :param verbosity: Verbosity > 0 will print verbose statements during the
+        execution.
+    :type verbosity: int
     :return: pandas.core.frame.DataFrame
-        Returns the dataframe with the retrieved offset stars for the given
-        target.
+        Returns the dataframe with the returned matches
     """
 
     # Convert radius in degrees
@@ -544,7 +546,6 @@ def get_ps1_offset_star(target_name, target_ra, target_dec, radius=300,
             print('Offset delta dec: {}'.format(ddec))
             print('Offset separation: {}'.format(separations))
             print('Offset position angle: {}'.format(pos_angles))
-
 
         offset_df.loc[:, 'separation'] = separations.value
         offset_df.loc[:, 'pos_angle'] = pos_angles.value
