@@ -24,13 +24,13 @@ Core classes:
 ImagingSurvey [x]
 - Download images
 
-Catalog [ ]
-- Online cross-match
-- Disk cross-match (match_coordinates_sky)
-- Get images (ImagingSurvey)
-- Do forced photometry (Image)
-- Get offset stars (related to online cross-match)
-- Generate finding charts (Image, ImagingSurvey)
+Catalog [x]
+- Online cross-match [x] (only datalab for now)
+- Disk cross-match (match_coordinates_sky) [x]
+- Get images (ImagingSurvey) [x]
+- Do forced photometry (Image) [ ]
+- Get offset stars (related to online cross-match) [x]
+- Generate finding charts (Image, ImagingSurvey) [ ]
 
 Image [ ]
 - Calculate forced photometry

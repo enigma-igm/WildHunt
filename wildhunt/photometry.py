@@ -132,7 +132,7 @@ class Forced_photometry(imagingsurvey.ImagingSurvey):
 
         # get the image parameters from the corresponding survey and filter
         filters = self.bands
-        survey = image.retrieve_survey(self.name, self.bands, self.fov)
+        survey = imagingsurvey.retrieve_survey(self.name, self.bands, self.fov)
 
         if survey != None:
             for band in filters:

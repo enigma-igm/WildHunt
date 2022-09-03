@@ -25,6 +25,10 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
 
         self.batch_size = 10000
 
+        self.ra = None
+        self.dec = None
+        self.nbatch = 1
+
         super(Panstarrs, self).__init__(bands, fov, 'PS1', verbosity)
 
     def download_images(self, ra, dec, image_folder_path, n_jobs=1):
@@ -69,8 +73,6 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
         # Compute the number of batches to retrieve the urls
         if np.size(self.ra) > self.batch_size:
             self.nbatch = int(np.ceil(np.size(self.ra) / self.batch_size))
-        else:
-            self.nbatch = 1
 
     def retrieve_image_url_list(self, batch_number = 0, imagetypes="stack"):
 

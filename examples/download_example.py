@@ -1,10 +1,8 @@
 #!/usr/bin/env python
 
 import time
-import pandas as pd
 
-from wildhunt import image
-
+from wildhunt import catalog
 
 
 
@@ -14,7 +12,8 @@ if __name__ == "__main__":
 
     t0 = time.time()
 
-    df = pd.read_csv('UKIDSS_sources.csv')
+    cat = catalog.Catalog('example', 'RA', 'DEC','Name',
+                          datapath='UKIDSS_sources.csv')
 
     survey_dict = [
         {'survey': 'PS1', 'bands': ['g', 'r', 'i', 'z', 'y'], 'fov':50},
@@ -24,9 +23,7 @@ if __name__ == "__main__":
          'fov': 120}
     ]
 
-    image.get_images(df['RA'].values[:20], df['DEC'].values[:20], 'cutouts',
-                     survey_dict,
-                     n_jobs=3)
+    cat.get_survey_images('cutouts',  survey_dict, n_jobs=3)
     print("{:.1f} s: ".format(time.time() - t0))
 
 

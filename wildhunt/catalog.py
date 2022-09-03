@@ -28,11 +28,39 @@ from wildhunt import catalog_defaults as whcd
 from wildhunt import catalog_queries as whcq
 from wildhunt import pypmsgs
 from wildhunt import utils
-
+from wildhunt.surveys import panstarrs, vsa_wsa, legacysurvey
 msgs = pypmsgs.Messages()
 
 # Potentially instantiate a derived class, called SegmentedCatalog
+def retrieve_survey(survey_name, bands, fov, verbosity=1):
+    """
 
+    :param survey_name:
+    :param bands:
+    :param fov:
+    :return:
+    """
+
+    survey = None
+
+    if survey_name == 'PS1':
+
+        survey = panstarrs.Panstarrs(bands, fov, verbosity=verbosity)
+
+    if survey_name[:3] in ['VHS', 'VVV', 'VMC', 'VIK', 'VID', 'UKI', 'UHS']:
+
+        survey = vsa_wsa.VsaWsa(bands, fov, survey_name, verbosity=verbosity)
+
+    if survey_name[:4] == 'DELS':
+
+        survey = legacysurvey.LegacySurvey(bands, fov, survey_name,
+                                           verbosity=verbosity)
+
+
+    if survey == None:
+        print('ERROR')
+
+    return survey
 
 class Catalog(object):
     """ Catalog class to handle small to large operations on photometric
@@ -50,28 +78,55 @@ class Catalog(object):
     def __init__(self, name, ra_column_name, dec_column_name,
                  id_column_name, datapath=None, table_data=None,
                  clear_temp_dir=True, dtype=None, verbose=1):
+        """ Initialize catalog class
+
+        :param name: Name of the catalog (is used as an identified for
+        saving the catalog or in cross-matches to the catalog)
+        :type name: string
+        :param ra_column_name: Name of the RA column
+        :type ra_column_name: string
+        :param dec_column_name: Name of the DEC column
+        :type dec_column_name: string
+        :param id_column_name: Name of the identifier column. The identifier
+            should ideally be unqiue to the source.
+        :type id_column_name: string
+        :param datapath: Path to the catalog data. The data can be in a
+            single file or in a folder.
+        :type datapath: string
+        :param table_data: Table data as a pandas dataframe.
+        :type table_data: pandas.DataFrame
+        :param clear_temp_dir:  Erase the temporary directory after each
+            operation in which it would be created.
+        :type clear_temp_dir: bool
+        :param dtype: List of data types for data input from csv files to
+            allow for optimal storage.
+        :type dtype: list(string)
+        :param verbose: Verbosity level for functions.
+        :type verbose: int
+        """
 
         # Main attributes
-        self.name = name
-        self.datapath = datapath
-        self.df = None
-        self.verbose = verbose
-        self.dtype = dtype
+        self.name = name  # Name of the catalog
+        self.datapath = datapath  # Path to catalog data
+        self.df = None  # Dask dataframe (populated internally)
+        self.verbose = verbose  # Verbosity level
+        self.dtype = dtype  # List of data types
 
         # Column name attributes
-        self.id_colname = id_column_name
-        self.ra_colname = ra_column_name
-        self.dec_colname = dec_column_name
+        self.id_colname = id_column_name  # Identifier column name
+        self.ra_colname = ra_column_name  # RA column name
+        self.dec_colname = dec_column_name  # DEC column name
         self.columns = [self.id_colname, self.ra_colname, self.dec_colname]
 
         # Attributes for file
         self.chunk = None  # Dataframe of the current batch
-        self.temp_dir = 'wild_temp'
-        self.clear_temp_dir = clear_temp_dir
+        self.temp_dir = 'wild_temp'  # Name of the temporary directory
+        self.clear_temp_dir = clear_temp_dir  # Erase/Keep temporary
+        # dictionary
 
         # Attributes for file partitioning
-        self.partition_limit = 1073741824  # 1GB
-        self.partition_size = 104857600  # 100Mb
+        self.partition_limit = 1073741824  # Maximum catalog size; 1GB
+        self.partition_size = 104857600  # Maximim partition size; 100Mb
 
         # Instantiate dask dataframe
         if table_data is None and datapath is None:
@@ -82,6 +137,29 @@ class Catalog(object):
             self.df = dd.from_pandas(table_data, npartitions=1)
 
     def init_dask_dataframe(self):
+        """Initialize dask dataframe.
+
+        This function populates the df attribute by reading the data in
+        datapath.
+
+        If datapath is a file it opens the file and checks whether the file
+        size exceeds self.partition_limit (default: 1GiB). If the file is
+        smaller the entire file will be converted to a dask datafile with
+        one partition. If the file is larger, it will be partitioned in
+        partitions with a maximum size of self.partition_size (default:
+        100Mib).
+
+        If datapath is a folder, the function assumes that the folder is
+        made up of one partition for every file in the folder.
+
+        The default file format is parquet and saving the catalog will
+        always be done in parquet files.
+
+        For input the following file formats are additionally supported:
+        csv, hdf5, fits (Table)
+
+        :return:
+        """
 
         msgs.info('Initializing catalog dataframe (dask dataframe)')
 
@@ -156,34 +234,46 @@ class Catalog(object):
 
         msgs.info('Catalog dataframe initialized.')
 
-    def save_catalog(self, filename: str = None,
+    def save_catalog(self, filepath: str = None,
                      file_format: str = 'parquet') -> None:
         """ Save catalog to filepath
 
-        :param filename: Filename (filepath) to save the catalog at
-        :type filename: string
+        :param filepath: Filepath to save the catalog
+        :type filepath: string
         :param file_format: Format to save the catalog in
         :type file_format: string (default: parquet)
         """
 
-        if filename is None:
-            filename = self.name
+        if filepath is None:
+            filepath = self.name
 
         if file_format == 'parquet':
-            self.df.to_parquet('{}'.format(filename))
+            self.df.to_parquet('{}'.format(filepath))
         elif file_format == 'csv':
-            self.df.to_csv('{}'.format(filename), index=False)
+            self.df.to_csv('{}'.format(filepath), index=False)
         elif file_format == 'hdf5':
-            self.df.to_hdf('{}'.format(filename), format='table')
+            self.df.to_hdf('{}'.format(filepath), format='table')
         else:
             msgs.error('Provided file format {} not supported'.format(
                 file_format))
 
-        msgs.info('Saved catalog to {}'.format(filename))
+        msgs.info('Saved catalog to {}'.format(filepath))
 
     def catalog_cross_match(self, match_catalog, match_distance,
-                            columns='all',
-                            merged_cat_name='merged', column_prefix=None):
+                            columns='all', column_prefix=None):
+        """ Merge catalog with external catalog (wildhunt.Catalog).
+
+        :param match_catalog: Catalog to match the current catalog class to.
+        :type match_catalog: wildhunt.Catalog
+        :param match_distance: Match distance in arcseconds.
+        :type match_distance: float
+        :param columns: List of catalog columns to merge from input catalog.
+        :type columns: list(string)
+        :param column_prefix: Prefix to add to merged columns from input
+            catalog.
+        :type column_prefix: string
+        :return: None
+        """
 
         msgs.info('Cross-matching {} with {}'.format(self.name,
                                                      match_catalog.name))
@@ -257,17 +347,23 @@ class Catalog(object):
                                                   idx)
             df_merged.to_parquet(filename)
 
-    def cross_match(self, survey='DELS', columns='default',
-                    match_distance=3):
-        """Positional cross-match to onlline catalog with a maximum match
-        distance of match_distance (in arcseconds)
+    def online_cross_match(self, survey='DELS', columns='default',
+                           match_distance=3):
+        """Positional cross-match to online catalog with a maximum match
+        distance of match_distance (in arcseconds).
 
-        :param survey:
-        :param columns:
-        :param match_distance:
+        Implemented online cross-matches:
+             - Dark Energy Legacy Survey (DELS): DR9 Tractor
+             table (ls_dr9.tractor)
+
+        :param survey: Survey identifier
+        :type survey: string
+        :param columns: List of column names to merge from online catalog.
+        :type columns: list
+        :param match_distance: Match distance in arcseconds.
+        :type match_distance: float
         :return:
         """
-
 
         msgs.info('Starting online cross match')
         msgs.info('Survey: {} '.format(survey))
@@ -341,10 +437,17 @@ class Catalog(object):
         """Cross-match catalog to online catalog from the NOIRLAB Astro data
         lab.
 
-        :param datalab_table:
-        :param columns:
-        :param match_distance:
-        :return:
+        Downloaded catalog data is saved in the temporary directory. Upon
+        completion of the online cross-match, the downloaded catalog data is
+        merged to the input catalog and saved.
+
+        :param datalab_table: Datalab table identifier
+        :type datalab_table: string
+        :param columns: List of column names to match
+        :type columns: list
+        :param match_distance: Match distance in arcseconds
+        :type match_distance: float
+        :return: None
         """
 
         # Convert match_distance to degrees
@@ -415,7 +518,7 @@ class Catalog(object):
         """Get offset stars for all targets in the catalog from the NOIRLAB
         Astro data lab.
 
-        Although this routine works with large catalogs, it will be slow in
+        Although this routine works with large catalogs, it is slow in
         the current implementation.
 
         Example of a datalab_dict
@@ -441,6 +544,8 @@ class Catalog(object):
         :return: None
         """
 
+        msgs.info('Retrieving offset stars for catalog from NOIRLAB Astro '
+                  'Datalab.')
         # Restrict the number of offset stars to be returned to n=5
         if n > 5:
             n = 5
@@ -449,6 +554,7 @@ class Catalog(object):
 
         # Serialized offset star query over all catalog partitions
         for idx, partition in enumerate(self.df.partitions):
+            msgs.info('Working on partition {}'.format(idx+1))
 
             df = partition.compute()
             offset_df = pd.DataFrame()
@@ -475,11 +581,15 @@ class Catalog(object):
             os.remove('temp_offset_df.csv')
 
             if self.df.npartitions > 1:
-                offset_df.to_csv('{}_{}_OFFSETS_part_{}.csv'.format(
-                    self.name, datalab_dict['table'].split('.')[0], idx))
+                filename = '{}_{}_OFFSETS_part_{}.csv'.format(
+                    self.name, datalab_dict['table'].split('.')[0], idx)
+                msgs.info('Saving offset stars to {}'.format(filename))
+                offset_df.to_csv(filename)
             else:
-                offset_df.to_csv('{}_{}_OFFSETS.csv'.format(
-                    self.name, datalab_dict['table'].split('.')[0]))
+                filename = '{}_{}_OFFSETS.csv'.format(
+                    self.name, datalab_dict['table'].split('.')[0])
+                msgs.info('Saving offset stars to {}'.format(filename))
+                offset_df.to_csv(filename)
 
     def get_offset_stars_astroquery(self, match_distance, catalog='tmass',
                                     n=3, quality_query=None,
@@ -499,12 +609,13 @@ class Catalog(object):
         :param quality_query: string
             A string written in pandas query syntax to apply quality criteria
             on potential offset stars around the target.
-        :param verbosity:
-            Verbosity > 0 will print verbose statements during the execution.
+        :param minimum_distance: Minimum distance to the target in arcsec
+        :type minimum_distance: float
         :return: pandas.core.frame.DataFrame
             Returns the dataframe with the retrieved offset stars for all
             targets in the input dataframe.
         """
+        msgs.info('Retrieving offset stars for catalog using astroquery.')
 
         # Restrict the number of offset stars to be returned to n=5
         if n > 5:
@@ -514,6 +625,7 @@ class Catalog(object):
 
         # Serialized offset star query over all catalog partitions
         for idx, partition in enumerate(self.df.partitions):
+            msgs.info('Working on partition {}'.format(idx + 1))
 
             df = partition.compute()
             offset_df = pd.DataFrame()
@@ -541,11 +653,15 @@ class Catalog(object):
             os.remove('temp_offset_df.csv')
 
             if self.df.npartitions > 1:
-                offset_df.to_csv('{}_{}_OFFSETS_part_{}.csv'.format(
-                    self.name, catalog, idx))
+                filename = '{}_{}_OFFSETS_part_{}.csv'.format(
+                    self.name, catalog, idx)
+                msgs.info('Saving offset stars to {}'.format(filename))
+                offset_df.to_csv(filename)
             else:
-                offset_df.to_csv('{}_{}_OFFSETS.csv'.format(
-                    self.name, catalog))
+                filename = '{}_{}_OFFSETS.csv'.format(
+                    self.name, catalog)
+                msgs.info('Saving offset stars to {}'.format(filename))
+                offset_df.to_csv(filename)
 
     def get_offset_stars_ps1(self, radius, data_release='dr2',
                              catalog='mean', quality_query=None, n=3):
@@ -572,6 +688,9 @@ class Catalog(object):
             Number of offset stars to retrieve. (Maximum: n=5)
         :return:
         """
+
+        msgs.info('Retrieving offset stars for catalog from PanSTARRS1.')
+
         # Restrict the number of offset stars to be returned to n=5
         if n > 5:
             n = 5
@@ -580,6 +699,7 @@ class Catalog(object):
 
         # Serialized offset star query over all catalog partitions
         for idx, partition in enumerate(self.df.partitions):
+            msgs.info('Working on partition {}'.format(idx + 1))
 
             df = partition.compute()
             offset_df = pd.DataFrame()
@@ -603,6 +723,44 @@ class Catalog(object):
             os.remove('temp_offset_df.csv')
 
             if self.df.npartitions > 1:
-                offset_df.to_csv('offset_catalog_part_{}.csv'.format(idx))
+                filename = '{}_ps1_OFFSETS_part_{}.csv'.format(
+                    self.name, idx)
+                msgs.info('Saving offset stars to {}'.format(filename))
+                offset_df.to_csv(filename)
             else:
-                offset_df.to_csv('offset_catalog.csv'.format(idx))
+                filename = '{}_ps1_OFFSETS.csv'.format(
+                    self.name)
+                msgs.info('Saving offset stars to {}'.format(filename))
+                offset_df.to_csv(filename)
+
+    def get_survey_images(self, image_folder_path, survey_dicts, n_jobs=1):
+        """ Retrieve survey images from an online imaging survey.
+
+        :param image_folder_path: Storage path for the downloaded images.
+        :type image_folder_path: string
+        :param survey_dicts: Survey dictionaries
+        :type survey_dicts: dict
+        :param n_jobs: Number of parallel jobs
+        :type n_jobs: int
+        :return: None
+        """
+
+        for survey_dict in survey_dicts:
+            survey = retrieve_survey(survey_dict['survey'],
+                                     survey_dict['bands'],
+                                     survey_dict['fov'])
+
+            for partition in self.df.partitions:
+                ra = partition.compute()[self.ra_colname]
+                dec = partition.compute()[self.dec_colname]
+                survey.download_images(ra, dec, image_folder_path, n_jobs)
+
+
+    def get_forced_photometry(self, image_folder_path, survey_dict, n_jobs=1):
+
+        # Dummy function for development.
+
+        pass
+
+
+

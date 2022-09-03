@@ -17,6 +17,6 @@ if __name__ == '__main__':
 
     # Cross-match catalog to DELS survey.
 
-    cat.cross_match(survey='DELS')
+    cat.online_cross_match(survey='DELS')
 
 

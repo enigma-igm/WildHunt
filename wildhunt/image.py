@@ -9,50 +9,64 @@ import glob
 from astropy.io import fits
 
 
-from wildhunt.surveys import panstarrs, vsa_wsa, legacysurvey
+
+def mp_get_forced_photometry(ra, dec, survey_dict):
+    # Get aperture photometry for one source but all bands/surveys
 
 
-def retrieve_survey(survey_name, bands, fov):
-
-    survey = None
-
-    if survey_name == 'PS1':
-
-        survey = panstarrs.Panstarrs(bands, fov)
-
-    if survey_name[:3] in ['VHS', 'VVV', 'VMC', 'VIK', 'VID', 'UKI', 'UHS']:
-
-        survey = vsa_wsa.VsaWsa(bands, fov, survey_name)
-
-    if survey_name[:4] == 'DELS':
-
-        survey = legacysurvey.LegacySurvey(bands, fov, survey_name)
+    # return photometry for each source but all filters/surveys (a row in a
+    # ra/dec table
+    pass
 
 
-    if survey == None:
-        print('ERROR')
 
-    return survey
+class image(object):
 
+    def __init__(self):
+        self.data = None  # image data
+        self.header = None
+        pass
 
-def get_images(ra, dec, image_folder_path, survey_dict, n_jobs=1, verbosity=1):
-    """
+    def open(self, filename):
+        hdul = fits.open(filename)
+        self.header = hdul[0].header
+        self.data = hdul[1].data
 
-    :param ra:
-    :param dec:
-    :param image_folder_path:
-    :param survey_dict:
-    :param n_jobs:
-    :param verbosity:
-    :return:
-    """
+        pass
 
 
-    for dict in survey_dict:
+    def get_aperture_photometry(self, ra, dec, survey, band):
+        # This function calculates aperture photometry on the image
 
-        survey = retrieve_survey(dict['survey'], dict['bands'], dict['fov'])
+        # Possible return a catalog entry
+        pass
 
-        survey.download_images(ra, dec, image_folder_path, n_jobs)
+
+        result_dict = {'ap_flux_2': None}
+
+        return result_dict
+
+
+
+
+# def get_images(ra, dec, image_folder_path, survey_dict, n_jobs=1, verbosity=1):
+#     """
+#
+#     :param ra:
+#     :param dec:
+#     :param image_folder_path:
+#     :param survey_dict:
+#     :param n_jobs:
+#     :param verbosity:
+#     :return:
+#     """
+#
+#
+#     for dict in survey_dict:
+#
+#         survey = retrieve_survey(dict['survey'], dict['bands'], dict['fov'])
+#
+#         survey.download_images(ra, dec, image_folder_path, n_jobs)
 
 
 
