@@ -32,14 +32,10 @@ def mp_get_forced_photometry(ra, dec, survey_dict):
     # ra/dec table
     pass
 
-def plot_source_images(ra, dec, survey_dict, fov, auto_download=True):
-    """Plot image cutouts for all specified surveys/bands for a single
-    source defined by ra, dec, with auto_download."""
-    pass
 
 class Image(object):
 
-    def __init__(self, ra, dec, survey, band, image_folder_path, fov):
+    def __init__(self, ra, dec, survey, band, image_folder_path, fov=120):
         self.source_name = utils.coord_to_name(np.array([ra]),
                                                np.array([dec]),
                                                epoch="J")[0]
@@ -56,9 +52,8 @@ class Image(object):
         # Open image
         self.open()
 
-
     def open(self):
-        """Open the image.
+        """Open the image fits file.
 
         :return: None
         """
@@ -73,6 +68,7 @@ class Image(object):
         file_path = None
         if len(filenames_available) > 0:
             for filename in filenames_available:
+                print(filename)
 
                 try:
                     file_fov = int(filename.split("_")[3].split(".")[0][3:])
@@ -80,6 +76,10 @@ class Image(object):
                     file_fov = 9999999
 
                 if self.fov <= file_fov:
+                    # hdul = fits.open(filename)
+                    # data = hdul[1].data
+                    # hdr = hdul[1].header
+
                     data, hdr = fits.getdata(filename, header=True)
                     file_found = True
                     file_path = filename
@@ -99,6 +99,16 @@ class Image(object):
                                       self.image_folder_path))
 
     def show(self, fov=None, n_sigma=3, color_map='viridis'):
+        """ Show the image data.
+
+        :param fov: Field of view
+        :type: float
+        :param n_sigma: Number of sigma for image color scale sigma clipping.
+        :type n_sigma: int
+        :param color_map: Matplotlib color map
+        :type color_map:
+        :return:
+        """
         fig = plt.figure(figsize=(5, 5))
 
         subplot = (1, 1, 1)
@@ -110,6 +120,22 @@ class Image(object):
 
     def _plot_axis(self, fig, subplot, fov=None, n_sigma=3,
                   color_map='viridis'):
+        """Plot image axis on input figure.
+
+        Class internal plotting routine.
+
+        :param fig: Input figure
+        :type fig:
+        :param subplot: Subplot touple (e.g., "(1,1,1)")
+        :type subplot tuple
+        :param fov: Field of view
+        :type: float
+        :param n_sigma: Number of sigma for image color scale sigma clipping.
+        :type n_sigma: int
+        :param color_map: Matplotlib color map
+        :type color_map:
+        :return:
+        """
 
         if fov is not None:
             cutout_data = self.get_cutout(fov=fov)
@@ -137,7 +163,45 @@ class Image(object):
 
         axs.set_title(self.survey+' '+self.band)
 
+        return axs
+
+
+    def _simple_plot(self, fig, subplot, fov, n_sigma=3, color_map='viridis'):
+
+        if fov is not None:
+            cutout_data = self.get_cutout(fov=fov)
+        else:
+            cutout_data = None
+
+        if cutout_data is not None:
+            img_data = cutout_data
+        else:
+            img_data = self.data
+
+
+        axs = fig.add_subplot(*subplot)
+
+        # Sigma-clipping of the color scale
+        mean = np.mean(img_data[~np.isnan(img_data)])
+        std = np.std(img_data[~np.isnan(img_data)])
+        upp_lim = mean + n_sigma * std
+        low_lim = mean - n_sigma * std
+
+        axs.imshow(img_data, origin='lower', vmin=low_lim,
+                   vmax=upp_lim, cmap=color_map)
+
+
+        return axs
+
+
+
     def get_cutout(self, fov):
+        """Create a cutout from the image with a given field of view (fov)
+
+        :param fov: Field of view for the cutout
+        :type fov: float
+        :return: Cutout data array
+        """
 
         wcs_img = wcs.WCS(self.header)
 
@@ -166,71 +230,3 @@ class Image(object):
         return result_dict
 
 
-
-
-# def get_images(ra, dec, image_folder_path, survey_dict, n_jobs=1, verbosity=1):
-#     """
-#
-#     :param ra:
-#     :param dec:
-#     :param image_folder_path:
-#     :param survey_dict:
-#     :param n_jobs:
-#     :param verbosity:
-#     :return:
-#     """
-#
-#
-#     for dict in survey_dict:
-#
-#         survey = retrieve_survey(dict['survey'], dict['bands'], dict['fov'])
-#
-#         survey.download_images(ra, dec, image_folder_path, n_jobs)
-
-
-
-def open_image(filename, ra, dec, fov, image_folder_path, verbosity=0):
-
-    """Opens an image defined by the filename with a fov of at least the
-    specified size (in arcseonds).
-
-    :param filename:
-    :param ra:
-    :param dec:
-    :param fov:
-    :param image_folder_path:
-    :param verbosity:
-    :return:
-    """
-
-    filenames_available = glob.glob(filename)
-    file_found = False
-    open_file_fov = None
-    file_path = None
-    if len(filenames_available) > 0:
-        for filename in filenames_available:
-
-            try:
-                file_fov = int(filename.split("_")[3].split(".")[0][3:])
-            except:
-                file_fov = 9999999
-
-            if fov <= file_fov:
-                data, hdr = fits.getdata(filename, header=True)
-                file_found = True
-                file_path =filename
-                open_file_fov = file_fov
-
-    if file_found:
-        if verbosity > 0:
-            print("Opened {} with a fov of {} "
-                  "arcseconds".format(file_path, open_file_fov))
-
-        return data, hdr, file_path
-
-    else:
-        if verbosity > 0:
-            print("File {} in folder {} not found. Target with RA {}"
-                  " and Decl {}".format(filename, image_folder_path,
-                                        ra, dec))
-        return None, None, None

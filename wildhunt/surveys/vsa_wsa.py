@@ -59,7 +59,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
 
         self.survey_setup(ra, dec, image_folder_path, epoch='J', n_jobs=n_jobs)
 
-        if len(ra) == len(dec) and len(ra) > 0:
+        if self.source_table.shape[0] > 0:
 
             self.retrieve_image_url_list()
 

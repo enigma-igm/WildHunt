@@ -43,7 +43,7 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
 
         self.survey_setup(ra, dec, image_folder_path, epoch='J', n_jobs=n_jobs)
 
-        if len(ra) == len(dec) and len(ra) > 0:
+        if self.source_table.shape[0] > 0 :
 
             self.batch_setup()
 
@@ -51,6 +51,8 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
                 self.retrieve_image_url_list(imagetypes="stack", batch_number = i)
 
                 self.check_for_existing_images_before_download()
+
+
 
                 if self.n_jobs > 1:
                     self.mp_download_image_from_url()

@@ -16,7 +16,7 @@ if __name__ == '__main__':
                               datapath=filename)
 
     # Cross-match catalog to DELS survey.
-
+    cat.df = cat.df.repartition(npartitions=10)
     cat.online_cross_match(survey='DELS')
 
 

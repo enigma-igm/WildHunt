@@ -377,22 +377,34 @@ class Catalog(object):
             msgs.info('Beginning crossmatch on partition {}'.format(idx))
             self.chunk = partition.compute()[self.columns]
 
+            # TODO a quick hack to fix later
+            # I suggest to implement a survey + table structure for the future.
             if survey == 'DELS':
+                cross_match_name = 'ls_dr9_tractor'
 
-                # TODO: Check if match exists
-
-                cross_match = self.datalab_cross_match(
-                    'ls_dr9.tractor',
-                    columns,
-                    match_distance=match_distance)
-
-            # Save cross-matched chunk to temporary folder
-            filename = '{}/{}_{}'.format(self.temp_dir, cross_match.name,
+            # Set up cross-match name
+            filename = '{}/{}_{}.parquet'.format(self.temp_dir, cross_match_name,
                                          idx)
-            cross_match_df = cross_match.df.compute()
-            cross_match_df.to_parquet(filename)
-            msgs.info('Downloaded cross match {} to temporary '
-                      'folder'.format(idx))
+
+            if os.path.exists(filename):
+                msgs.info('Partition {} cross-match exists. Continuing to '
+                          'next partition.'.format(idx))
+            else:
+
+                if survey == 'DELS':
+
+                    # TODO: Check if match exists
+
+                    cross_match = self.datalab_cross_match(
+                        'ls_dr9.tractor',
+                        columns,
+                        match_distance=match_distance)
+
+                # Save cross-matched chunk to temporary folder
+                cross_match_df = cross_match.df.compute()
+                cross_match_df.to_parquet(filename)
+                msgs.info('Downloaded cross match {} to temporary '
+                          'folder'.format(idx))
 
         # Log out of datalab
         if survey in ['DELS']:
