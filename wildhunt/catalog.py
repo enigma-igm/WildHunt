@@ -211,7 +211,7 @@ class Catalog(object):
             # Fits file conversion
             msgs.warn('Converting a large fits file.')
             table = Table.read(self.datapath)
-            df = table.to_pandas()
+            df = dd.from_pandas(table.to_pandas())
 
         if partition_file:
             # Repartition a single large input file
@@ -234,7 +234,7 @@ class Catalog(object):
             self.df = dd.read_parquet(self.name)
 
         else:
-            self.df = dd.from_pandas(df)
+            self.df = df
 
         msgs.info('Catalog dataframe initialized.')
 
