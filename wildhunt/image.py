@@ -12,6 +12,7 @@ import aplpy
 from astropy import wcs
 import astropy.units as u
 from astropy.io import fits
+from astropy.wcs import WCS
 from astropy.nddata.utils import Cutout2D
 from astropy.visualization import ZScaleInterval
 from astropy.coordinates import SkyCoord
@@ -178,8 +179,8 @@ class Image(object):
         else:
             img_data = self.data
 
-
-        axs = fig.add_subplot(*subplot)
+        wcs = WCS(self.header)
+        axs = fig.add_subplot(*subplot, projection=wcs)
 
         # Sigma-clipping of the color scale
         mean = np.mean(img_data[~np.isnan(img_data)])

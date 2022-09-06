@@ -383,8 +383,9 @@ class Catalog(object):
                 cross_match_name = 'ls_dr9_tractor'
 
             # Set up cross-match name
-            filename = '{}/{}_{}.parquet'.format(self.temp_dir, cross_match_name,
-                                         idx)
+            filename = '{}/{}_{}.parquet'.format(self.temp_dir,
+                                                 cross_match_name,
+                                                 idx)
 
             if os.path.exists(filename):
                 msgs.info('Partition {} cross-match exists. Continuing to '
@@ -427,12 +428,28 @@ class Catalog(object):
         msgs.info('Saving cross-matched dataframe to {}'.format(
             cross_match.name))
 
-        merge.to_parquet('{}'.format(cross_match.name))
+        merge.to_parquet('{}'.format(cross_match_name))
 
         # Remove the temporary folder (default)
         if self.clear_temp_dir:
             msgs.info('Removing temporary folder ({})'.format(self.temp_dir))
             shutil.rmtree(self.temp_dir)
+
+
+    def merge_catalog_on_column(self, input_catalog, left_on, right_on):
+
+        merge = self.df.merge(input_catalog,
+                              left_on=left_on,
+                              right_on=right_on,
+                              how='left',
+                              suffixes=('_source', '_match'))
+
+        # Save merged dataframe
+        msgs.info('Saving cross-matched dataframe to {}'.format(
+            input_catalog.name))
+
+        merge.to_parquet('{}'.format(input_catalog.name))
+
 
     def datalab_cross_match(self, datalab_table, columns, match_distance):
         """Cross-match catalog to online catalog from the NOIRLAB Astro data
