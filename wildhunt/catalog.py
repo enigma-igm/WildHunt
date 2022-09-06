@@ -7,6 +7,7 @@ import shutil
 import numpy as np
 import pandas as pd
 
+import dask
 import dask.dataframe as dd
 
 import astropy.units as u
@@ -26,13 +27,17 @@ from wildhunt.surveys import panstarrs, vsa_wsa, legacysurvey
 msgs = pypmsgs.Messages()
 
 # Set dask temporary directory
-os.environ.get("DASK_TEMPORARY_DIRECTORY")
-os.environ["DASK_TEMPORARY_DIRECTORY"] = './dask_temp'
+# os.environ.get("DASK_TEMPORARY_DIRECTORY")
+# os.environ["DASK_TEMPORARY_DIRECTORY"] = './dask_temp'
 
 if not os.path.isdir('./dask_temp'):
     os.mkdir('./dask_temp')
 
-print('Set dask temporary directory')
+dask.config.set({'temporary_directory': './dask_temp'})
+
+msgs.info('Set dask temporary directory to {}'.format(dask.config.get(
+    "temporary_directory")))
+
 
 def retrieve_survey(survey_name, bands, fov, verbosity=1):
     """ Retrieve survey class according to the survey name.
