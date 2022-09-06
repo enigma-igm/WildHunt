@@ -234,7 +234,7 @@ class Catalog(object):
             self.df = dd.read_parquet(self.name)
 
         else:
-            self.df = df
+            self.df = dd.from_pandas(df)
 
         msgs.info('Catalog dataframe initialized.')
 
