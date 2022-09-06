@@ -89,6 +89,48 @@ def degree_to_hms(dra, ddec, epoch='J'):
     return hms_ra, deg_dec
 
 
+def convert_dmsdec2decdeg(dec_dms,delimiter=':'):
+
+    if delimiter is None:
+        dec_degrees = float(dec_dms[0:3])
+        dec_minutes = float(dec_dms[3:5])
+        dec_seconds = float(dec_dms[5:10])
+    if delimiter is not None:
+        dec_degrees = float(dec_dms.split(delimiter)[0])
+        dec_minutes = float(dec_dms.split(delimiter)[1])
+        dec_seconds = float(dec_dms.split(delimiter)[2])
+
+    # print(dec_dms[0])
+
+    if dec_dms[0] == '-':
+        is_positive = False
+    else:
+        is_positive = True
+
+    dec = abs(dec_degrees) + dec_minutes/60. + dec_seconds/3600.
+
+    if is_positive is False:
+        dec = -dec
+
+    return dec
+
+
+def convert_hmsra2decdeg(ra_hms, delimiter=':'):
+
+    if delimiter is None:
+        ra_hours = float(ra_hms[0:2])
+        ra_minutes = float(ra_hms[2:4])
+        ra_seconds = float(ra_hms[4:10])
+    if delimiter ==':':
+        ra_hours = float(ra_hms[0:2])
+        ra_minutes = float(ra_hms[3:5])
+        ra_seconds = float(ra_hms[6:12])
+
+    return (ra_hours + ra_minutes/60. + ra_seconds/3600.) * 15.
+
+
+
+
 # FROM https://stackoverflow.com/questions/1094841/get-human-readable-version-of-file-size
 def sizeof_fmt(num, suffix="B"):
     for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
