@@ -25,6 +25,15 @@ from wildhunt import utils
 from wildhunt.surveys import panstarrs, vsa_wsa, legacysurvey
 msgs = pypmsgs.Messages()
 
+# Set dask temporary directory
+os.environ.get("DASK_TEMPORARY_DIRECTORY")
+os.environ["DASK_TEMPORARY_DIRECTORY"] = './dask_temp'
+
+if not os.path.isdir('./dask_temp'):
+    os.mkdir('./dask_temp')
+
+print('Set dask temporary directory')
+
 def retrieve_survey(survey_name, bands, fov, verbosity=1):
     """ Retrieve survey class according to the survey name.
 
@@ -375,7 +384,6 @@ class Catalog(object):
         # Serialized cross-match over partitions
         for idx, partition in enumerate(self.df.partitions):
             msgs.info('Beginning crossmatch on partition {}'.format(idx))
-            self.chunk = partition.compute()[self.columns]
 
             # TODO a quick hack to fix later
             # I suggest to implement a survey + table structure for the future.
@@ -391,6 +399,8 @@ class Catalog(object):
                 msgs.info('Partition {} cross-match exists. Continuing to '
                           'next partition.'.format(idx))
             else:
+
+                self.chunk = partition.compute()[self.columns]
 
                 if survey == 'DELS':
 
