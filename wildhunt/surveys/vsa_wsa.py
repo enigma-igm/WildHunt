@@ -106,8 +106,6 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                         'email1': '', 'crossHair': 'n',
                         'mode': 'wget'}
 
-        embed()
-
         boundary = "--FILEUPLOAD"  # separator
 
         if np.size(ra) > numCoords:
@@ -172,9 +170,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                     " --post-file {} http://wsa.roe.ac.uk:8080/wsa/tmpMultiGetImage -O {}".format(
                         uploadFile,
                         outFile))
-                url = "wget --keep-session-cookies --header=\"Content-Type: multipart/form-data;  boundary=FILEUPLOAD\"" \
-                      " --post-file {} http://wsa.roe.ac.uk:8080/wsa/tmpMultiGetImage -O {}".format(uploadFile,outFile)
-                embed()
+
             elif self.archive == 'VSA':
                 os.system(
                     "wget --keep-session-cookies --header=\"Content-Type: multipart/form-data;  boundary=FILEUPLOAD\""

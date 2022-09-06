@@ -207,6 +207,12 @@ class Catalog(object):
             msgs.error('Provided file format {} not supported'.format(
                 file_suffix))
 
+        if read_fits:
+            # Fits file conversion
+            msgs.warn('Converting a large fits file.')
+            table = Table.read(self.datapath)
+            df = table.to_pandas()
+
         if partition_file:
             # Repartition a single large input file
             msgs.info('Repartitioning large input file.')
@@ -214,15 +220,10 @@ class Catalog(object):
             msgs.info('Creating {} partitions.'.format(n_partitions))
             msgs.info('This may take a while.')
             # Repartition dataframe
-            if read_fits:
-                # Fits file conversion
-                msgs.warn('Converting a large fits file.')
-                table = Table.read(self.datapath)
-                df = table.to_pandas()
-                df = dd.from_pandas(df,
-                                    npartitions=n_partitions)
-            else:
-                df = df.repartition(npartitions=n_partitions)
+            df = dd.from_pandas(df, npartitions=n_partitions)
+
+            # else:
+            #     df = df.repartition(npartitions=n_partitions)
 
             # Save catalog structure
             self.df = df

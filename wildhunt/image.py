@@ -16,12 +16,23 @@ from astropy.wcs import WCS
 from astropy.nddata.utils import Cutout2D
 from astropy.visualization import ZScaleInterval
 from astropy.coordinates import SkyCoord
+from astropy.wcs.utils import proj_plane_pixel_scales
+
+from mpl_toolkits.axes_grid1.anchored_artists import (AnchoredEllipse,
+                                                      AnchoredSizeBar)
+
+from astropy.coordinates import ICRS
+
+from reproject.mosaicking import find_optimal_celestial_wcs
+
+from reproject import reproject_interp
 
 import matplotlib.pyplot as plt
 
 from wildhunt import utils
 from wildhunt import pypmsgs
 
+from IPython import embed
 
 msgs = pypmsgs.Messages()
 
@@ -36,7 +47,8 @@ def mp_get_forced_photometry(ra, dec, survey_dict):
 
 class Image(object):
 
-    def __init__(self, ra, dec, survey, band, image_folder_path, fov=120):
+    def __init__(self, ra, dec, survey, band, image_folder_path, fov=120,
+                 data=None, header=None):
         self.source_name = utils.coord_to_name(np.array([ra]),
                                                np.array([dec]),
                                                epoch="J")[0]
@@ -47,11 +59,12 @@ class Image(object):
         self.image_folder_path = image_folder_path
         self.fov = fov
 
-        self.data = None
-        self.header = None
+        self.data = data
+        self.header = header
 
         # Open image
-        self.open()
+        if data is None and header is None:
+            self.open()
 
     def open(self):
         """Open the image fits file.
@@ -166,8 +179,32 @@ class Image(object):
 
         return axs
 
+    def _rotate_north_up(self):
 
-    def _simple_plot(self, fig, subplot, fov, n_sigma=3, color_map='viridis'):
+        # Get image WCS
+        wcs = WCS(self.header)
+
+        frame = ICRS()
+
+        new_wcs, shape = find_optimal_celestial_wcs([(self.data,
+                                                   wcs)],
+                                                 frame=frame)
+
+        data, _ = reproject_interp((self.data, wcs), new_wcs,
+                                             shape_out=shape)
+        header = new_wcs.to_header()
+        header['NAXIS1'] = shape[1]
+        header['NAXIS2'] = shape[0]
+
+        self.header = header
+        self.data = data
+
+    def _simple_plot(self, fov, n_sigma=3, fig=None, subplot=None,
+                     color_map='viridis', axis=None, north=False,
+                     scalebar=5*u.arcsecond, sb_pad=0.5, sb_borderpad=0.4):
+
+        if north:
+            self._rotate_north_up()
 
         if fov is not None:
             cutout_data = self.get_cutout(fov=fov)
@@ -180,7 +217,14 @@ class Image(object):
             img_data = self.data
 
         wcs = WCS(self.header)
-        axs = fig.add_subplot(*subplot, projection=wcs)
+
+        if axis is None and fig is not None and subplot is not None:
+            axs = fig.add_subplot(subplot, projection=wcs)
+        elif axis is not None:
+            axs = axis
+        else:
+            msgs.error('Neither figure and subplot tuple or figure axis '
+                       'provided.')
 
         # Sigma-clipping of the color scale
         mean = np.mean(img_data[~np.isnan(img_data)])
@@ -191,8 +235,42 @@ class Image(object):
         axs.imshow(img_data, origin='lower', vmin=low_lim,
                    vmax=upp_lim, cmap=color_map)
 
+        if scalebar is not None:
+            if isinstance(scalebar, u.Quantity):
+                length = scalebar.to(u.degree).value
+            elif isinstance(scalebar, u.Unit):
+                length = scalebar.to(u.degree)
+
+            self._add_scalebar(axis, length, pad=sb_pad,
+                               borderpad=sb_borderpad)
+
         return axs
 
+    def _add_scalebar(self, axis, length, corner='lower right',
+                      pad=0.5, borderpad=0.4):
+        # Code adapted from Aplpy
+
+        pix_scale = proj_plane_pixel_scales(WCS(self.header))
+
+        sx = pix_scale[0]
+        sy = pix_scale[1]
+        degrees_per_pixel = np.sqrt(sx * sy)
+
+        label = '{:.1f} arcsec'.format(length*3600)
+
+        length = length / degrees_per_pixel
+
+        size_vertical = length/20
+
+
+
+        artist = AnchoredSizeBar(axis.transData, length, label,
+                                 corner, pad=pad, borderpad=borderpad,
+                                 size_vertical=size_vertical,
+                                 sep=3, frameon=False,
+                                 fontproperties={'size':15, 'weight':'bold'})
+
+        axis.add_artist(artist)
 
     def get_cutout(self, fov):
         """Create a cutout from the image with a given field of view (fov)
