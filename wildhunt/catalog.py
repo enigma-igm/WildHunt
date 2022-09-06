@@ -435,7 +435,6 @@ class Catalog(object):
             msgs.info('Removing temporary folder ({})'.format(self.temp_dir))
             shutil.rmtree(self.temp_dir)
 
-
     def merge_catalog_on_column(self, input_catalog, left_on, right_on):
 
         merge = self.df.merge(input_catalog,
