@@ -191,9 +191,7 @@ class Image(object):
         axs.imshow(img_data, origin='lower', vmin=low_lim,
                    vmax=upp_lim, cmap=color_map)
 
-
         return axs
-
 
 
     def get_cutout(self, fov):

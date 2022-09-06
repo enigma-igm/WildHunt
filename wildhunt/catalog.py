@@ -426,7 +426,7 @@ class Catalog(object):
 
         # Save merged dataframe
         msgs.info('Saving cross-matched dataframe to {}'.format(
-            cross_match.name))
+            cross_match_name))
 
         merge.to_parquet('{}'.format(cross_match_name))
 
