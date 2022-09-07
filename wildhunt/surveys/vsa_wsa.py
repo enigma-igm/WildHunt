@@ -176,8 +176,6 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                     " --post-file {} http://wsa.roe.ac.uk:8080/wsa/tmpMultiGetImage -O {}".format(
                         uploadFile,
                         outFile))
-                url = "wget --keep-session-cookies --header=\"Content-Type: multipart/form-data;  boundary=FILEUPLOAD\"" \
-                      " --post-file {} http://wsa.roe.ac.uk:8080/wsa/tmpMultiGetImage -O {}".format(uploadFile,outFile)
 
             elif self.archive == 'VSA':
                 os.system(
