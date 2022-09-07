@@ -4,8 +4,14 @@ import time
 import os
 import numpy as np
 
+from astropy.io import fits
+
 from wildhunt.surveys import imagingsurvey
+from wildhunt import pypmsgs
+
 from IPython import embed
+
+msgs = pypmsgs.Messages()
 
 
 # List of programmeID: VHS - 110, VVV - 120, VMC - 130, VIKING - 140, VIDEO - 150, UHS - 107, UKIDSS: LAS - 101,
@@ -106,8 +112,6 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                         'email1': '', 'crossHair': 'n',
                         'mode': 'wget'}
 
-        embed()
-
         boundary = "--FILEUPLOAD"  # separator
 
         if np.size(ra) > numCoords:
@@ -174,7 +178,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                         outFile))
                 url = "wget --keep-session-cookies --header=\"Content-Type: multipart/form-data;  boundary=FILEUPLOAD\"" \
                       " --post-file {} http://wsa.roe.ac.uk:8080/wsa/tmpMultiGetImage -O {}".format(uploadFile,outFile)
-                embed()
+
             elif self.archive == 'VSA':
                 os.system(
                     "wget --keep-session-cookies --header=\"Content-Type: multipart/form-data;  boundary=FILEUPLOAD\""
@@ -223,3 +227,44 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
             print("Start sleep")
             time.sleep(5)
             print("End sleep")
+
+    def force_photometry_params(self, header, band, filepath):
+        '''Set the parameters that are used in the aperture_photometry to perform forced photometry based on the
+        :param heade: header of the image
+        :param band: image band
+        :param filepath: file path to the image
+
+        Returns:
+            self
+        '''
+
+        par = fits.open(filepath)
+
+        if self.archive == 'WSA':
+
+            self.exp = par['PRIMARY'].header["EXP_TIME"]
+            amstart = par['PRIMARY'].header['AMSTART']
+            amend = par['PRIMARY'].header['AMEND']
+            self.extCorr = 0.05 * ((amstart + amend) / 2 - 1)
+            self.zpt = par['WSAIMAGE'].header['MAGZPT']
+
+        else:
+
+            self.exp = par['GETIMAGE'].header["EXPTIME"]
+
+            try:
+                # some of the headers do not have AIRMASS information
+                amstart = par['GETIMAGE'].header['ESO TEL AIRM START']
+                amend = par['GETIMAGE'].header['ESO TEL AIRM END']
+                self.extCorr = 0.05 * ((amstart + amend) / 2 - 1)
+            except:
+                msgs.warn('Header doest not have AIRMASS information.')
+                extCorr = 0.0
+            try:
+                self.zpt = par['GETIMAGE'].header['MAGZPT']
+            except:
+                self.zpt = 26.7  # this is a hack for VIKING J-band
+
+        self.back = 'back'
+
+        return self

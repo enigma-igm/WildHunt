@@ -85,3 +85,28 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
                 self.download_table = self.download_table.append(
                     {'image_name': image_name,'url': url},
                     ignore_index=True)
+
+    def force_photometry_params(self, header, band, filepath=None):
+        '''Set the parameters that are used in the aperture_photometry to perform forced photometry based on the
+        :param heade: header of the image
+        :param band: image band
+        :param filepath: file path to the image
+
+        Returns:
+            self
+        '''
+
+        zpt = {"g": 22.5, "r": 22.5, "z": 22.5, "w1": 22.5, "w2": 22.5}
+
+
+        self.exp = 1.
+        self.extCorr = 0.0
+        self.back = 'no_back'
+        self.zpt = zpt[band]
+
+        if band == 'w1':
+            self.ABcorr = 2.699
+        if band == 'w2':
+            self.ABcorr = 3.339
+
+        return self

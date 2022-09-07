@@ -6,22 +6,28 @@ Main module for downloading and manipulating image data.
 """
 
 import glob
+
 import numpy as np
 
 import aplpy
-from astropy import wcs
+
+from astropy.table import Table
+from astropy import wcs, stats
 import astropy.units as u
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.nddata.utils import Cutout2D
-from astropy.visualization import ZScaleInterval
 from astropy.coordinates import SkyCoord
+
+from photutils import aperture_photometry, SkyCircularAperture, SkyCircularAnnulus
 
 import matplotlib.pyplot as plt
 
 from wildhunt import utils
 from wildhunt import pypmsgs
+from wildhunt.catalog import retrieve_survey
 
+from IPython import embed
 
 msgs = pypmsgs.Messages()
 
@@ -33,10 +39,136 @@ def mp_get_forced_photometry(ra, dec, survey_dict):
     # ra/dec table
     pass
 
+def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts', radii=[1.], radius_in=7.0,
+                            radius_out=10.0, epoch='J'):
+    '''Perform forced photometry for a given target on images from a given imaging survey.
+
+    :param ra: right ascension in degrees
+    :param dec: right ascension in degrees
+    :param survey_dicts: survey dictionaries
+    :param image_folder_path: string, path where the images for which to perform forced photometry are stored
+    :param radii: forced photometry aperture radius in arcsec
+    :param radius_in: background extraction inner annulus radius in arcsec
+    :param radius_out: background extraction outer annulus radius in arcsec
+    :param epoch: string, the epoch that specify the initial letter of the source names
+
+    Returns:
+        astropy Table
+    '''
+
+    # open an astropy table to store the data
+    source_name = utils.coord_to_name(ra, dec, epoch=epoch)[0]
+    photo_table = Table()
+    photo_table['Name'] = [source_name]
+    photo_table['RA'] = [ra]
+    photo_table['DEC'] = [dec]
+
+    # Apply aperture photometry to every survey and band specified
+    for survey_dict in survey_dicts:
+
+        survey = retrieve_survey(survey_dict['survey'],
+                                 survey_dict['bands'],
+                                 survey_dict['fov'])
+        for band in survey_dict['bands']:
+
+            try:
+                # Open the image
+                image_data = Image(ra, dec, survey_dict['survey'], band, image_folder_path, fov=survey_dict['fov'])
+                header = image_data.header
+                data = image_data.data
+
+                # Retrieve the important info from the header
+                filepath = image_folder_path + '/' + source_name + "_" + survey_dict['survey'] + "_" + band \
+                           + "_fov" + str(survey_dict['fov']) + ".fits"
+                image_params = survey.force_photometry_params(header, band, filepath)
+                exp = image_params.exp
+                extCorr = image_params.extCorr
+                back = image_params.back
+                zpt = image_params.zpt
+                photo_table['{:}_ZP_{:}'.format(survey_dict['survey'], band)] = [zpt]
+
+                if 'w' in band:
+                    data = data.copy() * 10 ** (-image_params.corr / 2.5)
+
+                try:
+                    # define WCS
+                    wcs_img = wcs.WCS(header)
+                    # define coordinates and apertures
+                    position = SkyCoord(ra * u.deg, dec * u.deg, frame='fk5')
+                    aperture = [SkyCircularAperture(position, r=r * u.arcsec) for r in radii]
+                    pix_aperture = [aperture[i].to_pixel(wcs_img) for i in range(len(radii))]
+                    back_aperture = SkyCircularAnnulus(position, r_in=radius_in * u.arcsec,
+                                                       r_out=radius_out * u.arcsec)
+
+                    # estimate background
+                    if back == "no_back":
+                        background = np.zeros(len(radii))
+                    else:
+                        f_back = aperture_photometry(data, back_aperture, wcs=wcs_img)
+                        background = [
+                            float(f_back['aperture_sum']) / (radius_out ** 2 - radius_in ** 2) * radii[i] ** 2 for i
+                            in
+                            range(len(radii))]
+                    # compute the std from the whole image
+                    ## ToDo: we might need to improve this part (remove source in the image or use variance image): look at Eduardo's method
+                    mean, median, std = stats.sigma_clipped_stats(data, sigma=3.0, maxiters=5)
+
+                    # measure the flux
+                    f = aperture_photometry(data, aperture, wcs=wcs_img)
+                    flux = [float(f['aperture_sum_' + str(i)]) for i in range(len(radii))]
+                    # Estimate the SNR
+                    SN = [(flux[i] - background[i]) / (std * np.sqrt(pix_aperture[i].area)) for i in
+                          range(len(radii))]
+                    # Measure fluxes/magnitudes
+                    ## ToDo: for VSA/WSA/PS1 forced photometry we compute the native fluxes and the magnitudes in Vega, while we probably want nanomaggies and AB
+                    for i in range(len(radii)):
+                        radii_namei = str(radii[i] * 2.0).replace('.', 'p')
+                        photo_table['{:}_{:}_flux_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                            (flux[i] - background[i]) / exp
+                        photo_table['{:}_{:}_flux_aper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                            std * np.sqrt(pix_aperture[i].area) / exp
+                        photo_table['{:}_{:}_snr_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = SN[i]
+                        if (flux[i] - background[i]) > 0.:
+                            photo_table['{:}_{:}_mag_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                                -2.5 * np.log10(photo_table['{:}_{:}_flux_aper_{:}'.format(survey_dict['survey'], band,
+                                radii_namei)]) + photo_table['{:}_ZP_{:}'.format(survey_dict['survey'],
+                                                                                                band)] - extCorr
+                            photo_table['{:}_{:}_magaper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                                (2.5 / np.log(10)) * (1.0 / SN[i])
+                        else:
+                            photo_table['{:}_{:}_mag_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                                np.NAN
+                            photo_table['{:}_{:}_magaper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                                np.NAN
+                        msgs.info('The {:}-band magnitude is {:}+/-{:}'.format(band, float(
+                            photo_table['{:}_{:}_mag_aper_{:}'.format(survey_dict['survey'], band, radii_namei)]),
+                                float(photo_table['{:}_{:}_magaper_err_{:}'.format(survey_dict['survey'], band,
+                                                                                         radii_namei)])))
+                    photo_table['{:}_success_{:}'.format(survey_dict['survey'], band)] = 1
+
+                except:
+                    photo_table['{:}_ZP_{:}'.format(survey_dict['survey'], band)] = np.NAN
+                    msgs.warn('Photometry on image ' + str(source_name) + '.' + str(band) + '.fits failed')
+                    for i in range(len(radii)):
+                        radii_namei = str(radii[i] * 2.0).replace('.', 'p')
+                        photo_table['{:}_{:}_flux_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = np.NAN
+                        photo_table['{:}_{:}_flux_aper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                            np.NAN
+                        photo_table['{:}_{:}_snr_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = np.NAN
+                        photo_table['{:}_{:}_mag_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = np.NAN
+                        photo_table['{:}_{:}_magaper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = np.NAN
+                    photo_table['{:}_success_{:}'.format(survey_dict['survey'], band)] = 0
+
+            except:
+                msgs.error('The image {} is corrupted and cannot be opened'.format(source_name))
+    embed()
+    return photo_table
+
 
 class Image(object):
 
     def __init__(self, ra, dec, survey, band, image_folder_path, fov=120):
+
         self.source_name = utils.coord_to_name(np.array([ra]),
                                                np.array([dec]),
                                                epoch="J")[0]
@@ -60,6 +192,7 @@ class Image(object):
         """
 
         # Filepath
+
         filepath = self.image_folder_path + '/' + self.source_name + "_" + \
                    self.survey + "_" + self.band + "*fov*.fits"
 
@@ -215,17 +348,5 @@ class Image(object):
             cutout_data = None
 
         return cutout_data
-
-
-    def get_aperture_photometry(self, ra, dec, survey, band):
-        # This function calculates aperture photometry on the image
-
-        # Possible return a catalog entry
-        pass
-
-
-        result_dict = {'ap_flux_2': None}
-
-        return result_dict
 
 
