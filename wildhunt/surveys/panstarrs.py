@@ -56,11 +56,15 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
 
                 if self.n_jobs > 1:
                     self.mp_download_image_from_url()
+
                 else:
                     for idx in self.download_table.index:
                         image_name = self.download_table.loc[idx, 'image_name']
                         url = self.download_table.loc[idx, 'url']
                         self.download_image_from_url(url, image_name)
+
+            for i in range(self.nbatch):
+                os.remove(str(i) + '_PS1_download_urls.csv')
 
         else:
 
