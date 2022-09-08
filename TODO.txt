@@ -28,12 +28,12 @@ Catalog [x]
 - Online cross-match [x] (only datalab for now)
 - Disk cross-match (match_coordinates_sky) [x]
 - Get images (ImagingSurvey) [x]
-- Do forced photometry (Image) [ ]
+- Do forced photometry (Image) [x] - Review[]
 - Get offset stars (related to online cross-match) [x]
 - Generate finding charts (Image, ImagingSurvey) [ ]
 
 Image [ ]
-- Calculate forced photometry
+- Calculate forced photometry [x] - Review[]
 - Plot cutout images (for visual inspection)
 - Plot finding charts
 

@@ -6,27 +6,29 @@ Main module for downloading and manipulating image data.
 """
 
 import glob
+import os
+
+import multiprocessing
+from multiprocessing import Process, Queue
 
 import numpy as np
 
+import pandas as pd
+
 import aplpy
 
-from astropy.table import Table
+from astropy.table import Table, vstack
 from astropy import wcs, stats
 import astropy.units as u
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.nddata.utils import Cutout2D
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import SkyCoord, ICRS
 from astropy.wcs.utils import proj_plane_pixel_scales
 
-from mpl_toolkits.axes_grid1.anchored_artists import (AnchoredEllipse,
-                                                      AnchoredSizeBar)
-
-from astropy.coordinates import ICRS
+from mpl_toolkits.axes_grid1.anchored_artists import (AnchoredEllipse, AnchoredSizeBar)
 
 from reproject.mosaicking import find_optimal_celestial_wcs
-
 from reproject import reproject_interp
 
 from photutils import aperture_photometry, SkyCircularAperture, SkyCircularAnnulus
@@ -41,13 +43,82 @@ from IPython import embed
 
 msgs = pypmsgs.Messages()
 
-def mp_get_forced_photometry(ra, dec, survey_dict):
-    # Get aperture photometry for one source but all bands/surveys
 
+def forced_photometry(ra, dec, survey_dicts, table_name, image_folder_path='cutouts', radii=[1.], radius_in=7.0,
+                radius_out=10.0, epoch='J', n_jobs=5, remove=True):
+    """Main function that calls all the other functions used to perform forced photometry
+    :param ra: np.array(), right ascensions in degrees
+    :param dec: np.array(), declinations in degrees
+    :param survey_dicts: survey dictionaries
+    :param table_name: table where the data from forced photometry are stored
+    :param image_folder_path: string, path where the images are stored
+    :param radii: arcesc, forced photometry aperture radius
+    :param radius_in: arcesc, background extraction inner annulus radius
+    :param radius_out: arcesc, background extraction outer annulus radius
+    :param epoch: string, the epoch that specify the initial letter of the source names
+    :param n_jobs: int, number of forced photometry processes performed in parallel
+    :param remove: bool, remove the sub catalogs produced in the multiprocess forced photometry
+    """
 
-    # return photometry for each source but all filters/surveys (a row in a
-    # ra/dec table
-    pass
+    n_file = np.size(ra)
+    n_cpu = multiprocessing.cpu_count()
+
+    if n_jobs > n_cpu - 1:
+        n_jobs = n_cpu - 1
+    if n_jobs > n_file:
+        n_jobs = n_file
+
+    if n_jobs > 1:
+        work_queue = Queue()
+        processes = []
+        out_tab = Table()
+        for ii in range(n_file):
+            work_queue.put((ra[ii], dec[ii]))
+
+        for n_job in range(n_jobs):
+            p = Process(target=mp_get_forced_photometry, args=(work_queue, out_tab, n_job), kwargs={
+                'survey_dicts': survey_dicts,
+                'image_folder_path': image_folder_path,
+                'radii': radii,
+                'radius_in': radius_in,
+                'radius_out': radius_out,
+                'epoch': epoch})
+            processes.append(p)
+            p.start()
+
+        for p in processes:
+            p.join()
+
+        # Merge together the different forced photometry data tables that are generated in each process
+        save_master_table(n_jobs, table_name=table_name, remove=remove)
+
+    else:
+        final_tab = Table()
+        for idx, num in enumerate(ra):
+            phot_tab = get_aperture_photometry(ra[idx], dec[idx], survey_dicts, image_folder_path=image_folder_path,
+                                           radii=radii, radius_in=radius_in, radius_out=radius_out, epoch=epoch)
+            final_tab = vstack([final_tab, phot_tab])
+        final_tab.write(table_name + '_forced_photometry.csv', format='csv', overwrite=True)
+
+def mp_get_forced_photometry(work_queue, out_tab, n_jobs, survey_dicts, image_folder_path='cutouts',
+                             radii=[1.], radius_in=7.0, radius_out=10.0, epoch='J'):
+    ''' Get aperture photometry for one source but all bands/surveys in multiprocess
+    :param out_tab: table where the data from forced photometry are stored
+    :param n_jobs: int, number of forced photometry processes performed in parallel
+    :param survey_dicts: survey dictionaries
+    :param image_folder_path: string, path where the images are stored
+    :param radii: arcesc, forced photometry aperture radius
+    :param radius_in: arcesc, background extraction inner annulus radius
+    :param radius_out: arcesc, background extraction outer annulus radius
+    :param epoch: string, the epoch that specify the initial letter of the source names
+    '''
+
+    while not work_queue.empty():
+        ra, dec = work_queue.get()
+        phot = get_aperture_photometry(ra, dec, survey_dicts, image_folder_path=image_folder_path, radii=radii,
+                                       radius_in=radius_in, radius_out=radius_out, epoch=epoch)
+        out_tab = vstack([out_tab, phot])
+    out_tab.write('process_' + str(n_jobs) + '_forced_photometry.csv', format='csv', overwrite=True)
 
 def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts', radii=[1.], radius_in=7.0,
                             radius_out=10.0, epoch='J'):
@@ -56,7 +127,7 @@ def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts', 
     :param ra: right ascension in degrees
     :param dec: right ascension in degrees
     :param survey_dicts: survey dictionaries
-    :param image_folder_path: string, path where the images for which to perform forced photometry are stored
+    :param image_folder_path: string, path where the images are stored
     :param radii: forced photometry aperture radius in arcsec
     :param radius_in: background extraction inner annulus radius in arcsec
     :param radius_out: background extraction outer annulus radius in arcsec
@@ -171,9 +242,26 @@ def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts', 
 
             except:
                 msgs.error('The image {} is corrupted and cannot be opened'.format(source_name))
-    embed()
+
     return photo_table
 
+def save_master_table(n_jobs, table_name, remove=True):
+    '''Merge the data tables generated during each forced photometry process into a single table
+
+    :param n_jobs: int, number of forced photometry processes performed in parallel
+    :param table_name: table where the data from forced photometry are stored
+    :param remove: bool, remove the sub catalogs produced in the multiprocess forced photometry
+    '''
+    pd_table = pd.read_csv('process_' + str(0) + '_forced_photometry.csv')
+    master_table = Table.from_pandas(pd_table)
+
+    if remove == True: os.remove('process_' + str(0) + '_forced_photometry.csv')
+    for i in range(1, n_jobs):
+        pd_table = pd.read_csv('process_' + str(i) + '_forced_photometry.csv')
+        par = Table.from_pandas(pd_table)
+        master_table = vstack((master_table, par))
+        if remove == True: os.remove('process_' + str(i) + '_forced_photometry.csv')
+    master_table.write(table_name + '_forced_photometry.csv', format='csv', overwrite=True)
 
 class Image(object):
 
