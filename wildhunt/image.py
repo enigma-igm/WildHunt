@@ -37,7 +37,7 @@ import matplotlib.pyplot as plt
 
 from wildhunt import utils
 from wildhunt import pypmsgs
-from wildhunt.catalog import retrieve_survey
+from wildhunt import catalog
 
 from IPython import embed
 
@@ -147,7 +147,7 @@ def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts', 
     # Apply aperture photometry to every survey and band specified
     for survey_dict in survey_dicts:
 
-        survey = retrieve_survey(survey_dict['survey'],
+        survey = catalog.retrieve_survey(survey_dict['survey'],
                                  survey_dict['bands'],
                                  survey_dict['fov'])
         for band in survey_dict['bands']:

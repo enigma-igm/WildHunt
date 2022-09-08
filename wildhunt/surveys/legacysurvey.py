@@ -61,7 +61,6 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
             ra = self.source_table.loc[idx, 'ra']
             dec = self.source_table.loc[idx, 'dec']
             obj_name = self.source_table.loc[idx, 'obj_name']
-            release = 'ls-dr' + self.name[6:]
             bands = ''.join(self.bands)
 
             for band in bands:
@@ -69,8 +68,10 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
                 # Convert field of view in arcsecond to pixel size (1 pixel = 0.262 arcseconds
                 # for g,r,z and 2.75 arcseconds for W1, W2)
                 if band in ['1','2']:
+                    release = 'unwise-neo6'
                     pixelscale = 2.75
                 else:
+                    release = 'ls-dr' + self.name[6:]
                     pixelscale = 0.262
                 size = self.fov * 1 / pixelscale
 
@@ -96,7 +97,7 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
             self
         '''
 
-        zpt = {"g": 22.5, "r": 22.5, "z": 22.5, "w1": 22.5, "w2": 22.5}
+        zpt = {"g": 22.5, "r": 22.5, "z": 22.5, "1": 22.5, "2": 22.5}
 
 
         self.exp = 1.
@@ -104,9 +105,9 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
         self.back = 'no_back'
         self.zpt = zpt[band]
 
-        if band == 'w1':
+        if band == '1':
             self.ABcorr = 2.699
-        if band == 'w2':
+        if band == '2':
             self.ABcorr = 3.339
 
         return self
