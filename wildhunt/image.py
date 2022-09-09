@@ -163,13 +163,14 @@ def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts', 
                            + "_fov" + str(survey_dict['fov']) + ".fits"
                 image_params = survey.force_photometry_params(header, band, filepath)
                 exp = image_params.exp
-                extCorr = image_params.extCorr
                 back = image_params.back
                 zpt = image_params.zpt
+                nanomag_corr = image_params.nanomag_corr
+                ABcorr = image_params.ABcorr
                 photo_table['{:}_ZP_{:}'.format(survey_dict['survey'], band)] = [zpt]
 
                 if 'w' in band:
-                    data = data.copy() * 10 ** (-image_params.corr / 2.5)
+                    data = data.copy() * 10 ** (-image_params.ABcorr / 2.5)
 
                 try:
                     # define WCS
@@ -201,19 +202,17 @@ def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts', 
                     SN = [(flux[i] - background[i]) / (std * np.sqrt(pix_aperture[i].area)) for i in
                           range(len(radii))]
                     # Measure fluxes/magnitudes
-                    ## ToDo: for VSA/WSA/PS1 forced photometry we compute the native fluxes and the magnitudes in Vega, while we probably want nanomaggies and AB
                     for i in range(len(radii)):
                         radii_namei = str(radii[i] * 2.0).replace('.', 'p')
                         photo_table['{:}_{:}_flux_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
-                            (flux[i] - background[i]) / exp
+                            (flux[i] - background[i]) / exp * nanomag_corr
                         photo_table['{:}_{:}_flux_aper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
-                            std * np.sqrt(pix_aperture[i].area) / exp
+                            std * np.sqrt(pix_aperture[i].area) / exp * nanomag_corr
                         photo_table['{:}_{:}_snr_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = SN[i]
                         if (flux[i] - background[i]) > 0.:
-                            photo_table['{:}_{:}_mag_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                            photo_table['{:}_{:}_mag_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = 22.5 \
                                 -2.5 * np.log10(photo_table['{:}_{:}_flux_aper_{:}'.format(survey_dict['survey'], band,
-                                radii_namei)]) + photo_table['{:}_ZP_{:}'.format(survey_dict['survey'],
-                                                                                                band)] - extCorr
+                                radii_namei)])
                             photo_table['{:}_{:}_magaper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
                                 (2.5 / np.log(10)) * (1.0 / SN[i])
                         else:

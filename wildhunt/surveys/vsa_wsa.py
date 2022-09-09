@@ -240,29 +240,23 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
 
         if self.archive == 'WSA':
 
+            ABcorr = {"Z": 0.528, "Y": 0.634, "J": 0.938, "H": 1.379, "K": 1.9}
             self.exp = par['PRIMARY'].header["EXP_TIME"]
-            amstart = par['PRIMARY'].header['AMSTART']
-            amend = par['PRIMARY'].header['AMEND']
-            self.extCorr = 0.05 * ((amstart + amend) / 2 - 1)
             self.zpt = par['WSAIMAGE'].header['MAGZPT']
+            self.ABcorr = ABcorr[band]
 
         else:
 
             self.exp = par['GETIMAGE'].header["EXPTIME"]
+            ABcorr = {"Z": 0.521, "Y": 0.618, "J": 0.937, "H": 1.384, "K": 1.839}
+            self.ABcorr = ABcorr[band]
 
-            try:
-                # some of the headers do not have AIRMASS information
-                amstart = par['GETIMAGE'].header['ESO TEL AIRM START']
-                amend = par['GETIMAGE'].header['ESO TEL AIRM END']
-                self.extCorr = 0.05 * ((amstart + amend) / 2 - 1)
-            except:
-                msgs.warn('Header doest not have AIRMASS information.')
-                extCorr = 0.0
             try:
                 self.zpt = par['GETIMAGE'].header['MAGZPT']
             except:
                 self.zpt = 26.7  # this is a hack for VIKING J-band
 
         self.back = 'back'
+        self.nanomag_corr = np.power(10, 0.4 * (22.5 - self.zpt - self.ABcorr))
 
         return self

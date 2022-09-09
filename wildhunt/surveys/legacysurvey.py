@@ -101,13 +101,15 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
 
 
         self.exp = 1.
-        self.extCorr = 0.0
         self.back = 'no_back'
         self.zpt = zpt[band]
+        self.nanomag_corr = 1.
 
         if band == '1':
             self.ABcorr = 2.699
-        if band == '2':
+        elif band == '2':
             self.ABcorr = 3.339
+        else:
+            self.ABcorr = 0.
 
         return self

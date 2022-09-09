@@ -149,8 +149,9 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
 
 
         self.exp = header['EXPTIME']
-        self.extCorr = 0.0
         self.back = 'back'
         self.zpt = zpt[band]
+        self.ABcorr = 0.
+        self.nanomag_corr = np.power(10, 0.4*(22.5-self.zpt))
 
         return self
