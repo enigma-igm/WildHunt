@@ -61,16 +61,18 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
             ra = self.source_table.loc[idx, 'ra']
             dec = self.source_table.loc[idx, 'dec']
             obj_name = self.source_table.loc[idx, 'obj_name']
-            release = 'ls-dr' + self.name[6:]
             bands = ''.join(self.bands)
 
             for band in bands:
 
                 # Convert field of view in arcsecond to pixel size (1 pixel = 0.262 arcseconds
                 # for g,r,z and 2.75 arcseconds for W1, W2)
-                if band in ['1', '2']:
+
+                if band in ['1','2']:
+                    release = 'unwise-neo6'
                     pixelscale = 2.75
                 else:
+                    release = 'ls-dr' + self.name[6:]
                     pixelscale = 0.262
                 size = self.fov * 1 / pixelscale
 
@@ -85,3 +87,30 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
                 self.download_table = self.download_table.append(
                     {'image_name': image_name,'url': url},
                     ignore_index=True)
+
+    def force_photometry_params(self, header, band, filepath=None):
+        '''Set the parameters that are used in the aperture_photometry to perform forced photometry based on the
+        :param heade: header of the image
+        :param band: image band
+        :param filepath: file path to the image
+
+        Returns:
+            self
+        '''
+
+        zpt = {"g": 22.5, "r": 22.5, "z": 22.5, "1": 22.5, "2": 22.5}
+
+
+        self.exp = 1.
+        self.back = 'no_back'
+        self.zpt = zpt[band]
+        self.nanomag_corr = 1.
+
+        if band == '1':
+            self.ABcorr = 2.699
+        elif band == '2':
+            self.ABcorr = 3.339
+        else:
+            self.ABcorr = 0.
+
+        return self

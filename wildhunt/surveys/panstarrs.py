@@ -56,11 +56,15 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
 
                 if self.n_jobs > 1:
                     self.mp_download_image_from_url()
+
                 else:
                     for idx in self.download_table.index:
                         image_name = self.download_table.loc[idx, 'image_name']
                         url = self.download_table.loc[idx, 'url']
                         self.download_image_from_url(url, image_name)
+
+            for i in range(self.nbatch):
+                os.remove(str(i) + '_PS1_download_urls.csv')
 
         else:
 
@@ -131,31 +135,23 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
                                 ignore_index=True)
         self.download_table.to_csv('{}_PS1_download_urls.csv'.format(str(batch_number)))
 
-    def data_setup(self, obj_name, band, image_folder_path):
+    def force_photometry_params(self, header, band, filepath=None):
+        '''Set the parameters that are used in the aperture_photometry to perform forced photometry based on the
+        :param heade: header of the image
+        :param band: image band
+        :param filepath: file path to the image
+
+        Returns:
+            self
         '''
-            Set the parameters that are used in the aperture_photometry to perform forced photometry based on the
-            PS1 survey
-            Args:
-            Args:
-                obj_name:
-                band:
-                image_folder_path:
-            '''
 
         zpt = {"g": 25.0, "r": 25.0, "i": 25.0, "z": 25.0, "y": 25.0,}
 
-        # Read in the data and header
-        image_name = obj_name + "_" + self.name + "_" + band + "_fov" + '{:d}'.format(self.fov)
-        fitsname = os.path.join(image_folder_path, image_name + '.fits')
 
-        par = fits.open(fitsname, ignore_missing_end=True)
-        self.data = par[0].data.copy()
-        self.hdr = par[0].header
-        self.exp = par[0].header['EXPTIME']
-        self.extCorr = 0.0
+        self.exp = header['EXPTIME']
         self.back = 'back'
         self.zpt = zpt[band]
-
-        del par[0].data
+        self.ABcorr = 0.
+        self.nanomag_corr = np.power(10, 0.4*(22.5-self.zpt))
 
         return self

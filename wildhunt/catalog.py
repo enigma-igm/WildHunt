@@ -23,6 +23,7 @@ from wildhunt import catalog_defaults as whcd
 from wildhunt import catalog_queries as whcq
 from wildhunt import pypmsgs
 from wildhunt import utils
+from wildhunt import image
 from wildhunt.surveys import panstarrs, vsa_wsa, legacysurvey
 msgs = pypmsgs.Messages()
 
@@ -789,11 +790,25 @@ class Catalog(object):
                 dec = partition.compute()[self.dec_colname]
                 survey.download_images(ra, dec, image_folder_path, n_jobs)
 
-    def get_forced_photometry(self, image_folder_path, survey_dict, n_jobs=1):
+    def get_forced_photometry(self, survey_dicts, table_name, image_folder_path='cutouts', radii=[1.], radius_in=7.0,
+                radius_out=10.0, epoch='J', n_jobs=1, remove=True):
+        """ Perform the forced photometry for all the sources in the catalog
+        :param survey_dicts: survey dictionaries
+        :param table_name: table where the data from forced photometry are stored
+        :param image_folder_path: string, path where the images are stored
+        :param radii: arcesc, forced photometry aperture radius
+        :param radius_in: arcesc, background extraction inner annulus radius
+        :param radius_out: arcesc, background extraction outer annulus radius
+        :param epoch: string, the epoch that specify the initial letter of the source names
+        :param n_jobs: int, number of forced photometry processes performed in parallel
+        :param remove: bool, remove the sub catalogs produced in the multiprocess forced photometry
+        """
 
-        # Dummy function for development.
+        ra = self.df.compute()[self.ra_colname]
+        dec = self.df.compute()[self.dec_colname]
 
-        pass
+        image.forced_photometry(ra, dec, survey_dicts, table_name, image_folder_path=image_folder_path, radii=radii,
+                          radius_in=radius_in, radius_out=radius_out, epoch=epoch, n_jobs=n_jobs, remove=remove)
 
 
 
