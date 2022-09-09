@@ -68,7 +68,7 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
 
                 # Convert field of view in arcsecond to pixel size (1 pixel = 0.262 arcseconds
                 # for g,r,z and 2.75 arcseconds for W1, W2)
-                if band in ['1','2']:
+                if band in ['1', '2']:
                     pixelscale = 2.75
                 else:
                     pixelscale = 0.262
