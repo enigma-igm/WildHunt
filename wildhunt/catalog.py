@@ -31,13 +31,7 @@ msgs = pypmsgs.Messages()
 # os.environ.get("DASK_TEMPORARY_DIRECTORY")
 # os.environ["DASK_TEMPORARY_DIRECTORY"] = './dask_temp'
 
-if not os.path.isdir('./dask_temp'):
-    os.mkdir('./dask_temp')
 
-dask.config.set({'temporary_directory': './dask_temp'})
-
-msgs.info('Set dask temporary directory to {}'.format(dask.config.get(
-    "temporary_directory")))
 
 
 def retrieve_survey(survey_name, bands, fov, verbosity=1):
@@ -139,6 +133,14 @@ class Catalog(object):
             self.init_dask_dataframe()
         elif datapath is None and table_data is not None:
             self.df = dd.from_pandas(table_data, npartitions=1)
+
+        if not os.path.isdir('./dask_temp'):
+            os.mkdir('./dask_temp')
+
+        dask.config.set({'temporary_directory': './dask_temp'})
+
+        msgs.info('Set dask temporary directory to {}'.format(dask.config.get(
+            "temporary_directory")))
 
     def init_dask_dataframe(self):
         """Initialize dask dataframe.

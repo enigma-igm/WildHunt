@@ -15,7 +15,7 @@ if __name__ == "__main__":
     survey_dict = [
                 {'survey': 'PS1', 'bands': ['g', 'r'], 'fov':50},
                {'survey': 'UKIDSSDR11PLUSLAS', 'bands': ['J'], 'fov':120},
-               {'survey': 'DELSDR9', 'bands': ['z', '1'], 'fov':120}
+               {'survey': 'DELSDR9', 'bands': ['z', '1'], 'fov':120},
                 ]
 
     cat.get_survey_images('cutouts',  survey_dict, n_jobs=10)

@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import os
+
+import pandas as pd
 import requests
 import numpy as np
 from io import StringIO
@@ -129,10 +131,18 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
                                                                               self.size)
                     urlbase = url + "&red="
 
-                    self.download_table = self.download_table.append(
-                                {'image_name': image_name,
-                                 'url': urlbase + filename},
-                                ignore_index=True)
+                    new_entry = pd.DataFrame(data={'image_name': image_name,
+                                                   'url': urlbase + filename},
+                                             index=[0])
+                    self.download_table = pd.concat([self.download_table,
+                                                   new_entry],
+                                                   ignore_index=True)
+
+                    # self.download_table = self.download_table.append(
+                    #             {'image_name': image_name,
+                    #              'url': urlbase + filename},
+                    #             ignore_index=True)
+
         self.download_table.to_csv('{}_PS1_download_urls.csv'.format(str(batch_number)))
 
     def force_photometry_params(self, header, band, filepath=None):
