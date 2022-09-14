@@ -8,12 +8,14 @@ import numpy as np
 
 from astropy.io import fits
 from astropy import wcs
+from astropy.coordinates import SkyCoord
+from astropy import units as u
 from astropy.nddata.utils import Cutout2D
 from astropy.wcs.utils import proj_plane_pixel_scales
 
 import matplotlib.pyplot as plt
 
-from wildhunt import utils
+from wildhunt import utils, catalog
 import wildhunt.image as whim
 
 from IPython import embed
@@ -427,3 +429,100 @@ def get_pixelscale(hdr):
     scale = np.mean(proj_plane_pixel_scales(wcs_img)) * 3600
 
     return scale
+
+def generate_cutout_images(ra_sources, dec_sources, survey_dicts, imgsize = 30, download_images=True, n_col = 6,
+                           image_folder_path='cutouts', n_jobs=1, epoch='J'):
+
+
+
+    if download_images == True:
+        for survey_dict in survey_dicts:
+            survey = catalog.retrieve_survey(survey_dict['survey'],
+                                     survey_dict['bands'],
+                                     survey_dict['fov'])
+            survey.download_images(ra_sources, dec_sources, image_folder_path, n_jobs)
+
+    obj_names = utils.coord_to_name(ra_sources, dec_sources, epoch=epoch)
+
+    for obj_name, ra, dec in zip(obj_names, ra_sources, dec_sources):
+
+        cutout_names = []
+        band_names = []
+
+        for survey_dict in survey_dicts:
+            for band in survey_dict['bands']:
+
+                image = image_folder_path + '/' + obj_name + "_" + survey_dict['survey'] + "_" + band + "_fov" + \
+                         '{:d}.fits'.format(survey_dict['fov'])
+
+                pos = SkyCoord(ra * u.deg, dec * u.deg, frame='fk5')
+
+                if band in ['Y','J','H','K']:
+                    wcs_img = wcs.WCS(fits.getheader(image, 1))
+                    data = fits.getdata(image, 1)
+                else:
+                    wcs_img = wcs.WCS(fits.getheader(image, 0))
+                    data = fits.getdata(image, 0)
+
+                size = (imgsize * u.arcsec, imgsize * u.arcsec)
+                cutout = Cutout2D(data, pos, size, wcs=wcs_img)
+
+                hdu = fits.PrimaryHDU(cutout.data)
+                hdu.header.update(cutout.wcs.to_header())
+                cutout_name = image_folder_path + '/cutout_' + obj_name + "_" + survey_dict['survey'] + "_" + band \
+                              + "_fov" + '{}.fits'.format(str(imgsize))
+                hdu.writeto(cutout_name, overwrite=True)
+
+                cutout_names.append('cutout_' + obj_name + "_" + survey_dict['survey'] + "_" + band \
+                              + "_fov" + '{}.fits'.format(str(imgsize)))
+                band_names.append(band)
+
+        thumbnail(obj_name, ra, dec, cutout_names, band_names, n_col = n_col, image_folder_path = image_folder_path)
+
+def thumbnail(obj_name, ra, dec, cutouts, bands, n_col = 6, smooth=None, north=True, size=30, pmin=5.0, pmax=95.0,
+              show_circle=True, interpolation='nearest', cmap='gist_yarg', aspect='auto',image_folder_path='cutouts'):
+    '''Making thumbnails for a list of given bands
+
+    '''
+
+    n_images = len(cutouts)
+    n_row = int(math.ceil(n_images / n_col))
+    fig = plt.figure(figsize=(5*n_col, 5*n_row))
+
+    title = obj_name
+    plt.title(title, loc='center', fontsize=25)
+    plt.axis('off')
+
+    fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.05, hspace=0)
+    for idx, cutout in enumerate(cutouts):
+        try:
+
+            si = aplpy.FITSFigure(image_folder_path + '/' + cutout,
+                                  north=north, figure=fig, subplot=(n_row, n_col, idx + 1))
+            si.recenter(ra, dec, radius=size / 2 / 3600.)
+            if show_circle:
+                si.show_circles(ra, dec, radius=size / 2 / 5 / 3600., lw=4, color='cyan')
+            if smooth is not None:
+                if isinstance(smooth, int):
+                    this_smooth=smooth
+                else:
+                    this_smooth = smooth[idx]
+                if this_smooth==0:
+                    this_smooth=None
+            else:
+                this_smooth=None
+            si.show_colorscale(interpolation=interpolation, aspect=aspect, cmap=cmap, stretch='linear', pmin=pmin,
+                               pmax=pmax, smooth=this_smooth)
+
+            si.add_label(0.1, 0.85, bands[idx], relative=True, horizontalalignment='left',
+                             color='r', size=45)
+
+            si.axis_labels.hide()
+            si.tick_labels.hide()
+            si.ticks.hide()
+        except:
+            print('Skiping {:}'.format(cutout))
+
+        plt.savefig(image_folder_path + '/' + obj_name + '.png', dpi=300)
+
+    plt.close('all')
