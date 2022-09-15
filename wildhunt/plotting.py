@@ -430,10 +430,37 @@ def get_pixelscale(hdr):
 
     return scale
 
-def generate_cutout_images(ra_sources, dec_sources, survey_dicts, imgsize = 30, download_images=True, n_col = 6,
-                           image_folder_path='cutouts', n_jobs=1, epoch='J'):
+def generate_cutout_images(ra_sources, dec_sources, survey_dicts, imgsize = 30, download_images = True, n_col = 6,
+                           image_folder_path = 'cutouts', n_jobs = 1, epoch = 'J', aperture = 1.5, n_sigma = 3,
+                           color_map_name = 'Greys'):
+    """ Create axes components to plot many sources in all specified surveys/bands
+        and bands.
 
-
+        :param ra_sources: float
+            Right Ascension of the target
+        :param dec_sources: float
+            Declination of the target
+        :param survey_dicts: dictionary
+            List of survey names, bands, and fovs
+        :param imgsize: float
+            Cutout size in arcsec
+        :param download_images: bool
+            Download automatically the images to produce the cutouts for all the sources
+        :param n_col: int
+            Number of columns
+        :param image_folder_path: string
+            Path where the images are downloaded and the cutouts saved
+        :param n_jobs: int
+            Number of multiprocesses used to download the images
+        :param epoch: string
+            The epoch that specify the initial letter of the source names
+        :param apertures: list of floats
+            Aperture in arcseconds for plotting the circular aperture centered on the image of each cutout
+        :param n_sigma: int
+            Number of sigmas for the sigma-clipping routine that creates the boundaries for the color map.
+        :param color_map_name: string
+            Name of the color map
+        """
 
     if download_images == True:
         for survey_dict in survey_dicts:
@@ -448,6 +475,16 @@ def generate_cutout_images(ra_sources, dec_sources, survey_dicts, imgsize = 30, 
 
         cutout_names = []
         band_names = []
+        idx = 0
+        n_images = 0
+        for i in range(len(survey_dicts)):
+            n_images+=len(survey_dicts[i]['bands'])
+
+        n_row = int(math.ceil(n_images / n_col))
+
+        fig = plt.figure(figsize=(5 * n_col, 5 * n_row))
+        plt.text(0.40, 1.05, obj_name, fontsize=25)
+        plt.axis('off')
 
         for survey_dict in survey_dicts:
             for band in survey_dict['bands']:
@@ -458,71 +495,72 @@ def generate_cutout_images(ra_sources, dec_sources, survey_dicts, imgsize = 30, 
                 pos = SkyCoord(ra * u.deg, dec * u.deg, frame='fk5')
 
                 if band in ['Y','J','H','K']:
-                    wcs_img = wcs.WCS(fits.getheader(image, 1))
+                    hdr = fits.getheader(image, 1)
                     data = fits.getdata(image, 1)
                 else:
-                    wcs_img = wcs.WCS(fits.getheader(image, 0))
+                    hdr = fits.getheader(image, 0)
                     data = fits.getdata(image, 0)
 
-                size = (imgsize * u.arcsec, imgsize * u.arcsec)
-                cutout = Cutout2D(data, pos, size, wcs=wcs_img)
-
-                hdu = fits.PrimaryHDU(cutout.data)
-                hdu.header.update(cutout.wcs.to_header())
-                cutout_name = image_folder_path + '/cutout_' + obj_name + "_" + survey_dict['survey'] + "_" + band \
-                              + "_fov" + '{}.fits'.format(str(imgsize))
-                hdu.writeto(cutout_name, overwrite=True)
-
-                cutout_names.append('cutout_' + obj_name + "_" + survey_dict['survey'] + "_" + band \
-                              + "_fov" + '{}.fits'.format(str(imgsize)))
-                band_names.append(band)
-
-        thumbnail(obj_name, ra, dec, cutout_names, band_names, n_col = n_col, image_folder_path = image_folder_path)
-
-def thumbnail(obj_name, ra, dec, cutouts, bands, n_col = 6, smooth=None, north=True, size=30, pmin=5.0, pmax=95.0,
-              show_circle=True, interpolation='nearest', cmap='gist_yarg', aspect='auto',image_folder_path='cutouts'):
-    '''Making thumbnails for a list of given bands
-
-    '''
-
-    n_images = len(cutouts)
-    n_row = int(math.ceil(n_images / n_col))
-    fig = plt.figure(figsize=(5*n_col, 5*n_row))
-
-    title = obj_name
-    plt.title(title, loc='center', fontsize=25)
-    plt.axis('off')
-
-    fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.05, hspace=0)
-    for idx, cutout in enumerate(cutouts):
-        try:
-
-            si = aplpy.FITSFigure(image_folder_path + '/' + cutout,
-                                  north=north, figure=fig, subplot=(n_row, n_col, idx + 1))
-            si.recenter(ra, dec, radius=size / 2 / 3600.)
-            if show_circle:
-                si.show_circles(ra, dec, radius=size / 2 / 5 / 3600., lw=4, color='cyan')
-            if smooth is not None:
-                if isinstance(smooth, int):
-                    this_smooth=smooth
+                if data is not None:
+                    file_found = True
                 else:
-                    this_smooth = smooth[idx]
-                if this_smooth==0:
-                    this_smooth=None
-            else:
-                this_smooth=None
-            si.show_colorscale(interpolation=interpolation, aspect=aspect, cmap=cmap, stretch='linear', pmin=pmin,
-                               pmax=pmax, smooth=this_smooth)
+                    file_found = False
 
-            si.add_label(0.1, 0.85, bands[idx], relative=True, horizontalalignment='left',
-                             color='r', size=45)
+                if file_found:
 
-            si.axis_labels.hide()
-            si.tick_labels.hide()
-            si.ticks.hide()
-        except:
-            print('Skiping {:}'.format(cutout))
+                    wcs_img = wcs.WCS(hdr)
+                    overlap = True
+                    size = (imgsize * u.arcsec, imgsize * u.arcsec)
+
+                    try:
+                        cutout = Cutout2D(data, pos, size, wcs=wcs_img)
+
+                    except:
+                        print("Source not in image")
+                        overlap = False
+                        cutout = None
+
+                    if cutout is not None:
+
+                        if overlap:
+                            cutout = cutout.data
+
+                        hdu = fits.ImageHDU(data=cutout, header=hdr)
+
+                        axs = aplpy.FITSFigure(hdu, figure=fig,
+                                               subplot=(n_row, n_col, idx + 1),
+                                               north=True)
+
+                        # Check if input color map name is a color map, else use viridis
+                        try:
+                            cm = plt.get_cmap(color_map_name)
+                        except ValueError:
+                            print('Color map argument is not a color map. Setting '
+                                  'default: Greys')
+                            cm = plt.get_cmap('Greys')
+                            color_map_name = 'Greys'
+
+                        # Sigma-clipping of the color scale
+                        mean = np.mean(cutout[~np.isnan(cutout)])
+                        std = np.std(cutout[~np.isnan(cutout)])
+                        upp_lim = mean + n_sigma * std
+                        low_lim = mean - n_sigma * std
+                        axs.show_colorscale(vmin=low_lim, vmax=upp_lim,
+                                            cmap=color_map_name)
+
+                        # Plot circular aperture (forced photometry flux)
+                        (yy, xx) = cutout.shape
+                        circx = (xx * 0.5)  # + 1
+                        circy = (yy * 0.5)  # + 1
+                        aper_pix = aperture_inpixels(aperture, hdr)
+                        circle = plt.Circle((circx, circy), aper_pix, color='r', fill=False,
+                                            lw=1.5)
+                        fig.gca().add_artist(circle)
+                        idx += 1
+
+                        # Create survey/band label and add a title
+                        fig.gca().set_title(survey_dict['survey'] + " " + band)
 
         plt.savefig(image_folder_path + '/' + obj_name + '.png', dpi=300)
 
-    plt.close('all')
+        plt.close()
