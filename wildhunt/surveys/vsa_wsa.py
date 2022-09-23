@@ -3,6 +3,7 @@
 import time
 import os
 import numpy as np
+import pandas as pd
 
 from astropy.io import fits
 
@@ -215,10 +216,19 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                         image_name = obj_name + "_" + self.name + "_" + \
                                      line[band_url] + "_fov" + '{:d}'.format(self.fov)
 
-                        self.download_table = self.download_table.append(
-                            {'image_name': image_name,
-                             'url': fileURL},
-                            ignore_index=True)
+                        new_entry = pd.DataFrame(data={'image_name':
+                                                       image_name,
+                                                       'url': fileURL},
+                                                 index=[0])
+
+                        self.download_table = pd.concat([self.download_table,
+                                                        new_entry],
+                                                        ignore_index=True)
+
+                        # self.download_table = self.download_table.append(
+                        #     {'image_name': image_name,
+                        #      'url': fileURL},
+                        #     ignore_index=True)
 
             out.close()
 

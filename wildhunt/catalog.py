@@ -31,13 +31,7 @@ msgs = pypmsgs.Messages()
 # os.environ.get("DASK_TEMPORARY_DIRECTORY")
 # os.environ["DASK_TEMPORARY_DIRECTORY"] = './dask_temp'
 
-if not os.path.isdir('./dask_temp'):
-    os.mkdir('./dask_temp')
 
-dask.config.set({'temporary_directory': './dask_temp'})
-
-msgs.info('Set dask temporary directory to {}'.format(dask.config.get(
-    "temporary_directory")))
 
 
 def retrieve_survey(survey_name, bands, fov, verbosity=1):
@@ -139,6 +133,14 @@ class Catalog(object):
             self.init_dask_dataframe()
         elif datapath is None and table_data is not None:
             self.df = dd.from_pandas(table_data, npartitions=1)
+
+        if not os.path.isdir('./dask_temp'):
+            os.mkdir('./dask_temp')
+
+        dask.config.set({'temporary_directory': './dask_temp'})
+
+        msgs.info('Set dask temporary directory to {}'.format(dask.config.get(
+            "temporary_directory")))
 
     def init_dask_dataframe(self):
         """Initialize dask dataframe.
@@ -382,7 +384,7 @@ class Catalog(object):
             msgs.info('Creating WildHunt temporary directory')
 
         # For datalab surveys log in to datalb
-        if survey in ['DELS']:
+        if survey in ['DELS', 'UNWISE']:
             response = ac.whoAmI()
             if response == 'anonymous':
                 msgs.info('Log in to NOIRLAB Astro Data Lab')
@@ -390,6 +392,10 @@ class Catalog(object):
                                  getpass.getpass('Enter password (+ENTER): '))
             msgs.info('Astro Data Lab USER: {}'.format(ac.whoAmI()))
             msgs.info('Astro Data Lab TABLES: {}'.format(qc.mydb_list()))
+
+        if survey in ['UKIDSSDR11PLUSLAS', 'VIKINGDR5']:
+
+            msgs.info('Using astroquery to get sources from the WSA archive.')
 
         # Serialized cross-match over partitions
         for idx, partition in enumerate(self.df.partitions):
@@ -399,6 +405,12 @@ class Catalog(object):
             # I suggest to implement a survey + table structure for the future.
             if survey == 'DELS':
                 cross_match_name = 'ls_dr9_tractor'
+            elif survey == 'UNWISE':
+                cross_match_name = 'unwise_dr1_object'
+            elif survey == 'UKIDSSDR11LAS':
+                cross_match_name = 'ukidssdr11las'
+            elif survey == 'VIKINGDR5':
+                cross_match_name = 'vikingdr5'
 
             # Set up cross-match name
             filename = '{}/{}_{}.parquet'.format(self.temp_dir,
@@ -413,13 +425,24 @@ class Catalog(object):
                 self.chunk = partition.compute()[self.columns]
 
                 if survey == 'DELS':
-
-                    # TODO: Check if match exists
-
                     cross_match = self.datalab_cross_match(
                         'ls_dr9.tractor',
                         columns,
                         match_distance=match_distance)
+
+                elif survey == 'UNWISE':
+                    cross_match = self.datalab_cross_match(
+                        'unwise_dr1.object',
+                        columns,
+                        match_distance)
+
+                elif survey == 'UKIDSSDR11LAS':
+                    cross_match = self.astroquery_cross_match('ukidssdr11',
+                                                              match_distance)
+
+                elif survey == 'VIKINGDR5':
+                    cross_match = self.astroquery_cross_match('vikingdr5',
+                                                              match_distance)
 
                 # Save cross-matched chunk to temporary folder
                 cross_match_df = cross_match.df.compute()
@@ -444,11 +467,18 @@ class Catalog(object):
                      how='left',
                      suffixes=('_source', '_match'))
 
+
         # Save merged dataframe
         msgs.info('Saving cross-matched dataframe to {}'.format(
             cross_match_name))
 
-        merge.to_parquet('{}'.format(cross_match_name))
+
+        try:
+            merge.to_parquet('{}'.format(cross_match_name))
+        except:
+            msgs.warn('Merged catalog could not be save in .parquet format')
+            msgs.warn('Instead it has been saved in .csv.')
+            merge.to_csv('{}_csv'.format(cross_match_name))
 
         # Remove the temporary folder (default)
         if self.clear_temp_dir:
@@ -495,6 +525,11 @@ class Catalog(object):
         if datalab_table == 'ls_dr9.tractor' and columns == 'default':
             columns = whcd.ls_dr9_default_columns
             match_name = '{}_x_ls_dr9_tractor'.format(self.name)
+
+        if datalab_table == 'unwise_dr1.object' and columns == 'default':
+            columns = whcd.unwise_dr1_default_columns
+            match_name = '{}_x_unwise_dr1'.format(self.name)
+
         else:
             msgs.warn('Datalab Table not implemented yet')
 
@@ -504,8 +539,12 @@ class Catalog(object):
                   + qc.mydb_import('wild_upload', self.chunk, drop=True))
 
         upload_table = 'mydb://wild_upload'
-        survey = 'ls_dr9'
-        datalab_table = 'tractor'
+        if datalab_table == 'ls_dr9.tractor':
+            survey = 'ls_dr9'
+            datalab_table = 'tractor'
+        elif datalab_table == 'unwise_dr1.object':
+            survey = 'unwise_dr1'
+            datalab_table = 'object'
 
         # Build SQL query
         if columns is not None:
@@ -549,6 +588,71 @@ class Catalog(object):
                               table_data=result_df)
 
         return cross_match
+
+
+    def astroquery_cross_match(self, catalog, match_distance):
+
+        service = whcq.astroquery_dict[catalog]['service']
+        cat = whcq.astroquery_dict[catalog]['catalog']
+        ra = whcq.astroquery_dict[catalog]['ra']
+        dec = whcq.astroquery_dict[catalog]['dec']
+        mag = whcq.astroquery_dict[catalog]['mag']
+        mag_name = whcq.astroquery_dict[catalog]['mag_name']
+        distance = whcq.astroquery_dict[catalog]['distance']
+        dr = whcq.astroquery_dict[catalog]['data_release']
+
+        result_df = None
+
+        match_name = '{}_x_{}'.format(self.name, catalog)
+
+        # Loop over all sources in the chunk
+        for idx in self.chunk.index:
+
+            source_ra = self.chunk.loc[idx, self.ra_colname]
+            source_dec = self.chunk.loc[idx, self.dec_colname]
+            source_id = self.chunk.loc[idx, self.id_colname]
+
+            astroquery_df = whcq.query_region_astroquery(source_ra, source_dec,
+                                                         match_distance,
+                                                         service, cat,
+                                                         data_release=dr)
+
+            if astroquery_df.shape[0] > 0:
+                astroquery_df.drop(columns='sourceID', inplace=True)
+
+                if result_df is None:
+                    # Create and empty dataframe with the columsn of the
+                    # returned astroquery dataframe
+                    result_df = pd.DataFrame(columns=astroquery_df.columns)
+                    result_df['source_ra'] = None
+                    result_df['source_dec'] = None
+                    result_df['source_id'] = None
+
+                # Sort by ascending distance
+                astroquery_df.sort_values('distance', inplace=True)
+                astroquery_df['source_ra'] = source_ra
+                astroquery_df['source_dec'] = source_dec
+                astroquery_df['source_id'] = source_id
+
+
+                # Series of the closest match
+                new_row = astroquery_df.loc[astroquery_df.index[0], :]
+
+                result_df = pd.concat([result_df, new_row.to_frame().T],
+                                      ignore_index=True)
+
+
+        cross_match = Catalog(match_name,
+                              id_column_name=self.id_colname,
+                              ra_column_name=self.ra_colname,
+                              dec_column_name=self.dec_colname,
+                              table_data=result_df)
+
+
+
+        return cross_match
+
+
 
     def get_offset_stars_datalab(self, match_distance, datalab_dict,
                                  n=3, where=None, minimum_distance=3):

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import numpy as np
+import pandas as pd
 from astropy.table import Table
 
 from wildhunt.surveys import imagingsurvey
@@ -67,6 +68,7 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
 
                 # Convert field of view in arcsecond to pixel size (1 pixel = 0.262 arcseconds
                 # for g,r,z and 2.75 arcseconds for W1, W2)
+
                 if band in ['1','2']:
                     release = 'unwise-neo6'
                     pixelscale = 2.75
@@ -83,9 +85,17 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
                        "&pixscale={}&bands={}&size={}").format(ra,dec,release,str(pixelscale),band,str(int(size)))
 
 
-                self.download_table = self.download_table.append(
-                    {'image_name': image_name,'url': url},
-                    ignore_index=True)
+                # Implementing concat instead of deprecated append
+                new_entry = pd.DataFrame(data={'image_name': image_name,
+                                               'url': url},
+                                         index=[0])
+                self.download_table = pd.concat([self.download_table,
+                                                new_entry],
+                                                ignore_index=True)
+
+                # self.download_table = self.download_table.append(
+                #     {'image_name': image_name,'url': url},
+                #     ignore_index=True)
 
     def force_photometry_params(self, header, band, filepath=None):
         '''Set the parameters that are used in the aperture_photometry to perform forced photometry based on the

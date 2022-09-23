@@ -418,7 +418,8 @@ class Image(object):
 
     def _simple_plot(self, fov, n_sigma=3, fig=None, subplot=None,
                      color_map='viridis', axis=None, north=False,
-                     scalebar=5*u.arcsecond, sb_pad=0.5, sb_borderpad=0.4):
+                     scalebar=5*u.arcsecond, sb_pad=0.5, sb_borderpad=0.4,
+                     corner='lower right', frameon=False):
 
         if north:
             self._rotate_north_up()
@@ -459,12 +460,14 @@ class Image(object):
                 length = scalebar.to(u.degree)
 
             self._add_scalebar(axis, length, pad=sb_pad,
-                               borderpad=sb_borderpad)
+                               borderpad=sb_borderpad,
+                               corner=corner,
+                               frameon=frameon)
 
         return axs
 
     def _add_scalebar(self, axis, length, corner='lower right',
-                      pad=0.5, borderpad=0.4):
+                      pad=0.5, borderpad=0.4, frameon=False):
         # Code adapted from Aplpy
 
         pix_scale = proj_plane_pixel_scales(WCS(self.header))
@@ -484,8 +487,8 @@ class Image(object):
         artist = AnchoredSizeBar(axis.transData, length, label,
                                  corner, pad=pad, borderpad=borderpad,
                                  size_vertical=size_vertical,
-                                 sep=3, frameon=False,
-                                 fontproperties={'size':15, 'weight':'bold'})
+                                 sep=3, frameon=frameon,
+                                 fontproperties={'size': 15, 'weight': 'bold'})
 
         axis.add_artist(artist)
 

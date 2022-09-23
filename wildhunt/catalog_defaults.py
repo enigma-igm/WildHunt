@@ -31,3 +31,18 @@ ls_dr9_default_columns = """
       match.type, 
       match.ebv, 
   """
+
+unwise_dr1_default_columns = """
+    match.ra,
+    match.dec,
+    match.flux_w1,
+    match.flux_w2,
+    match.flags_unwise_w1,
+    match.flags_unwise_w2,
+    match.dflux_w1,
+    match.dflux_w2,
+    match.mag_w1_vg,
+    match.mag_w2_vg,
+    match.glat,
+    match.glon,
+"""
