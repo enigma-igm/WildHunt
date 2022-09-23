@@ -858,6 +858,10 @@ class Catalog(object):
                     quality_query=quality_query, n=n,
                     verbosity=self.verbose)
 
+                offset_df = pd.concat([offset_df, temp_df], ignore_index=True)
+
+                offset_df.to_csv('temp_offset_df.csv', index=False)
+
             # Remove temporary backup file
             os.remove('temp_offset_df.csv')
 
