@@ -52,7 +52,7 @@ astroquery_dict = {
                                        'UKIDSS_J',
                                'mag': 'jAperMag3', 'distance': 'distance'},
                     # new, needs to be tested!
-                    'vikingdr5': {'service': 'vsa', 'catalog': 'VIKING',
+                    'vikingdr5': {'service': 'VSA', 'catalog': 'VIKING',
                                'ra': 'ra', 'dec': 'dec',
                                'data_release': 'VIKINGDR5', 'mag_name': 'VHS_J',
                                'mag': 'jAperMag3', 'distance': 'distance'}
