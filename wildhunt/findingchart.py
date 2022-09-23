@@ -20,7 +20,7 @@ from matplotlib.collections import PatchCollection
 
 
 from wildhunt import utils as utils
-from wildhunt import image
+from wildhunt import plotting
 
 
 # Define some colors
@@ -278,7 +278,7 @@ def make_finding_chart(ra, dec, survey, band, aperture, fov,
     filename = image_folder_path + '/' + coord_name[0] + "_" + survey + "_" + \
                band + "*.fits"
 
-    data, hdr, file_path = image.open_image(filename, im_ra, im_dec,
+    data, hdr, file_path = plotting.open_image(filename, im_ra, im_dec,
                                       fov,
                                       image_folder_path,
                                       verbosity=verbosity)
