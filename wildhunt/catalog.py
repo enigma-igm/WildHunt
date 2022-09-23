@@ -384,7 +384,7 @@ class Catalog(object):
             msgs.info('Creating WildHunt temporary directory')
 
         # For datalab surveys log in to datalb
-        if survey in ['DELS']:
+        if survey in ['DELS', 'UNWISE']:
             response = ac.whoAmI()
             if response == 'anonymous':
                 msgs.info('Log in to NOIRLAB Astro Data Lab')
@@ -405,6 +405,8 @@ class Catalog(object):
             # I suggest to implement a survey + table structure for the future.
             if survey == 'DELS':
                 cross_match_name = 'ls_dr9_tractor'
+            elif survey == 'UNWISE':
+                cross_match_name = 'unwise_dr1_object'
             elif survey == 'UKIDSSDR11LAS':
                 cross_match_name = 'ukidssdr11las'
             elif survey == 'VIKINGDR5':
@@ -423,11 +425,16 @@ class Catalog(object):
                 self.chunk = partition.compute()[self.columns]
 
                 if survey == 'DELS':
-
                     cross_match = self.datalab_cross_match(
                         'ls_dr9.tractor',
                         columns,
                         match_distance=match_distance)
+
+                elif survey == 'UNWISE':
+                    cross_match = self.datalab_cross_match(
+                        'unwise_dr1.object',
+                        columns,
+                        match_distance)
 
                 elif survey == 'UKIDSSDR11LAS':
                     cross_match = self.astroquery_cross_match('ukidssdr11',
@@ -518,6 +525,11 @@ class Catalog(object):
         if datalab_table == 'ls_dr9.tractor' and columns == 'default':
             columns = whcd.ls_dr9_default_columns
             match_name = '{}_x_ls_dr9_tractor'.format(self.name)
+
+        if datalab_table == 'unwise_dr1.object' and columns == 'default':
+            columns = whcd.unwise_dr1_default_columns
+            match_name = '{}_x_unwise_dr1'.format(self.name)
+
         else:
             msgs.warn('Datalab Table not implemented yet')
 
@@ -527,8 +539,12 @@ class Catalog(object):
                   + qc.mydb_import('wild_upload', self.chunk, drop=True))
 
         upload_table = 'mydb://wild_upload'
-        survey = 'ls_dr9'
-        datalab_table = 'tractor'
+        if datalab_table == 'ls_dr9.tractor':
+            survey = 'ls_dr9'
+            datalab_table = 'tractor'
+        elif datalab_table == 'unwise_dr1.object':
+            survey = 'unwise_dr1'
+            datalab_table = 'object'
 
         # Build SQL query
         if columns is not None:

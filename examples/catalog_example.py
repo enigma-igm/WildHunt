@@ -23,9 +23,11 @@ if __name__ == '__main__':
     cat.df = cat.df.sample(frac=0.1)
     print(cat.df.compute().shape)
     # Do the online cross-match
-    cat.online_cross_match(survey='UKIDSSDR11LAS')
+    # cat.online_cross_match(survey='UKIDSSDR11LAS')
 
     # Legacy Survey DecaLS
     # cat.online_cross_match(survey='DELS')
 
+    # UNWISE DR1
+    cat.online_cross_match(survey='UNWISE')
 
