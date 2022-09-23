@@ -56,6 +56,7 @@ astroquery_dict = {
                                'ra': 'ra', 'dec': 'dec',
                                'data_release': 'VIKINGDR5', 'mag_name': 'VHS_J',
                                'mag': 'jAperMag3', 'distance': 'distance'}
+                    # 'uhds': {'service': }
                   }
 
 example_datalab_dict = {'table': 'ls_dr9.tractor',

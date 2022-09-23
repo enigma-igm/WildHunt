@@ -601,28 +601,29 @@ class Catalog(object):
                                                          service, cat,
                                                          data_release=dr)
 
-            astroquery_df.drop(columns='sourceID', inplace=True)
+            if astroquery_df.shape[0] > 0:
+                astroquery_df.drop(columns='sourceID', inplace=True)
 
-            if result_df is None:
-                # Create and empty dataframe with the columsn of the
-                # returned astroquery dataframe
-                result_df = pd.DataFrame(columns=astroquery_df.columns)
-                result_df['source_ra'] = None
-                result_df['source_dec'] = None
-                result_df['source_id'] = None
+                if result_df is None:
+                    # Create and empty dataframe with the columsn of the
+                    # returned astroquery dataframe
+                    result_df = pd.DataFrame(columns=astroquery_df.columns)
+                    result_df['source_ra'] = None
+                    result_df['source_dec'] = None
+                    result_df['source_id'] = None
 
-            # Sort by ascending distance
-            astroquery_df.sort_values('distance', inplace=True)
-            astroquery_df['source_ra'] = source_ra
-            astroquery_df['source_dec'] = source_dec
-            astroquery_df['source_id'] = source_id
+                # Sort by ascending distance
+                astroquery_df.sort_values('distance', inplace=True)
+                astroquery_df['source_ra'] = source_ra
+                astroquery_df['source_dec'] = source_dec
+                astroquery_df['source_id'] = source_id
 
 
-            # Series of the closest match
-            new_row = astroquery_df.loc[astroquery_df.index[0], :]
+                # Series of the closest match
+                new_row = astroquery_df.loc[astroquery_df.index[0], :]
 
-            result_df = pd.concat([result_df, new_row.to_frame().T],
-                                  ignore_index=True)
+                result_df = pd.concat([result_df, new_row.to_frame().T],
+                                      ignore_index=True)
 
 
         cross_match = Catalog(match_name,
