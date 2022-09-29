@@ -30,12 +30,12 @@ Catalog [x]
 - Get images (ImagingSurvey) [x]
 - Do forced photometry (Image) [x] - Review[]
 - Get offset stars (related to online cross-match) [x]
-- Generate finding charts (Image, ImagingSurvey) [ ]
+- Generate finding charts (Image, ImagingSurvey) [x]
 
-Image [ ]
+Image [x]
 - Calculate forced photometry [x] - Review[]
-- Plot cutout images (for visual inspection)
-- Plot finding charts
+- Plot cutout images (for visual inspection) [x]
+- Plot finding charts [x]
 
 Instrument [ ]
 - All info related to specific instruments

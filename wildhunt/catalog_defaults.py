@@ -46,3 +46,22 @@ unwise_dr1_default_columns = """
     match.glat,
     match.glon,
 """
+
+catwise2020_default_columns = """
+    match.ra,
+    match.dec,
+    match.w1flux,
+    match.w2flux,
+    match.w1sigflux,
+    match.w2sigflux,
+    match.w1mpro,
+    match.w2mpro,
+    match.w1sigmpro,
+    match.w2sigmpro,
+    match.w1snr,
+    match.w2snr,
+    match.glat,
+    match.glon,
+    match.cc_flags,
+    match.ab_flags,
+"""

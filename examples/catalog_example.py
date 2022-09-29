@@ -26,8 +26,11 @@ if __name__ == '__main__':
     # cat.online_cross_match(survey='UKIDSSDR11LAS')
 
     # Legacy Survey DecaLS
-    # cat.online_cross_match(survey='DELS')
+    cat.online_cross_match(survey='DELS')
 
     # UNWISE DR1
     cat.online_cross_match(survey='UNWISE')
+
+    # CATWISE 2020
+    cat.online_cross_match(survey='CATWISE')
 

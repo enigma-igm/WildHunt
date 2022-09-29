@@ -384,7 +384,7 @@ class Catalog(object):
             msgs.info('Creating WildHunt temporary directory')
 
         # For datalab surveys log in to datalb
-        if survey in ['DELS', 'UNWISE']:
+        if survey in ['DELS', 'UNWISE', 'CATWISE']:
             response = ac.whoAmI()
             if response == 'anonymous':
                 msgs.info('Log in to NOIRLAB Astro Data Lab')
@@ -407,6 +407,8 @@ class Catalog(object):
                 cross_match_name = 'ls_dr9_tractor'
             elif survey == 'UNWISE':
                 cross_match_name = 'unwise_dr1_object'
+            elif survey == 'CATWISE':
+                cross_match_name = 'catwise2020_main'
             elif survey == 'UKIDSSDR11LAS':
                 cross_match_name = 'ukidssdr11las'
             elif survey == 'VIKINGDR5':
@@ -433,6 +435,12 @@ class Catalog(object):
                 elif survey == 'UNWISE':
                     cross_match = self.datalab_cross_match(
                         'unwise_dr1.object',
+                        columns,
+                        match_distance)
+
+                elif survey == 'CATWISE':
+                    cross_match = self.datalab_cross_match(
+                        'catwise2020.main',
                         columns,
                         match_distance)
 
@@ -530,6 +538,10 @@ class Catalog(object):
             columns = whcd.unwise_dr1_default_columns
             match_name = '{}_x_unwise_dr1'.format(self.name)
 
+        if datalab_table == 'catwise2020.main' and columns == 'default':
+            columns = whcd.catwise2020_default_columns
+            match_name = '{}_x_catwise2020'.format(self.name)
+
         else:
             msgs.warn('Datalab Table not implemented yet')
 
@@ -545,6 +557,9 @@ class Catalog(object):
         elif datalab_table == 'unwise_dr1.object':
             survey = 'unwise_dr1'
             datalab_table = 'object'
+        elif datalab_table == 'catwise2020.main':
+            survey = 'catwise2020'
+            datalab_table = 'main'
 
         # Build SQL query
         if columns is not None:
