@@ -534,11 +534,11 @@ class Catalog(object):
             columns = whcd.ls_dr9_default_columns
             match_name = '{}_x_ls_dr9_tractor'.format(self.name)
 
-        if datalab_table == 'unwise_dr1.object' and columns == 'default':
+        elif datalab_table == 'unwise_dr1.object' and columns == 'default':
             columns = whcd.unwise_dr1_default_columns
             match_name = '{}_x_unwise_dr1'.format(self.name)
 
-        if datalab_table == 'catwise2020.main' and columns == 'default':
+        elif datalab_table == 'catwise2020.main' and columns == 'default':
             columns = whcd.catwise2020_default_columns
             match_name = '{}_x_catwise2020'.format(self.name)
 
