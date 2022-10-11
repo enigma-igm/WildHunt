@@ -222,11 +222,12 @@ class Catalog(object):
             n_partitions = round(filesize/self.partition_size)
             msgs.info('Creating {} partitions.'.format(n_partitions))
             msgs.info('This may take a while.')
+            
             # Repartition dataframe
-            df = dd.from_pandas(df, npartitions=n_partitions)
-
-            # else:
-            #     df = df.repartition(npartitions=n_partitions)
+            if isinstance(df, pd.DataFrame):
+                df = dd.from_pandas(df, npartitions=n_partitions)
+            elif isinstance(df, dd.DataFrame):
+                df = df.repartition(npartitions=n_partitions)
 
             # Save catalog structure
             self.df = df

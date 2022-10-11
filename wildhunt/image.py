@@ -344,8 +344,11 @@ class Image(object):
 
         subplot = (1, 1, 1)
 
-        self._plot_axis(fig, subplot, fov=fov, n_sigma=n_sigma,
-                       color_map=color_map)
+        # self._plot_axis(fig, subplot, fov=fov, n_sigma=n_sigma,
+        #                color_map=color_map)
+
+        self._simple_plot(fov, n_sigma=n_sigma, fig=fig, subplot=subplot,
+                          color_map=color_map, north=True,)
 
         plt.show()
 
@@ -419,7 +422,9 @@ class Image(object):
     def _simple_plot(self, fov, n_sigma=3, fig=None, subplot=None,
                      color_map='viridis', axis=None, north=False,
                      scalebar=5*u.arcsecond, sb_pad=0.5, sb_borderpad=0.4,
-                     corner='lower right', frameon=False):
+                     corner='lower right', frameon=False, low_lim=None,
+                     upp_lim=None):
+
 
         if north:
             self._rotate_north_up()
@@ -444,11 +449,15 @@ class Image(object):
             msgs.error('Neither figure and subplot tuple or figure axis '
                        'provided.')
 
-        # Sigma-clipping of the color scale
-        mean = np.mean(img_data[~np.isnan(img_data)])
-        std = np.std(img_data[~np.isnan(img_data)])
-        upp_lim = mean + n_sigma * std
-        low_lim = mean - n_sigma * std
+        if isinstance(upp_lim, float) and isinstance(low_lim, float):
+            msgs.info('Using user defined color scale limits.')
+        else:
+            msgs.info('Determining color scale limits by sigma clipping.')
+            # Sigma-clipping of the color scale
+            mean = np.mean(img_data[~np.isnan(img_data)])
+            std = np.std(img_data[~np.isnan(img_data)])
+            upp_lim = mean + n_sigma * std
+            low_lim = mean - n_sigma * std
 
         axs.imshow(img_data, origin='lower', vmin=low_lim,
                    vmax=upp_lim, cmap=color_map)
