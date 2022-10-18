@@ -213,8 +213,12 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
                     else:
                         band_url = line.index('band=') + len('band=')
                         # Create image name
-                        image_name = obj_name + "_" + self.name + "_" + \
-                                     line[band_url] + "_fov" + '{:d}'.format(self.fov)
+                        if (line[band_url] == 'K') & (self.archive == 'VSA'):
+                            image_name = obj_name + "_" + self.name + "_" + \
+                                         line[band_url] +  line[band_url+1] + "_fov" + '{:d}'.format(self.fov)
+                        else:
+                            image_name = obj_name + "_" + self.name + "_" + \
+                                         line[band_url] + "_fov" + '{:d}'.format(self.fov)
 
                         new_entry = pd.DataFrame(data={'image_name':
                                                        image_name,
@@ -258,7 +262,7 @@ class VsaWsa(imagingsurvey.ImagingSurvey):
         else:
 
             self.exp = par['GETIMAGE'].header["EXPTIME"]
-            ABcorr = {"Z": 0.521, "Y": 0.618, "J": 0.937, "H": 1.384, "K": 1.839}
+            ABcorr = {"Z": 0.521, "Y": 0.618, "J": 0.937, "H": 1.384, "Ks": 1.839}
             self.ABcorr = ABcorr[band]
 
             try:

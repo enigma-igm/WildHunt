@@ -494,7 +494,7 @@ def generate_cutout_images(ra_sources, dec_sources, survey_dicts, imgsize = 30, 
 
                 pos = SkyCoord(ra * u.deg, dec * u.deg, frame='fk5')
 
-                if band in ['Y','J','H','K']:
+                if band in ['Y','J','H','K','Ks']:
                     hdr = fits.getheader(image, 1)
                     data = fits.getdata(image, 1)
                 else:
