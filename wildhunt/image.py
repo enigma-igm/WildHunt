@@ -25,7 +25,9 @@ from astropy.wcs import WCS
 from astropy.nddata.utils import Cutout2D
 from astropy.coordinates import SkyCoord, ICRS
 from astropy.wcs.utils import proj_plane_pixel_scales
+from astropy.visualization import ZScaleInterval
 
+from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1.anchored_artists import (AnchoredEllipse, AnchoredSizeBar)
 
 from reproject.mosaicking import find_optimal_celestial_wcs
@@ -342,7 +344,7 @@ class Image(object):
         """
         fig = plt.figure(figsize=(5, 5))
 
-        subplot = (1, 1, 1)
+        subplot = 111
 
         # self._plot_axis(fig, subplot, fov=fov, n_sigma=n_sigma,
         #                color_map=color_map)
@@ -352,52 +354,52 @@ class Image(object):
 
         plt.show()
 
-    def _plot_axis(self, fig, subplot, fov=None, n_sigma=3,
-                  color_map='viridis'):
-        """Plot image axis on input figure.
-
-        Class internal plotting routine.
-
-        :param fig: Input figure
-        :type fig:
-        :param subplot: Subplot touple (e.g., "(1,1,1)")
-        :type subplot tuple
-        :param fov: Field of view
-        :type: float
-        :param n_sigma: Number of sigma for image color scale sigma clipping.
-        :type n_sigma: int
-        :param color_map: Matplotlib color map
-        :type color_map:
-        :return:
-        """
-
-        if fov is not None:
-            cutout_data = self.get_cutout(fov=fov)
-        else:
-            cutout_data = None
-
-        if cutout_data is not None:
-            img_data = cutout_data
-        else:
-            img_data = self.data
-
-        hdu = fits.ImageHDU(data=img_data, header=self.header)
-
-        axs = aplpy.FITSFigure(hdu, figure=fig,
-                               subplot=subplot,
-                               north=True)
-
-        # Sigma-clipping of the color scale
-        mean = np.mean(img_data[~np.isnan(img_data)])
-        std = np.std(img_data[~np.isnan(img_data)])
-        upp_lim = mean + n_sigma * std
-        low_lim = mean - n_sigma * std
-        axs.show_colorscale(vmin=low_lim, vmax=upp_lim,
-                            cmap=color_map)
-
-        axs.set_title(self.survey+' '+self.band)
-
-        return axs
+    # def _plot_axis(self, fig, subplot, fov=None, n_sigma=3,
+    #               color_map='viridis'):
+    #     """Plot image axis on input figure.
+    #
+    #     Class internal plotting routine.
+    #
+    #     :param fig: Input figure
+    #     :type fig:
+    #     :param subplot: Subplot touple (e.g., "(1,1,1)")
+    #     :type subplot tuple
+    #     :param fov: Field of view
+    #     :type: float
+    #     :param n_sigma: Number of sigma for image color scale sigma clipping.
+    #     :type n_sigma: int
+    #     :param color_map: Matplotlib color map
+    #     :type color_map:
+    #     :return:
+    #     """
+    #
+    #     if fov is not None:
+    #         cutout_data = self._get_cutout(fov=fov)
+    #     else:
+    #         cutout_data = None
+    #
+    #     if cutout_data is not None:
+    #         img_data = cutout_data
+    #     else:
+    #         img_data = self.data
+    #
+    #     hdu = fits.ImageHDU(data=img_data, header=self.header)
+    #
+    #     axs = aplpy.FITSFigure(hdu, figure=fig,
+    #                            subplot=subplot,
+    #                            north=True)
+    #
+    #     # Sigma-clipping of the color scale
+    #     mean = np.mean(img_data[~np.isnan(img_data)])
+    #     std = np.std(img_data[~np.isnan(img_data)])
+    #     upp_lim = mean + n_sigma * std
+    #     low_lim = mean - n_sigma * std
+    #     axs.show_colorscale(vmin=low_lim, vmax=upp_lim,
+    #                         cmap=color_map)
+    #
+    #     axs.set_title(self.survey+' '+self.band)
+    #
+    #     return axs
 
     def _rotate_north_up(self):
 
@@ -423,14 +425,14 @@ class Image(object):
                      color_map='viridis', axis=None, north=False,
                      scalebar=5*u.arcsecond, sb_pad=0.5, sb_borderpad=0.4,
                      corner='lower right', frameon=False, low_lim=None,
-                     upp_lim=None):
+                     upp_lim=None, logscale=False):
 
 
         if north:
             self._rotate_north_up()
 
         if fov is not None:
-            cutout_data = self.get_cutout(fov=fov)
+            cutout_data = self._get_cutout(fov=fov)
         else:
             cutout_data = None
 
@@ -441,6 +443,7 @@ class Image(object):
 
         wcs = WCS(self.header)
 
+        axs = None
         if axis is None and fig is not None and subplot is not None:
             axs = fig.add_subplot(subplot, projection=wcs)
         elif axis is not None:
@@ -448,6 +451,7 @@ class Image(object):
         else:
             msgs.error('Neither figure and subplot tuple or figure axis '
                        'provided.')
+
 
         if isinstance(upp_lim, float) and isinstance(low_lim, float):
             msgs.info('Using user defined color scale limits.')
@@ -459,8 +463,23 @@ class Image(object):
             upp_lim = mean + n_sigma * std
             low_lim = mean - n_sigma * std
 
-        axs.imshow(img_data, origin='lower', vmin=low_lim,
-                   vmax=upp_lim, cmap=color_map)
+        if logscale:
+            # To avoid np.NaN for negative flux values in the logNorm
+            # conversion the absolute value of the minimum flux value will
+            # be added for display purposes only.
+            mod_img_data = img_data + abs(np.min(img_data))
+
+            axs.imshow(mod_img_data, origin='lower',
+                       cmap=color_map,
+                       norm=LogNorm()
+                       )
+        else:
+            axs.imshow(img_data, origin='lower',
+                       vmin=low_lim,
+                       vmax=upp_lim,
+                       cmap=color_map,
+                       )
+
 
         if scalebar is not None:
             if isinstance(scalebar, u.Quantity):
@@ -468,7 +487,7 @@ class Image(object):
             elif isinstance(scalebar, u.Unit):
                 length = scalebar.to(u.degree)
 
-            self._add_scalebar(axis, length, pad=sb_pad,
+            self._add_scalebar(axs, length, pad=sb_pad,
                                borderpad=sb_borderpad,
                                corner=corner,
                                frameon=frameon)
@@ -501,7 +520,7 @@ class Image(object):
 
         axis.add_artist(artist)
 
-    def get_cutout(self, fov):
+    def _get_cutout(self, fov):
         """Create a cutout from the image with a given field of view (fov)
 
         :param fov: Field of view for the cutout
@@ -522,5 +541,93 @@ class Image(object):
             cutout_data = None
 
         return cutout_data
+
+
+    def get_cutout_image(self, ra, dec, fov):
+
+
+        wcs_img = wcs.WCS(self.header)
+
+        pixcrd = wcs_img.wcs_world2pix(ra, dec, 0)
+        positions = (np.float(pixcrd[0]), np.float(pixcrd[1]))
+
+        try:
+            cutout = Cutout2D(self.data, positions, size=fov * u.arcsec,
+                                   wcs=wcs_img, copy=True)
+
+            header = self.header.copy()
+            # Update header wcs for cutout
+            header.update(cutout.wcs.to_header())
+
+            cutout_image = Image(ra, dec, self.survey, self.band,
+                                 self.image_folder_path, fov=fov,
+                                 data=cutout.data, header=header)
+
+            msgs.info("Returning generated cutout")
+
+            return cutout_image
+
+        except:
+            msgs.warn("Cutout generation failed.")
+
+            return None
+
+    def calculate_aperture_photometry(self, ra, dec,
+                                      aperture_radii=[1.],
+                                      background_aperture=[7., 10.],
+                                      ref_frame='icrs',
+                                      background=True):
+
+        img_wcs = wcs.WCS(self.header)
+        img_data = self.data
+
+        source_position = SkyCoord(ra * u.deg, dec * u.deg, frame=ref_frame)
+
+        # Initialize source aperture
+        aperture = [SkyCircularAperture(
+            source_position, r=r * u.arcsec) for r in aperture_radii]
+        pix_aperture = [aperture[i].to_pixel(img_wcs) for i in
+                        range(len(aperture_radii))]
+
+        # Initialize background aperture
+        back_aperture = SkyCircularAnnulus(source_position,
+                                           r_in=background_aperture[0] *
+                                                u.arcsec,
+                                           r_out=background_aperture[1] *
+                                                 u.arcsec)
+        # Calculate background flux level
+        if not background:
+            background = np.zeros(len(aperture_radii))
+        else:
+            background_flux = aperture_photometry(img_data,
+                                         back_aperture,
+                                         wcs=img_wcs)
+
+            background_area = background_aperture[1] ** 2 - \
+                              background_aperture[0] ** 2
+            background_diff = background_area * aperture_radii ** 2
+            background = [
+                float(background_flux['aperture_sum']) / background_diff[i]
+                for i in range(len(aperture_radii))]
+
+        # TODO: Implement std calculation instead of background flux estimation
+        mean, median, std = stats.sigma_clipped_stats(img_data, sigma=3.0,
+                                                      maxiters=5)
+
+        # Measure the source flux
+        source_flux = aperture_photometry(img_data, aperture, wcs=img_wcs)
+        flux = [float(source_flux['aperture_sum_' + str(i)]) for i in range(
+            len(aperture_radii))]
+
+        # Estimate the SNR
+        snr = [(flux[i] - background[i]) /
+               (std * np.sqrt(pix_aperture[i].area)) for i in
+              range(len(aperture_radii))]
+
+        return flux, snr
+
+
+
+
 
 

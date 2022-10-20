@@ -222,7 +222,7 @@ class Catalog(object):
             n_partitions = round(filesize/self.partition_size)
             msgs.info('Creating {} partitions.'.format(n_partitions))
             msgs.info('This may take a while.')
-            
+
             # Repartition dataframe
             if isinstance(df, pd.DataFrame):
                 df = dd.from_pandas(df, npartitions=n_partitions)
