@@ -149,11 +149,15 @@ def keck(instrument, table, ra_column_name, dec_column_name, mag_column_name,
     for i in range(len(name_targ)):
         if pos_angles[i] > 180: pos_angles[i] -= 360
 
+        ra_name = name_targ[i][:5]
+        dec_name = name_targ[i][10:15]
+        name = ra_name + dec_name
+
         print('{:} {:} {:} 2000.00 rotdest={:0.2f} rotmode=PA vmag={:0.1f}'.format(
-            name_targ[i], rahms_targ[i].replace(':', ' '), decdms_targ[i].replace(':', ' '), pos_angles[i],
+            name + ' ' * 5, rahms_targ[i].replace(':', ' '), decdms_targ[i].replace(':', ' '), pos_angles[i],
             mag_targ[i]), file=f)
         print('{:}_OFF  {:} {:} 2000.00 rotdest={:0.2f} rotmode=PA vmag={:0.1f} raoffset={:0.2f} '
-              'decoffset={:0.2f}'.format(name_targ[i], rahms_star[i].replace(':', ' '),
+              'decoffset={:0.2f}'.format(name, rahms_star[i].replace(':', ' '),
                 decdms_star[i].replace(':', ' '), pos_angles[i], mag_star[i], dra[i], ddec[i]), file=f)
     f.close()
     print('Starlist {}.txt generated for observing with Keck/{}'.format(output_starlist, instrument))
