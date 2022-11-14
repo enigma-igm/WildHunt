@@ -467,7 +467,7 @@ class Image(object):
             # To avoid np.NaN for negative flux values in the logNorm
             # conversion the absolute value of the minimum flux value will
             # be added for display purposes only.
-            mod_img_data = img_data + abs(np.min(img_data))
+            mod_img_data = img_data + abs(np.nanmin(img_data))
 
             axs.imshow(mod_img_data, origin='lower',
                        cmap=color_map,
