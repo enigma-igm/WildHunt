@@ -5,17 +5,15 @@ Main module for downloading and manipulating image data.
 
 """
 
-import glob
 import os
-
+import glob
+import math
 import multiprocessing
 from multiprocessing import Process, Queue
 
 import numpy as np
-
 import pandas as pd
 
-import aplpy
 
 from astropy.table import Table, vstack
 from astropy import wcs, stats
@@ -265,6 +263,278 @@ def save_master_table(n_jobs, table_name, remove=True):
     master_table.write(table_name + '_forced_photometry.csv', format='csv', overwrite=True)
 
 
+def get_pixelscale(hdr):
+    '''
+    Get pixelscale from header and return in it in arcsec/pixel
+    '''
+
+    wcs_img = wcs.WCS(hdr)
+    scale = np.mean(proj_plane_pixel_scales(wcs_img)) * 3600
+
+    return scale
+
+def aperture_inpixels(aperture, hdr):
+    '''
+    receives aperture in arcsec. Returns aperture in pixels
+    '''
+    pixelscale = get_pixelscale(hdr)
+    aperture /= pixelscale #pixels
+
+    return aperture
+
+
+
+def make_mult_png_fig(ra, dec, surveys, bands,
+                      fovs, apertures, square_sizes, image_dir, mag_list=None,
+                      magerr_list=None, sn_list=None,
+                      forced_mag_list=None, forced_magerr_list=None,
+                      forced_sn_list=None, n_col=3,
+                      n_sigma=3, color_map_name='viridis',
+                      scalebar=5 * u.arcsecond,
+                      add_info_label=None, add_info_value=None):
+    """Create a figure to plot cutouts for one source in all specified surveys
+    and bands.
+
+    :param ra: float
+        Right Ascension of the target
+    :param dec: float
+        Declination of the target
+     :param surveys: list of strings
+        List of survey names, length has to be equal to bands and fovs
+    :param bands: list of strings
+        List of band names, length has to be equal to surveys and fovs
+    :param fovs: list of floats
+        Field of view in arcseconds of image cutouts, length has be equal to
+        surveys, bands and apertures.
+    :param apertures: list of floats
+        List of apertures in arcseconds for forced photometry calculated,
+        length has to be equal to surveys, bands and fovs
+    :param square_sizes: list of floats
+        List of
+    :param image_dir: string
+        Path to the directory where all the images are be stored
+    :param mag_list: list of floats
+        List of magnitudes for each survey/band
+    :param magerr_list: list of floats
+         List of magnitude errors for each survey/band
+    :param sn_list: list of floats
+         List of S/N for each survey/band
+    :param forced_mag_list: list of floats
+         List of forced magnitudes for each survey/band
+    :param forced_magerr_list: list of floats
+        List of forced magnitude errors for each survey/band
+    :param forced_sn_list: list of floats
+        List of forced S/N for each survey/band
+    :param n_col: int
+        Number of columns
+    :param n_sigma: int
+        Number of sigmas for the sigma-clipping routine that creates the
+        boundaries for the color map.
+    :param color_map_name: string
+        Name of the color map
+    :param add_info_value : string
+        Value for additional information added to the title of the figure
+    :param add_info_label : string
+        Label for additional information added to the title of the figure
+    :param verbosity:
+        Verbosity > 0 will print verbose statements during the execution
+    :return: matplotlib.figure
+        Figure with the plot.
+    """
+
+    n_images = len(surveys)
+
+    n_row = int(math.ceil(n_images / n_col))
+
+    fig = plt.figure(figsize=(5*n_col, 5*n_row))
+
+    fig = _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
+                              fovs, apertures, square_sizes, image_dir, mag_list,
+                              magerr_list, sn_list,
+                              forced_mag_list, forced_magerr_list,
+                              forced_sn_list, scalebar, n_sigma,
+                              color_map_name)
+
+    coord_name = utils.coord_to_name(np.array([ra]),
+                                  np.array([dec]),
+                                  epoch="J")
+
+    if add_info_label is None or add_info_value is None:
+        fig.suptitle(coord_name[0])
+    else:
+        fig.suptitle(coord_name[0]+' '+add_info_label+'='+add_info_value)
+
+    return fig
+
+
+def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
+                        fovs, apertures, square_sizes, image_dir, mag_list=None,
+                        magerr_list=None, sn_list=None,
+                        forced_mag_list=None, forced_magerr_list=None,
+                        forced_sn_list=None, scalebar=5 * u.arcsecond,
+                        n_sigma=3, color_map_name='viridis'):
+    """ Create axes components to plot one source in all specified surveys
+    and bands.
+
+    :param fig: matplotlib.figure
+        Figure
+    :param n_row: int
+        Number of rows
+    :param n_col: int
+        Number of columns
+     :param ra: float
+        Right Ascension of the target
+    :param dec: float
+        Declination of the target
+     :param surveys: list of strings
+        List of survey names, length has to be equal to bands and fovs
+    :param bands: list of strings
+        List of band names, length has to be equal to surveys and fovs
+    :param fovs: list of floats
+        Field of view in arcseconds of image cutouts, length has be equal to
+        surveys, bands and apertures.
+    :param apertures: list of floats
+        List of apertures in arcseconds for forced photometry calculated,
+        length has to be equal to surveys, bands and fovs
+    :param square_sizes: list of floats
+        List of
+    :param image_dir: string
+        Path to the directory where all the images are be stored
+    :param mag_list: list of floats
+        List of magnitudes for each survey/band
+    :param magerr_list: list of floats
+         List of magnitude errors for each survey/band
+    :param sn_list: list of floats
+         List of S/N for each survey/band
+    :param forced_mag_list: list of floats
+         List of forced magnitudes for each survey/band
+    :param forced_magerr_list: list of floats
+        List of forced magnitude errors for each survey/band
+    :param forced_sn_list: list of floats
+        List of forced S/N for each survey/band
+    :param n_col: int
+        Number of columns
+    :param n_sigma: int
+        Number of sigmas for the sigma-clipping routine that creates the
+        boundaries for the color map.
+    :param color_map_name: string
+        Name of the color map
+    :param verbosity:
+        Verbosity > 0 will print verbose statements during the execution
+    :return: matplotlib.figure
+        Figure with the plot.
+    """
+
+    for idx, survey in enumerate(surveys):
+        band = bands[idx]
+        fov = fovs[idx]
+        aperture = apertures[idx]
+        size = square_sizes[idx]
+
+        if mag_list is not None:
+            catmag = mag_list[idx]
+        else:
+            catmag = None
+        if magerr_list is not None:
+            caterr = magerr_list[idx]
+        else:
+            caterr = None
+        if sn_list is not None:
+            catsn = sn_list[idx]
+        else:
+            catsn = None
+        if forced_mag_list is not None:
+            forced_mag = forced_mag_list[idx]
+        else:
+            forced_mag = None
+        if forced_magerr_list is not None:
+            forced_magerr = forced_magerr_list[idx]
+        else:
+            forced_magerr = None
+        if forced_sn_list is not None:
+            forced_sn = forced_sn_list[idx]
+        else:
+            forced_sn = None
+
+
+        image = SurveyImage(ra, dec, survey, band, image_dir, fov=fov)
+
+        cutout = image.get_cutout_image(ra, dec, fov)
+
+        axs = cutout._simple_plot(fov, n_sigma=n_sigma, fig=fig,
+                                 subplot=int(f"{n_row}{n_col}{idx + 1}"),
+                                 color_map=color_map_name, axis=None,
+                                 north=True,
+                                 scalebar=scalebar, sb_pad=0.5,
+                                 sb_borderpad=0.4,
+                                 corner='lower right', frameon=False,
+                                 low_lim=None,
+                                 upp_lim=None, logscale=False)
+
+
+
+        # Plot circular aperture (forced photometry flux)
+        (yy, xx) = cutout.data.shape
+        circx = (xx * 0.5)  # + 1
+        circy = (yy * 0.5)  # + 1
+        aper_pix = aperture_inpixels(aperture, cutout.header)
+        circle = plt.Circle((circx, circy), aper_pix, color='r', fill=False,
+                            lw=1.5)
+        fig.gca().add_artist(circle)
+
+        # Plot rectangular aperture (error region)
+        rect_inpixels = aperture_inpixels(size, cutout.header)
+        square = plt.Rectangle((circx - rect_inpixels * 0.5,
+                                circy - rect_inpixels * 0.5),
+                               rect_inpixels, rect_inpixels,
+                               color='r', fill=False, lw=1.5)
+        fig.gca().add_artist(square)
+
+        # Create forced photometry label
+        if (forced_mag is not None):
+            if (forced_sn is not None) & (forced_magerr is not None):
+                forcedlabel = r'${0:s} = {1:.2f} \pm {2:.2f} (SN=' \
+                              r'{3:.1f})$'.format(band + "_{forced}",
+                                                  forced_mag,
+                                                  forced_magerr,
+                                                  forced_sn)
+            elif forced_magerr is not None:
+                forcedlabel = r'${0:s} = {1:.2f} \pm {2:.2f}$'.format(
+                    band + "_{forced}", forced_mag, forced_magerr)
+            else:
+                forcedlabel = r'${0:s} = {1:.2f}$'.format(
+                    band + "_{forced}", forced_mag)
+
+            fig.gca().text(0.03, 0.16, forcedlabel, color='black',
+                     weight='bold', fontsize='large',
+                     bbox=dict(facecolor='white', alpha=0.6),
+                     transform=fig.gca().transAxes)
+
+        # Create catalog magnitude label
+        if catmag is not None:
+            if (catsn is not None) & (caterr is not None):
+                maglabel = r'${0:s} = {1:.2f} \pm {2:.2f}  (SN=' \
+                           r'{3:.2f})$'.format(
+                    band + "_{cat}", catmag, caterr, catsn)
+            elif caterr is not None:
+                maglabel = r'${0:s} = {1:.2f} \pm {2:.2f}$'.format(
+                    band + "_{cat}", catmag, caterr)
+            else:
+                maglabel = r'${0:s} = {1:.2f}$'.format(
+                    band + "_{cat}", catmag)
+
+            fig.gca().text(0.03, 0.04, maglabel, color='black',
+                     weight='bold',
+                     fontsize='large',
+                     bbox=dict(facecolor='white', alpha=0.6),
+                     transform=fig.gca().transAxes)
+
+        fig.gca().set_title(survey + " " + band)
+
+    return fig
+
+
+
 
 class Image(object):
 
@@ -371,6 +641,7 @@ class Image(object):
             msgs.info('Using user defined color scale limits.')
         else:
             msgs.info('Determining color scale limits by sigma clipping.')
+
             # Sigma-clipping of the color scale
             mean = np.mean(img_data[~np.isnan(img_data)])
             std = np.std(img_data[~np.isnan(img_data)])
@@ -448,6 +719,7 @@ class Image(object):
         pixcrd = wcs_img.wcs_world2pix(self.ra, self.dec, 0)
         positions = (np.float(pixcrd[0]), np.float(pixcrd[1]))
 
+        # ToDo here is some bug regarding the cuouts
         try:
             cutout_data = Cutout2D(self.data, positions, size=fov * u.arcsec,
                                    wcs=wcs_img).data
@@ -458,7 +730,6 @@ class Image(object):
         return cutout_data
 
 
-    # TODO : REWRITE FOR PROPER USE!
     def get_cutout_image(self, ra, dec, fov, survey=None, band=None,
                          cutout_dir=None, save=False):
 
@@ -499,277 +770,10 @@ class Image(object):
             msgs.info("Returning generated cutout")
             return cutout_image
 
-
-
-
     def to_fits(self, filename, overwrite=True):
 
         hdu = fits.PrimaryHDU(self.data, header=self.header)
         hdu.writeto(filename, overwrite=overwrite)
-
-
-
-class SurveyImage(object):
-
-    def __init__(self, ra, dec, survey, band, image_folder_path, fov=120,
-                 data=None, header=None):
-        self.source_name = utils.coord_to_name(np.array([ra]),
-                                               np.array([dec]),
-                                               epoch="J")[0]
-        self.survey = survey
-        self.band = band
-        self.ra = ra
-        self.dec = dec
-        self.image_folder_path = image_folder_path
-        self.fov = fov
-
-        self.data = data
-        self.header = header
-
-        # Open image
-        if data is None and header is None:
-            self.open()
-
-    def open(self):
-        """Open the image fits file.
-
-        :return: None
-        """
-
-        # Filepath
-        filepath = self.image_folder_path + '/' + self.source_name + "_" + \
-                   self.survey + "_" + self.band + "*fov*.fits"
-
-        filenames_available = glob.glob(filepath)
-        file_found = False
-        open_file_fov = None
-        file_path = None
-        if len(filenames_available) > 0:
-            for filename in filenames_available:
-                print(filename)
-
-                try:
-                    file_fov = int(filename.split("_")[3].split(".")[0][3:])
-                except:
-                    file_fov = 9999999
-
-                if self.fov <= file_fov:
-                    # hdul = fits.open(filename)
-                    # data = hdul[1].data
-                    # hdr = hdul[1].header
-
-                    data, hdr = fits.getdata(filename, header=True)
-                    file_found = True
-                    file_path = filename
-                    open_file_fov = file_fov
-
-        if file_found:
-            msgs.info("Opened {} with a fov of {} "
-                      "arcseconds".format(file_path, open_file_fov))
-
-            self.data = data
-            self.header = hdr
-
-        else:
-            msgs.error("{} {}-band image of source {} in\ folder {} not "
-                      "found.".format(self.survey, self.band,
-                                      self.source_name,
-                                      self.image_folder_path))
-
-    def show(self, fov=None, n_sigma=3, color_map='viridis'):
-        """ Show the image data.
-
-        :param fov: Field of view
-        :type: float
-        :param n_sigma: Number of sigma for image color scale sigma clipping.
-        :type n_sigma: int
-        :param color_map: Matplotlib color map
-        :type color_map:
-        :return:
-        """
-        fig = plt.figure(figsize=(5, 5))
-
-        subplot = 111
-
-        # self._plot_axis(fig, subplot, fov=fov, n_sigma=n_sigma,
-        #                color_map=color_map)
-
-        self._simple_plot(fov, n_sigma=n_sigma, fig=fig, subplot=subplot,
-                          color_map=color_map, north=True,)
-
-        plt.show()
-
-
-    def _rotate_north_up(self):
-
-        # Get image WCS
-        wcs = WCS(self.header)
-
-        frame = ICRS()
-
-        new_wcs, shape = find_optimal_celestial_wcs([(self.data,
-                                                   wcs)],
-                                                 frame=frame)
-
-        data, _ = reproject_interp((self.data, wcs), new_wcs,
-                                             shape_out=shape)
-        header = new_wcs.to_header()
-        header['NAXIS1'] = shape[1]
-        header['NAXIS2'] = shape[0]
-
-        self.header = header
-        self.data = data
-
-    def _simple_plot(self, fov, n_sigma=3, fig=None, subplot=None,
-                     color_map='viridis', axis=None, north=False,
-                     scalebar=5*u.arcsecond, sb_pad=0.5, sb_borderpad=0.4,
-                     corner='lower right', frameon=False, low_lim=None,
-                     upp_lim=None, logscale=False):
-
-
-        if north:
-            self._rotate_north_up()
-
-        if fov is not None:
-            cutout_data = self._get_cutout(fov=fov)
-        else:
-            cutout_data = None
-
-        if cutout_data is not None:
-            img_data = cutout_data
-        else:
-            img_data = self.data
-
-        wcs = WCS(self.header)
-
-        axs = None
-        if axis is None and fig is not None and subplot is not None:
-            axs = fig.add_subplot(subplot, projection=wcs)
-        elif axis is not None:
-            axs = axis
-        else:
-            msgs.error('Neither figure and subplot tuple or figure axis '
-                       'provided.')
-
-
-        if isinstance(upp_lim, float) and isinstance(low_lim, float):
-            msgs.info('Using user defined color scale limits.')
-        else:
-            msgs.info('Determining color scale limits by sigma clipping.')
-            # Sigma-clipping of the color scale
-            mean = np.mean(img_data[~np.isnan(img_data)])
-            std = np.std(img_data[~np.isnan(img_data)])
-            upp_lim = mean + n_sigma * std
-            low_lim = mean - n_sigma * std
-
-        if logscale:
-            # To avoid np.NaN for negative flux values in the logNorm
-            # conversion the absolute value of the minimum flux value will
-            # be added for display purposes only.
-            mod_img_data = img_data + abs(np.nanmin(img_data))
-
-            axs.imshow(mod_img_data, origin='lower',
-                       cmap=color_map,
-                       norm=LogNorm()
-                       )
-        else:
-            axs.imshow(img_data, origin='lower',
-                       vmin=low_lim,
-                       vmax=upp_lim,
-                       cmap=color_map,
-                       )
-
-
-        if scalebar is not None:
-            if isinstance(scalebar, u.Quantity):
-                length = scalebar.to(u.degree).value
-            elif isinstance(scalebar, u.Unit):
-                length = scalebar.to(u.degree)
-
-            self._add_scalebar(axs, length, pad=sb_pad,
-                               borderpad=sb_borderpad,
-                               corner=corner,
-                               frameon=frameon)
-
-        return axs
-
-    def _add_scalebar(self, axis, length, corner='lower right',
-                      pad=0.5, borderpad=0.4, frameon=False):
-        # Code adapted from Aplpy
-
-        pix_scale = proj_plane_pixel_scales(WCS(self.header))
-
-        sx = pix_scale[0]
-        sy = pix_scale[1]
-        degrees_per_pixel = np.sqrt(sx * sy)
-
-        label = '{:.1f} arcsec'.format(length*3600)
-
-        length = length / degrees_per_pixel
-
-        size_vertical = length/20
-
-
-
-        artist = AnchoredSizeBar(axis.transData, length, label,
-                                 corner, pad=pad, borderpad=borderpad,
-                                 size_vertical=size_vertical,
-                                 sep=3, frameon=frameon,
-                                 fontproperties={'size': 15, 'weight': 'bold'})
-
-        axis.add_artist(artist)
-
-    def _get_cutout(self, fov):
-        """Create a cutout from the image with a given field of view (fov)
-
-        :param fov: Field of view for the cutout
-        :type fov: float
-        :return: Cutout data array
-        """
-
-        wcs_img = wcs.WCS(self.header)
-
-        pixcrd = wcs_img.wcs_world2pix(self.ra, self.dec, 0)
-        positions = (np.float(pixcrd[0]), np.float(pixcrd[1]))
-
-        try:
-            cutout_data = Cutout2D(self.data, positions, size=fov * u.arcsec,
-                                   wcs=wcs_img).data
-        except:
-            msgs.warn("Source not in image.")
-            cutout_data = None
-
-        return cutout_data
-
-
-    def get_cutout_image(self, ra, dec, fov):
-
-
-        wcs_img = wcs.WCS(self.header)
-
-        pixcrd = wcs_img.wcs_world2pix(ra, dec, 0)
-        positions = (np.float(pixcrd[0]), np.float(pixcrd[1]))
-
-        try:
-            cutout = Cutout2D(self.data, positions, size=fov * u.arcsec,
-                                   wcs=wcs_img, copy=True)
-
-            header = self.header.copy()
-            # Update header wcs for cutout
-            header.update(cutout.wcs.to_header())
-
-            cutout_image = Image(ra, dec, self.survey, self.band,
-                                 self.image_folder_path, fov=fov,
-                                 data=cutout.data, header=header)
-
-            msgs.info("Returning generated cutout")
-
-            return cutout_image
-
-        except:
-            msgs.warn("Cutout generation failed.")
-
-            return None
 
     def calculate_aperture_photometry(self, ra, dec,
                                       aperture_radii=[1.],
@@ -825,6 +829,396 @@ class SurveyImage(object):
 
         return flux, snr
 
+
+
+class SurveyImage(Image):
+
+
+    def __init__(self, ra, dec, survey, band, image_dir,
+                 data=None, header=None, fov=120):
+
+        self.ra = ra
+        self.dec = dec
+        self.survey = survey
+        self.band = band
+        self.image_dir = image_dir
+        self.fov = fov
+
+        self.source_name = utils.coord_to_name(np.array([ra]),
+                                               np.array([dec]),
+                                               epoch="J")[0]
+
+        if data is None and header is None:
+            msgs.info('Trying to open from image directory')
+            data, header = self.open()
+        elif data is not None and header is not None:
+            msgs.info('User supplied image header and data')
+
+
+        super(SurveyImage, self).__init__(data=data, header=header, fov=fov)
+
+
+    def open(self):
+        """Open the survey image fits file
+
+        :return: None
+        """
+
+        # Filepath
+        filepath = self.image_dir + '/' + self.source_name + "_" + \
+                   self.survey + "_" + self.band + "*fov*.fits"
+
+        filenames_available = glob.glob(filepath)
+        file_found = False
+        open_file_fov = None
+        file_path = None
+        if len(filenames_available) > 0:
+            for filename in filenames_available:
+                print(filename)
+
+                try:
+                    file_fov = int(filename.split("_")[3].split(".")[0][3:])
+                except:
+                    file_fov = 9999999
+
+                if self.fov <= file_fov:
+
+                    data, header = fits.getdata(filename, header=True)
+                    file_found = True
+                    file_path = filename
+                    open_file_fov = file_fov
+
+        if file_found:
+            msgs.info("Opened {} with a fov of {} "
+                      "arcseconds".format(file_path, open_file_fov))
+
+            return data, header
+
+        else:
+            msgs.error("{} {}-band image of source {} in\ folder {} not "
+                       "found.".format(self.survey, self.band,
+                                       self.source_name,
+                                       self.image_dir))
+
+
+#
+#
+# class SurveyImage(object):
+#
+#     def __init__(self, ra, dec, survey, band, image_folder_path, fov=120,
+#                  data=None, header=None):
+#         self.source_name = utils.coord_to_name(np.array([ra]),
+#                                                np.array([dec]),
+#                                                epoch="J")[0]
+#         self.survey = survey
+#         self.band = band
+#         self.ra = ra
+#         self.dec = dec
+#         self.image_folder_path = image_folder_path
+#         self.fov = fov
+#
+#         self.data = data
+#         self.header = header
+#
+#         # Open image
+#         if data is None and header is None:
+#             self.open()
+#
+#     def open(self):
+#         """Open the image fits file.
+#
+#         :return: None
+#         """
+#
+#         # Filepath
+#         filepath = self.image_folder_path + '/' + self.source_name + "_" + \
+#                    self.survey + "_" + self.band + "*fov*.fits"
+#
+#         filenames_available = glob.glob(filepath)
+#         file_found = False
+#         open_file_fov = None
+#         file_path = None
+#         if len(filenames_available) > 0:
+#             for filename in filenames_available:
+#                 print(filename)
+#
+#                 try:
+#                     file_fov = int(filename.split("_")[3].split(".")[0][3:])
+#                 except:
+#                     file_fov = 9999999
+#
+#                 if self.fov <= file_fov:
+#                     # hdul = fits.open(filename)
+#                     # data = hdul[1].data
+#                     # hdr = hdul[1].header
+#
+#                     data, hdr = fits.getdata(filename, header=True)
+#                     file_found = True
+#                     file_path = filename
+#                     open_file_fov = file_fov
+#
+#         if file_found:
+#             msgs.info("Opened {} with a fov of {} "
+#                       "arcseconds".format(file_path, open_file_fov))
+#
+#             self.data = data
+#             self.header = hdr
+#
+#         else:
+#             msgs.error("{} {}-band image of source {} in\ folder {} not "
+#                       "found.".format(self.survey, self.band,
+#                                       self.source_name,
+#                                       self.image_folder_path))
+#
+#     def show(self, fov=None, n_sigma=3, color_map='viridis'):
+#         """ Show the image data.
+#
+#         :param fov: Field of view
+#         :type: float
+#         :param n_sigma: Number of sigma for image color scale sigma clipping.
+#         :type n_sigma: int
+#         :param color_map: Matplotlib color map
+#         :type color_map:
+#         :return:
+#         """
+#         fig = plt.figure(figsize=(5, 5))
+#
+#         subplot = 111
+#
+#         # self._plot_axis(fig, subplot, fov=fov, n_sigma=n_sigma,
+#         #                color_map=color_map)
+#
+#         self._simple_plot(fov, n_sigma=n_sigma, fig=fig, subplot=subplot,
+#                           color_map=color_map, north=True,)
+#
+#         plt.show()
+#
+#
+#     def _rotate_north_up(self):
+#
+#         # Get image WCS
+#         wcs = WCS(self.header)
+#
+#         frame = ICRS()
+#
+#         new_wcs, shape = find_optimal_celestial_wcs([(self.data,
+#                                                    wcs)],
+#                                                  frame=frame)
+#
+#         data, _ = reproject_interp((self.data, wcs), new_wcs,
+#                                              shape_out=shape)
+#         header = new_wcs.to_header()
+#         header['NAXIS1'] = shape[1]
+#         header['NAXIS2'] = shape[0]
+#
+#         self.header = header
+#         self.data = data
+#
+#     def _simple_plot(self, fov, n_sigma=3, fig=None, subplot=None,
+#                      color_map='viridis', axis=None, north=False,
+#                      scalebar=5*u.arcsecond, sb_pad=0.5, sb_borderpad=0.4,
+#                      corner='lower right', frameon=False, low_lim=None,
+#                      upp_lim=None, logscale=False):
+#
+#
+#         if north:
+#             self._rotate_north_up()
+#
+#         if fov is not None:
+#             cutout_data = self._get_cutout(fov=fov)
+#         else:
+#             cutout_data = None
+#
+#         if cutout_data is not None:
+#             img_data = cutout_data
+#         else:
+#             img_data = self.data
+#
+#         wcs = WCS(self.header)
+#
+#         axs = None
+#         if axis is None and fig is not None and subplot is not None:
+#             axs = fig.add_subplot(subplot, projection=wcs)
+#         elif axis is not None:
+#             axs = axis
+#         else:
+#             msgs.error('Neither figure and subplot tuple or figure axis '
+#                        'provided.')
+#
+#
+#         if isinstance(upp_lim, float) and isinstance(low_lim, float):
+#             msgs.info('Using user defined color scale limits.')
+#         else:
+#             msgs.info('Determining color scale limits by sigma clipping.')
+#             # Sigma-clipping of the color scale
+#             mean = np.mean(img_data[~np.isnan(img_data)])
+#             std = np.std(img_data[~np.isnan(img_data)])
+#             upp_lim = mean + n_sigma * std
+#             low_lim = mean - n_sigma * std
+#
+#         if logscale:
+#             # To avoid np.NaN for negative flux values in the logNorm
+#             # conversion the absolute value of the minimum flux value will
+#             # be added for display purposes only.
+#             mod_img_data = img_data + abs(np.nanmin(img_data))
+#
+#             axs.imshow(mod_img_data, origin='lower',
+#                        cmap=color_map,
+#                        norm=LogNorm()
+#                        )
+#         else:
+#             axs.imshow(img_data, origin='lower',
+#                        vmin=low_lim,
+#                        vmax=upp_lim,
+#                        cmap=color_map,
+#                        )
+#
+#
+#         if scalebar is not None:
+#             if isinstance(scalebar, u.Quantity):
+#                 length = scalebar.to(u.degree).value
+#             elif isinstance(scalebar, u.Unit):
+#                 length = scalebar.to(u.degree)
+#
+#             self._add_scalebar(axs, length, pad=sb_pad,
+#                                borderpad=sb_borderpad,
+#                                corner=corner,
+#                                frameon=frameon)
+#
+#         return axs
+#
+#     def _add_scalebar(self, axis, length, corner='lower right',
+#                       pad=0.5, borderpad=0.4, frameon=False):
+#         # Code adapted from Aplpy
+#
+#         pix_scale = proj_plane_pixel_scales(WCS(self.header))
+#
+#         sx = pix_scale[0]
+#         sy = pix_scale[1]
+#         degrees_per_pixel = np.sqrt(sx * sy)
+#
+#         label = '{:.1f} arcsec'.format(length*3600)
+#
+#         length = length / degrees_per_pixel
+#
+#         size_vertical = length/20
+#
+#
+#
+#         artist = AnchoredSizeBar(axis.transData, length, label,
+#                                  corner, pad=pad, borderpad=borderpad,
+#                                  size_vertical=size_vertical,
+#                                  sep=3, frameon=frameon,
+#                                  fontproperties={'size': 15, 'weight': 'bold'})
+#
+#         axis.add_artist(artist)
+#
+#     def _get_cutout(self, fov):
+#         """Create a cutout from the image with a given field of view (fov)
+#
+#         :param fov: Field of view for the cutout
+#         :type fov: float
+#         :return: Cutout data array
+#         """
+#
+#         wcs_img = wcs.WCS(self.header)
+#
+#         pixcrd = wcs_img.wcs_world2pix(self.ra, self.dec, 0)
+#         positions = (np.float(pixcrd[0]), np.float(pixcrd[1]))
+#
+#         try:
+#             cutout_data = Cutout2D(self.data, positions, size=fov * u.arcsec,
+#                                    wcs=wcs_img).data
+#         except:
+#             msgs.warn("Source not in image.")
+#             cutout_data = None
+#
+#         return cutout_data
+#
+#
+#     def get_cutout_image(self, ra, dec, fov):
+#
+#
+#         wcs_img = wcs.WCS(self.header)
+#
+#         pixcrd = wcs_img.wcs_world2pix(ra, dec, 0)
+#         positions = (np.float(pixcrd[0]), np.float(pixcrd[1]))
+#
+#         try:
+#             cutout = Cutout2D(self.data, positions, size=fov * u.arcsec,
+#                                    wcs=wcs_img, copy=True)
+#
+#             header = self.header.copy()
+#             # Update header wcs for cutout
+#             header.update(cutout.wcs.to_header())
+#
+#             cutout_image = Image(ra, dec, self.survey, self.band,
+#                                  self.image_folder_path, fov=fov,
+#                                  data=cutout.data, header=header)
+#
+#             msgs.info("Returning generated cutout")
+#
+#             return cutout_image
+#
+#         except:
+#             msgs.warn("Cutout generation failed.")
+#
+#             return None
+#
+#     def calculate_aperture_photometry(self, ra, dec,
+#                                       aperture_radii=[1.],
+#                                       background_aperture=[7., 10.],
+#                                       ref_frame='icrs',
+#                                       background=True):
+#
+#         img_wcs = wcs.WCS(self.header)
+#         img_data = self.data
+#
+#         source_position = SkyCoord(ra * u.deg, dec * u.deg, frame=ref_frame)
+#
+#         # Initialize source aperture
+#         aperture = [SkyCircularAperture(
+#             source_position, r=r * u.arcsec) for r in aperture_radii]
+#         pix_aperture = [aperture[i].to_pixel(img_wcs) for i in
+#                         range(len(aperture_radii))]
+#
+#         # Initialize background aperture
+#         back_aperture = SkyCircularAnnulus(source_position,
+#                                            r_in=background_aperture[0] *
+#                                                 u.arcsec,
+#                                            r_out=background_aperture[1] *
+#                                                  u.arcsec)
+#         # Calculate background flux level
+#         if not background:
+#             background = np.zeros(len(aperture_radii))
+#         else:
+#             background_flux = aperture_photometry(img_data,
+#                                          back_aperture,
+#                                          wcs=img_wcs)
+#
+#             background_area = background_aperture[1] ** 2 - \
+#                               background_aperture[0] ** 2
+#             background_diff = background_area * aperture_radii ** 2
+#             background = [
+#                 float(background_flux['aperture_sum']) / background_diff[i]
+#                 for i in range(len(aperture_radii))]
+#
+#         # TODO: Implement std calculation instead of background flux estimation
+#         mean, median, std = stats.sigma_clipped_stats(img_data, sigma=3.0,
+#                                                       maxiters=5)
+#
+#         # Measure the source flux
+#         source_flux = aperture_photometry(img_data, aperture, wcs=img_wcs)
+#         flux = [float(source_flux['aperture_sum_' + str(i)]) for i in range(
+#             len(aperture_radii))]
+#
+#         # Estimate the SNR
+#         snr = [(flux[i] - background[i]) /
+#                (std * np.sqrt(pix_aperture[i].area)) for i in
+#               range(len(aperture_radii))]
+#
+#         return flux, snr
+#
 
 
 
