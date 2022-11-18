@@ -154,7 +154,8 @@ def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts', 
 
             try:
                 # Open the image
-                image_data = Image(ra, dec, survey_dict['survey'], band, image_folder_path, fov=survey_dict['fov'])
+                image_data = SurveyImage(ra, dec, survey_dict['survey'], band,
+                                    image_folder_path, fov=survey_dict['fov'])
                 header = image_data.header
                 data = image_data.data
 

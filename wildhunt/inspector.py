@@ -382,6 +382,8 @@ class ImageViewGUI(QMainWindow):
 
     def goto_cutout(self):
 
+        self.save_data_file()
+
         new_candidate_number = int(self.goto_le.text())
 
         if new_candidate_number < self.len_df-1 and new_candidate_number > 0:
@@ -395,6 +397,8 @@ class ImageViewGUI(QMainWindow):
 
     def next_cutout(self):
 
+        self.save_data_file()
+
         if self.candidate_number < self.len_df-1:
 
           self.candidate_number += 1
@@ -406,6 +410,8 @@ class ImageViewGUI(QMainWindow):
 
 
     def previous_cutout(self):
+
+        self.save_data_file()
 
         if self.candidate_number > 0:
 
