@@ -159,6 +159,7 @@ class ImageViewGUI(QMainWindow):
                  sn_column_names=None, forced_mag_column_names=None,
                  forced_magerr_column_names=None, forced_sn_column_names=None,
                  auto_download= False, auto_forced_phot=False,
+                 minimum_fov=60,
                  visual_classes=None, add_info_list=None, verbosity=0):
 
         QtWidgets.QMainWindow.__init__(self)
@@ -244,7 +245,7 @@ class ImageViewGUI(QMainWindow):
         self.f_magerr_list = None
         self.f_sn_list = None
 
-        self.fovs = [60] * len(self.surveys)
+        self.fovs = [minimum_fov] * len(self.surveys)
         self.square_sizes = [20] * len(self.surveys)
 
         # Length of catalog file
@@ -843,6 +844,7 @@ class MyDialog(QDialog):
 def run(catalog, image_path, ra_column_name,
                  dec_column_name,
                  surveys, bands, psf_size=None, apertures=None,
+                 minimum_fov=10,
                  mag_column_names=None, magerr_column_names=None,
                  sn_column_names=None, forced_mag_column_names=None,
                  forced_magerr_column_names=None, forced_sn_column_names=None,
@@ -862,6 +864,7 @@ def run(catalog, image_path, ra_column_name,
                         forced_sn_column_names=forced_sn_column_names,
                         auto_download=auto_download,
                         auto_forced_phot=auto_forced_phot,
+                        minimum_fov=minimum_fov,
                         add_info_list=add_info_list,
                         visual_classes=visual_classes,
                         verbosity=verbosity)
