@@ -1,116 +1,30 @@
 
 import sys
+import gc
+import math
+import numpy as np
+from functools import partial
 
-from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5 import QtWidgets
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
-import pandas as pd
 
-from astropy import units as u
-
-from functools import partial
-
+import matplotlib
+import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-
-from wildhunt import image_refactor as it
 from wildhunt import utils
-
-import math
-import gc
-
-#------------------------------------------------------------------------------
-#------------------------------------------------------------------------------
-# GLOBAL USER INPUT -- TO CHECK BEFORE STARTING THE PYTHON ROUTINE
-#------------------------------------------------------------------------------
-#------------------------------------------------------------------------------
-
-#------------------------------------------------------------------------------
-# INPUT DATA FILES
-#------------------------------------------------------------------------------
-#
-# # Input File (hdf5, astropy fits table, ...)
-# catalog_filename = 'desdrop_vhs_unwise_full_ydrop_step2_enhanced.hdf5'
-# # catalog_filename = 'des_vhs_unwise_ydrops_checked.hdf5'
-# # catalog_filename = 'checked_candidates.hdf5'
-# catalog_filename = 'checked_candidates_lastcheck.hdf5'
-# catalog_filename = 'selected_ydrops.hdf5'
-# catalog_filename = 'selected_ydrops_forced_photometry.hdf5'
-# catalog_filename = 'temp.hdf5'
-# df = pd.read_hdf('selected_ydrops_forced_photometry.hdf5','data')
-# df = df.sort_values('vhs_ra_j')
-# df.to_hdf('temp.hdf5', 'data')
-#
-# # Image path
-# image_path = "./cutouts"
-# # Coordinate column names, either string or list of strings with length N
-# ra_column_name = 'vhs_ra_j'
-# dec_column_name = 'vhs_dec_j'
-# # List of surveys, list with length N
-# surveys = ['desdr1', 'desdr1', 'desdr1', 'vhsdr6', 'vhsdr6', 'unwise-neo3',
-#            'unwise-neo3']
-# # List of survey bands, list with length N
-# bands = ['i','z','Y','J','Ks','w1','w2']
-#
-# # kwargs
-# # List of psf sizes, either None, float or list with length N
-# psf_size = None
-# # List of aperture sizes, either None (automatic) or list with length N
-# apertures = None
-#
-# # List of magnitude column names, list with length N
-# mag_column_names = [None, None, None, 'VHS_mag_J',
-#                   'VHS_mag_K', 'UNWISE_mag_w1',
-#                   'UNWISE_mag_w2']
-# # List of magnitude error column names, list with length N
-# magerr_column_names = [None, None, None, 'vhs_magerr_j', 'vhs_magerr_k',
-#                        'unwise_magerr_w1', 'unwise_magerr_w2']
-# # List of S/N column names, list with length N
-# sn_column_names = None
-#
-# # List of forced magnitude column names, list with length N
-# forced_mag_column_names = ['DES_mag_i', 'DES_mag_z','DES_mag_y', None, None,
-#                            'forced_unwise-neo3_mag_w1',
-#                            'forced_unwise-neo3_mag_w2']
-# # List of forced magnitude error column names, list with length N
-# forced_magerr_column_names = ['forced_desdr1_magerr_i',
-#                               'forced_desdr1_magerr_z',
-#                               'forced_desdr1_magerr_Y',
-#                               None, None, 'forced_unwise-neo3_magerr_w1',
-#                            'forced_unwise-neo3_magerr_w2']
-# # List of S/N column names, list with length N
-# forced_sn_column_names = None
-#
-# # List of custom visual classification classes (default is point, extended,
-# # bad pixel, artifact, other)
-# visual_classes = ['ydrop', 'point', 'ext', 'badpix', 'blend',
-#                   'DES_artifcat', 'UNWISE_artifact', 'no_UNWISE_source',
-#                   'no_VHS_source', 'VHS_artifact', 'review']
-# # visual_classes = 'auto'
-#
-# add_info_list = [('color', 'JK', 'VHS_mag_J', 'VHS_mag_K'),
-#                  ('color', 'KW1', 'VHS_mag_K', 'UNWISE_mag_w1'),
-#                  ('color', 'W1W2', 'UNWISE_mag_w1', 'UNWISE_mag_w2'),
-#                  ('column','desdr1_nepochs_i','desdr1_nepochs_i'),
-#                  ('column','desdr1_nepochs_z','desdr1_nepochs_z'),
-#                  ('column','desdr1_nepochs_y','desdr1_nepochs_y'),
-#                  ('column', 'VHS-J Pixel X', 'vhs_xpos_j'),
-#                  ('column', 'VHS-J Pixel Y', 'vhs_ypos_j'),
-#                  ('column', 'VHS-K Pixel X', 'vhs_xpos_k'),
-#                  ('column', 'VHS-K Pixel Y', 'vhs_ypos_k'),]
-
-# -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
+from wildhunt import pypmsgs
+from wildhunt import image_refactor as it
 
 # Suppress warnings!!! THIS IS EXTREMELY DANGEROUS!!!
+# I do it anyway :D
 import warnings
 warnings.filterwarnings("ignore")
+
+# Instantiate message interface
+msgs = pypmsgs.Messages()
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
@@ -128,10 +42,14 @@ default_apertures = {'desdr1': 2.0,
                      'ps1': 2.0,
                      'skymapper': 2.0,
                      'vlass': 2.0,
-                     'JWST': 1.0}
+                     'JWST': 1.0  # Placeholder for now
+                     }
 
 default_visual_classes = ['point', 'ext', 'badpix', 'blend']
 
+
+cmaps = matplotlib.pyplot.colormaps()
+print(cmaps)
 
 class CutoutViewCanvas(FigureCanvas):
 
@@ -160,7 +78,7 @@ class CutoutViewCanvas(FigureCanvas):
         self.n_row = int(math.ceil(n_images / self.n_col))
 
         self.fig = plt.figure(figsize=(5 * self.n_col, 5 * self.n_row),
-                              dpi=50)
+                              dpi=80)
         self.fig.subplots_adjust(hspace=0.4, wspace=0.2)
 
         FigureCanvas.__init__(self, self.fig)
@@ -221,9 +139,9 @@ class CutoutViewCanvas(FigureCanvas):
                                            forced_magerr_list,
                                            forced_sn_list,
                                            n_sigma=n_sigma,
-                                           scalebar=np.min(
-                                               apertures)*u.arcsecond,
-                                           color_map_name=color_map_name)
+                                           scalebar=None,
+                                           color_map_name=color_map_name,
+                                          show_axes=False)
 
         self.draw()
 
@@ -245,14 +163,22 @@ class ImageViewGUI(QMainWindow):
 
         QtWidgets.QMainWindow.__init__(self)
 
-        self.setWindowTitle("JT's magic cutout GUI")
+        self.setWindowTitle("Visual inspection GUI - Inspector")
 
         self.df = catalog.copy()
 
+        # Check if visual identification (vis_id) column exists, otherwise
+        # create a new one.
         try:
             self.df['vis_id'] = self.df.vis_id.values
         except:
             self.df['vis_id'] = np.nan
+
+        # Check if vis_comment column exists, otherwise create one.
+        try:
+            self.df['vis_comment'] = self.df.vis_comment.values
+        except:
+            self.df['vis_comment'] = np.nan
 
         # ----------------------------------------------------------------------
         # Set up  class variables
@@ -276,7 +202,7 @@ class ImageViewGUI(QMainWindow):
         if visual_classes is not None:
             if isinstance(visual_classes, (list,)):
                 self.vis_classes = visual_classes
-                print("YEAH!")
+
 
             elif isinstance(visual_classes, (str,)) and visual_classes == \
                     'auto':
@@ -374,7 +300,22 @@ class ImageViewGUI(QMainWindow):
         self.n_sigma = int(self.nsigma_input.text())
         self.fovs = [float(self.clipsize_input.text())] * \
                             len(self.surveys)
-        self.color_map_name = self.cmap_le.text()
+
+
+        new_color_map = self.cmap_le.text()
+
+        if new_color_map.endswith("_r"):
+            new_color_map_name = new_color_map[:-2]
+        else:
+            new_color_map_name = new_color_map
+
+        print(new_color_map_name)
+
+        if new_color_map_name in cmaps:
+            self.color_map_name = new_color_map
+        else:
+            msgs.warn('Color map name {} is not recognized by '
+                      'matplotlib'.format(new_color_map_name))
 
         self.update_plot()
 
@@ -398,7 +339,7 @@ class ImageViewGUI(QMainWindow):
         if self.magerr_column_names is not None:
             self.magerr_list = self.df.loc[idx, self.magerr_column_names].values
         if self.sn_column_names is not None:
-            self.sn_list = df.loc[idx, self.sn_column_names].values
+            self.sn_list = self.df.loc[idx, self.sn_column_names].values
 
 
 
@@ -487,6 +428,18 @@ class ImageViewGUI(QMainWindow):
         self.next_cutout()
 
 
+    def save_comment(self):
+
+        comment = str(self.comment_class_le.text())
+
+        if self.verbosity > 1:
+            print('Comment "{}" saved'.format(comment))
+
+        self.df.loc[self.df.index[self.candidate_number], 'vis_comment'] = \
+            comment
+
+        self.update_info_box()
+
     def save_classification(self, classification):
 
         if self.verbosity > 1:
@@ -499,15 +452,16 @@ class ImageViewGUI(QMainWindow):
 
 
     def save_data_file(self):
-        """ Saves the dataframe in a hdf5 table format
+        """ Saves the dataframe in a csv table format
 
         """
         filename = str(self.output_le.text())
 
-        self.df.to_hdf(filename, 'data')
+        self.df.to_csv(filename, index_label=False)
 
         if self.verbosity > 0:
-            print('Data file saved.')
+            msgs.info('File with visual classification saved to {}.'.format(
+                filename))
 
 
     def create_info_box(self):
@@ -528,8 +482,14 @@ class ImageViewGUI(QMainWindow):
         self.visual_classification_label = QLabel('Visual classification: {'
                                                   '}'.format(vis_class))
 
+        vis_comment = str(self.df.loc[idx, 'vis_comment'])
+        self.visual_comment_label = QLabel('Comment: {'
+                                                  '}'.format(vis_comment))
+
         for w in [self.target_lbl, self.coord_name_lbl,
-                  self.visual_classification_label]:
+                  self.visual_classification_label,
+                  self.visual_comment_label]:
+
             self.info_layout.addWidget(w)
 
         if self.add_info_list is not None:
@@ -582,6 +542,11 @@ class ImageViewGUI(QMainWindow):
         vis_class = str(self.df.loc[idx, 'vis_id'])
         self.visual_classification_label.setText('Visual classification: {'
                                                   '}'.format(vis_class))
+
+        vis_comment = str(self.df.loc[idx, 'vis_comment'])
+        self.visual_comment_label.setText('Comment: {'
+                                                 '}'.format(vis_comment))
+
         if self.add_info_list is not None:
 
             # Updating add_info_list values
@@ -607,7 +572,7 @@ class ImageViewGUI(QMainWindow):
 
         self.cmap_lbl = QLabel("Color map:")
         self.cmap_le = QLineEdit(self.color_map_name)
-        self.cmap_le.setMaxLength(15)
+        self.cmap_le.setMaxLength(20)
         self.cmap_le.returnPressed.connect(self.update)
 
         self.visid_lbl = QLabel("Visual identification:")
@@ -625,7 +590,7 @@ class ImageViewGUI(QMainWindow):
         self.nsigma_input.returnPressed.connect(self.update)
 
         self.output_lbl = QLabel("Output filename:")
-        self.output_le = QLineEdit('checked_candidates.hdf5')
+        self.output_le = QLineEdit('checked_candidates.csv')
         self.output_le.setMaxLength(40)
 
         self.goto_le = QLineEdit('1')
@@ -648,6 +613,17 @@ class ImageViewGUI(QMainWindow):
         self.manual_class_le.setMaxLength(22)
         self.manual_class_save_button = QPushButton("Save manual class")
         self.manual_class_save_button.clicked.connect(self.save_manual_classification)
+
+        # Add comment box and option to save comment
+        self.comment_class_save_button = QPushButton("Save comment")
+        self.comment_class_save_button.clicked.connect(
+            self.save_comment)
+        self.comment_class_le = QLineEdit('visual classification comment')
+        self.comment_class_le.setMaxLength(30)
+        self.comment_class_le.returnPressed.connect(
+            self.comment_class_save_button.click)
+
+
 
         class_button_list.extend([self.manual_class_le, self.manual_class_save_button])
 
@@ -677,7 +653,9 @@ class ImageViewGUI(QMainWindow):
             hbox.addWidget(w)
             hbox.setAlignment(w, Qt.AlignVCenter)
 
-        for w in [self.clipsize_lbl, self.clipsize_input, self.cmap_lbl, self.cmap_le, self.nsigma_lbl, self.nsigma_input]:
+        for w in [self.clipsize_lbl, self.clipsize_input,
+                  self.cmap_lbl, self.cmap_le, self.nsigma_lbl,
+                  self.nsigma_input]:
             hbox2.addWidget(w)
             hbox2.setAlignment(w, Qt.AlignVCenter)
 
@@ -685,7 +663,11 @@ class ImageViewGUI(QMainWindow):
             hbox3.addWidget(button)
             hbox3.setAlignment(button, Qt.AlignVCenter)
 
-        for w in [self.output_lbl, self.output_le, self.save_file_button]:
+        for w in [self.comment_class_le,
+                  self.comment_class_save_button,
+                  self.output_lbl,
+                  self.output_le,
+                  self.save_file_button]:
             hbox4.addWidget(w)
             hbox4.setAlignment(w, Qt.AlignVCenter)
 
@@ -699,22 +681,33 @@ class ImageViewGUI(QMainWindow):
 
 
     def create_status_bar(self):
-        self.status_text = QLabel("This is the development version of "
-                                  "JT's magic cutout GUI")
+        self.status_text = QLabel("Visual inspection GUI developed by "
+                                  "Jan-Torge Schindler as part of the "
+                                  "WildHunt package.")
         self.statusBar().addWidget(self.status_text, 1)
 
 
     def create_menu(self):
         self.file_menu = self.menuBar().addMenu("&File")
 
-        load_file_action = self.create_action("&Save plot",
-            shortcut="Ctrl+S", slot=self.save_plot,
-            tip="Save the plot")
-        quit_action = self.create_action("&Quit", slot=self.close,
-            shortcut="Ctrl+Q", tip="Close the application")
+        # Add action to save plot
+        self.save_plot_action = QAction("&Save plot")
+        self.save_plot_action.triggered.connect(self.save_plot)
+        # Add shortcut to save plot
+        self.save_sc = QShortcut(QKeySequence('Ctrl+S'), self)
+        self.save_sc.activated.connect(self.save_plot)
 
-        self.add_actions(self.file_menu,
-            (load_file_action, None, quit_action))
+        self.add_actions(self.file_menu, [self.save_plot_action])
+
+
+        # load_file_action = self.create_action("&Save plot",
+        #     shortcut="Ctrl+S", slot=self.save_plot,
+        #     tip="Save the plot")
+        # quit_action = self.create_action("&Quit", slot=self.close,
+        #     shortcut="Ctrl+Q", tip="Close the application")
+
+        # self.add_actions(self.file_menu,
+        #     (load_file_action, None, quit_action))
 
         self.help_menu = self.menuBar().addMenu("&Help")
         about_action = self.create_action("&About",
@@ -730,7 +723,7 @@ class ImageViewGUI(QMainWindow):
             else:
                 target.addAction(action)
 
-    def create_action(  self, text, slot=None, shortcut=None,
+    def create_action(self, text, slot=None, shortcut=None,
                         icon=None, tip=None, checkable=False,
                         signal="triggered()"):
         action = QAction(text, self)
@@ -748,19 +741,24 @@ class ImageViewGUI(QMainWindow):
         return action
 
     def save_plot(self):
-        file_choices = "PNG (*.png)|*.png"
 
-        path = unicode(QFileDialog.getSaveFileName(self,
-                        'Save file', '',
-                        file_choices))
-        if path:
-            self.canvas.print_figure(path, dpi=self.dpi)
-            self.statusBar().showMessage('Saved to %s' % path, 2000)
+        # file_choices = "PNG (*.png)|*.png"
+
+        in_dict = self.cutout_plot_dict
+
+        coord_name = utils.coord_to_name(np.array([in_dict['ra']]),
+                                         np.array([in_dict['dec']]),
+                                         epoch='J')[0]
+
+        filename = './{}.png'.format(coord_name)
+
+        self.canvas.print_figure(filename, dpi=200)
+        self.statusBar().showMessage('Saved to %s' % filename, 2000)
 
     def on_about(self):
-        msg = """ JT's magic cutout image view GUI
-        Author: Jan-Torge Schindler (schindler@mpia.de)
-        Last modified: 05/23/19
+        msg = """ Visual inspection GUI - Inspector
+        Author: Jan-Torge Schindler (schindler@strw.leidenuniv.nl)
+        Last modified: 11/18/22
         """
         QMessageBox.about(self, "About", msg.strip())
 

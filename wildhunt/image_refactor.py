@@ -372,7 +372,7 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
                         magerr_list=None, sn_list=None,
                         forced_mag_list=None, forced_magerr_list=None,
                         forced_sn_list=None, scalebar=5 * u.arcsecond,
-                        n_sigma=3, color_map_name='viridis'):
+                        n_sigma=3, color_map_name='viridis', show_axes=True):
     """ Create axes components to plot one source in all specified surveys
     and bands.
 
@@ -461,9 +461,12 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
 
         cutout = image.get_cutout_image(ra, dec, fov)
 
+        wcs = WCS(cutout.header)
+        axs = fig.add_subplot(int(f"{n_row}{n_col}{idx + 1}"), projection=wcs)
+
         axs = cutout._simple_plot(fov, n_sigma=n_sigma, fig=fig,
-                                 subplot=int(f"{n_row}{n_col}{idx + 1}"),
-                                 color_map=color_map_name, axis=None,
+                                 subplot=None,
+                                 color_map=color_map_name, axis=axs,
                                  north=True,
                                  scalebar=scalebar, sb_pad=0.5,
                                  sb_borderpad=0.4,
@@ -471,7 +474,8 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
                                  low_lim=None,
                                  upp_lim=None, logscale=False)
 
-
+        axs.get_xaxis().set_visible(False)
+        axs.get_yaxis().set_visible(False)
 
         # Plot circular aperture (forced photometry flux)
         (yy, xx) = cutout.data.shape
