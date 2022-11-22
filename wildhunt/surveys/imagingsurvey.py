@@ -144,7 +144,10 @@ class ImagingSurvey(object):
         try:
 
             r = requests.get(url)
-            open(self.image_folder_path + '/' + image_name + '.fits', "wb").write(r.content)
+            if 'unwise.me' in url:
+                open(self.image_folder_path + '/' + image_name + '.tar.gz', "wb").write(r.content)
+            else:
+                open(self.image_folder_path + '/' + image_name + '.fits', "wb").write(r.content)
 
             if self.verbosity > 0:
                 print("[INFO] Download of {} to {} completed".format(image_name, self.image_folder_path))

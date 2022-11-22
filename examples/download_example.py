@@ -20,7 +20,8 @@ if __name__ == "__main__":
          {'survey': 'UKIDSSDR11PLUSLAS', 'bands': ['J'],
           'fov':120},
         {'survey': 'DELSDR9', 'bands': ['z'],
-         'fov': 120}
+         'fov': 120},
+        {'survey': 'allWISE', 'bands': ['3', '4'], 'fov': 120}
     ]
 
     cat.get_survey_images('cutouts',  survey_dict, n_jobs=3)

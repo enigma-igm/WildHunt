@@ -24,7 +24,7 @@ from wildhunt import catalog_queries as whcq
 from wildhunt import pypmsgs
 from wildhunt import utils
 from wildhunt import image
-from wildhunt.surveys import panstarrs, vsa_wsa, legacysurvey
+from wildhunt.surveys import panstarrs, vsa_wsa, legacysurvey, wise
 msgs = pypmsgs.Messages()
 
 # Set dask temporary directory
@@ -53,6 +53,10 @@ def retrieve_survey(survey_name, bands, fov, verbosity=1):
 
     if survey_name[:4] == 'DELS':
         survey = legacysurvey.LegacySurvey(bands, fov, survey_name,
+                                           verbosity=verbosity)
+
+    if 'WISE' in survey_name:
+        survey = wise.WISE(bands, fov, survey_name,
                                            verbosity=verbosity)
 
     if survey is None:
