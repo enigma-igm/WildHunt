@@ -16,7 +16,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 from wildhunt import utils
 from wildhunt import pypmsgs
-from wildhunt import image_refactor as it
+from wildhunt import image as it
 
 # Suppress warnings!!! THIS IS EXTREMELY DANGEROUS!!!
 # I do it anyway :D
@@ -158,7 +158,7 @@ class ImageViewGUI(QMainWindow):
                  mag_column_names=None, magerr_column_names=None,
                  sn_column_names=None, forced_mag_column_names=None,
                  forced_magerr_column_names=None, forced_sn_column_names=None,
-                 auto_download= False, auto_forced_phot=False,
+                 auto_download=False, auto_forced_phot=False,
                  minimum_fov=60,
                  visual_classes=None, add_info_list=None, verbosity=0):
 

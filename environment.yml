@@ -19,6 +19,8 @@ dependencies:
 - sphinx>=1.4
 - ipykernel
 - fastparquet
+- pyqt
+- astropy reproject
 - pip:
   - nbsphinx
   - nbsphinx-link

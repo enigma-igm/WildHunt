@@ -9,3 +9,7 @@ dask~=2022.8.1
 scipy~=1.7.3
 matplotlib~=3.5.1
 astroquery~=0.4.6
+pyqt
+reproject
+dask
+astroquery
