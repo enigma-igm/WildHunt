@@ -480,7 +480,7 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
         axs.get_yaxis().set_visible(False)
 
         # Plot circular aperture (forced photometry flux)
-        (yy, xx) = cutout.data.shape
+        yy, xx = wcs.wcs_world2pix(ra, dec, 0)
         circx = (xx * 0.5)  # + 1
         circy = (yy * 0.5)  # + 1
         aper_pix = aperture_inpixels(aperture, cutout.header)
