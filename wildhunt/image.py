@@ -571,7 +571,10 @@ class Image(object):
             self.ra = ra
             self.dec = dec
 
-        self.fov = fov
+        self.fov = fov   # Field of view
+
+        self.aperture = None  # Photutils aperture for aperture photometry
+
 
 
     def get_central_coordinates_from_wcs(self):
@@ -756,14 +759,43 @@ class Image(object):
 
     def get_cutout_image(self, ra, dec, fov, survey=None, band=None,
                          cutout_dir=None, save=False):
+        """ Create a cutout image from the image.
+
+        This function returns the cutout image as an image.Image object
+        unless save has been set to True. In this case the cutout image will
+        be saved to the specified cutout_dir directory using the survey and
+        filter name as part of the file name.
+
+        :param ra: The right ascension of the center of the cutout.
+        :type ra: float
+        :param dec: The declination of the center of the cutout.
+        :type dec: float
+        :param fov: The field of view of the cutout in arcseconds.
+        :type fov: float
+        :param survey: The survey name to use for the cutout.
+        :type survey: str
+        :param band: The filter band to use  for the cutout.
+        :type band: str
+        :param cutout_dir: The path to the directory to save the cutout.
+        :type cutout_dir: str
+        :param save: Boolean to indicate whether to save the cutout image.
+        :type save: bool
+        :return: Returns the cutout image as an image.Image object (
+        save=False) or None (save=True).
+        :rtype: image.Image
+        """
 
         wcs_img = wcs.WCS(self.header)
 
         pixcrd = wcs_img.wcs_world2pix(ra, dec, 0)
         positions = (np.float(pixcrd[0]), np.float(pixcrd[1]))
 
-        cutout = Cutout2D(self.data, positions, size=fov * u.arcsec,
-                          wcs=wcs_img, copy=True)
+        try:
+            cutout = Cutout2D(self.data, positions, size=fov * u.arcsec,
+                              wcs=wcs_img, copy=True)
+        except:
+            msgs.warn('Source not in image.')
+            return None
 
         header = self.header.copy()
 
@@ -784,13 +816,15 @@ class Image(object):
 
             # Save image
             cutout_image.to_fits(cutout_path)
-            msgs.info("Cutout save to file")
+            if self.verbosity > 0:
+                msgs.info("Cutout save to file")
 
             return None
+
         # Returning the cutout image as an Image object
         else:
-
-            msgs.info("Returning generated cutout")
+            if self.verbosity > 0:
+                msgs.info("Returning generated cutout")
             return cutout_image
 
     def to_fits(self, filename, overwrite=True):
