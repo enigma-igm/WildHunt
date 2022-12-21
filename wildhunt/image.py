@@ -466,7 +466,7 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
 
         axs = fig.add_subplot(int(f"{n_row}{n_col}{idx + 1}"), projection=wcs)
 
-        axs = cutout._simple_plot(fov, n_sigma=n_sigma, fig=fig,
+        axs = cutout._simple_plot(n_sigma=n_sigma, fig=fig,
                                  subplot=None,
                                  color_map=color_map_name, axis=axs,
                                  north=True,
@@ -634,25 +634,55 @@ class Image(object):
         self.data = data
 
 
-    def _simple_plot(self, fov, n_sigma=3, fig=None, subplot=None,
+    def _simple_plot(self, n_sigma=3, fig=None, subplot=None,
                      color_map='viridis', axis=None, north=False,
                      scalebar=5*u.arcsecond, sb_pad=0.5, sb_borderpad=0.4,
                      corner='lower right', frameon=False, low_lim=None,
                      upp_lim=None, logscale=False):
+        """ Simple plot function for the image data.
 
+        :param n_sigma: The number of sigma for the color scale.
+        :type n_sigma: int
+        :param fig: A matplotlib figure, which will be used to plot the
+         image on
+        :type fig: matplotlib.figure.Figure
+        :param subplot: The subplot number.
+        :type subplot: int
+        :param color_map: The matplotlib color map.
+        :type color_map: str
+        :param axis: A matplotlib axis, which can be used as an alternative
+         to plot the image on.
+        :type axis: matplotlib.axes._subplots.AxesSubplot
+        :param north: A boolean to indicate whether to rotate the image
+         north up.
+        :type north: bool
+        :param scalebar: The scalebar length in arcseconds.
+        :type scalebar: astropy.units.quantity.Quantity
+        :param sb_pad: The scalebar padding in fraction of font size.
+        :type sb_pad: float
+        :param sb_borderpad: The scalebar border padding in fraction of the
+         font size.
+        :type sb_borderpad: float
+        :param corner: The scalebar corner position.
+        :type corner: str
+        :param frameon: A boolean to indicate whether to add a frame around the
+         scalebar.
+        :type frameon: bool
+        :param low_lim: The lower limit of the color scale. This overrides
+         the n_sigma parameter.
+        :type low_lim: float
+        :param upp_lim: The upper limit of the color scale. This overrides
+         the n_sigma parameter.
+        :type upp_lim: float
+        :param logscale: A boolean to indicate whether to use a log scale
+        for the color scale.
+        :type logscale: bool
+        :return: matplotlib axis
+        :rtype: matplotlib.axes._subplots.AxesSubplot
+        """
 
         if north:
             self._rotate_north_up()
-
-        if fov is not None:
-            cutout_data = self._get_cutout(fov=fov)
-        else:
-            cutout_data = None
-
-        if cutout_data is not None:
-            img_data = cutout_data
-        else:
-            img_data = self.data
 
         wcs = WCS(self.header)
 
@@ -665,15 +695,14 @@ class Image(object):
             msgs.error('Neither figure and subplot tuple or figure axis '
                        'provided.')
 
-
         if isinstance(upp_lim, float) and isinstance(low_lim, float):
             msgs.info('Using user defined color scale limits.')
         else:
             msgs.info('Determining color scale limits by sigma clipping.')
 
             # Sigma-clipping of the color scale
-            mean = np.mean(img_data[~np.isnan(img_data)])
-            std = np.std(img_data[~np.isnan(img_data)])
+            mean = np.mean(self.data[~np.isnan(self.data)])
+            std = np.std(self.data[~np.isnan(self.data)])
             upp_lim = mean + n_sigma * std
             low_lim = mean - n_sigma * std
 
@@ -681,19 +710,18 @@ class Image(object):
             # To avoid np.NaN for negative flux values in the logNorm
             # conversion the absolute value of the minimum flux value will
             # be added for display purposes only.
-            mod_img_data = img_data + abs(np.nanmin(img_data))
+            mod_img_data = self.data + abs(np.nanmin(self.data))
 
             axs.imshow(mod_img_data, origin='lower',
                        cmap=color_map,
                        norm=LogNorm()
                        )
         else:
-            axs.imshow(img_data, origin='lower',
+            axs.imshow(self.data, origin='lower',
                        vmin=low_lim,
                        vmax=upp_lim,
                        cmap=color_map,
                        )
-
 
         if scalebar is not None:
             if isinstance(scalebar, u.Quantity):
