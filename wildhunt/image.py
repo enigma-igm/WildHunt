@@ -546,7 +546,9 @@ class Image(object):
 
 
     def __init__(self, filename=None, data=None, header=None, exten=0,
-                 fov=None, ra=None, dec=None):
+                 fov=None, ra=None, dec=None, verbosity=1):
+
+        self.verbosity = verbosity
 
         if filename is not None and data is None and header is None:
             hdul = fits.open(filename)
@@ -892,7 +894,7 @@ class SurveyImage(Image):
 
 
     def __init__(self, ra, dec, survey, band, image_dir, min_fov,
-                 data=None, header=None):
+                 data=None, header=None, verbosity=1):
 
         self.ra = ra
         self.dec = dec
@@ -900,6 +902,7 @@ class SurveyImage(Image):
         self.band = band
         self.image_dir = image_dir
         self.fov = min_fov
+        self.verbosity = verbosity
 
         self.source_name = utils.coord_to_name(np.array([ra]),
                                                np.array([dec]),
