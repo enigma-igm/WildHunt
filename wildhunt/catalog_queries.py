@@ -46,16 +46,18 @@ astroquery_dict = {
                                'ra': 'ra', 'dec': 'dec',
                                'data_release': 'VHSDR6', 'mag_name': 'VHS_J',
                                'mag': 'jAperMag3', 'distance': 'distance'},
-                    'ukidssdr11': {'service': 'UKIDSS', 'catalog': 'LAS',
-                               'ra': 'ra', 'dec': 'dec',
-                               'data_release': 'UKIDSSDR11PLUS', 'mag_name':
-                                       'UKIDSS_J',
-                               'mag': 'jAperMag3', 'distance': 'distance'},
+                    'ukidssdr11las': {'service': 'UKIDSS', 'catalog': 'LAS',
+                                      'ra': 'ra', 'dec': 'dec',
+                                      'data_release': 'UKIDSSDR11PLUS',
+                                      'mag_name': 'UKIDSS_J',
+                                      'mag': 'jAperMag3', 'distance':
+                                      'distance'},
                     # new, needs to be tested!
                     'vikingdr5': {'service': 'VSA', 'catalog': 'VIKING',
-                               'ra': 'ra', 'dec': 'dec',
-                               'data_release': 'VIKINGDR5', 'mag_name': 'VHS_J',
-                               'mag': 'jAperMag3', 'distance': 'distance'}
+                                  'ra': 'ra', 'dec': 'dec',
+                                  'data_release': 'VIKINGDR5', 'mag_name':
+                                      'VHS_J',
+                                  'mag': 'jAperMag3', 'distance': 'distance'}
                     # 'uhds': {'service': }
                   }
 
@@ -109,8 +111,8 @@ def query_region_astroquery(ra, dec, match_distance, service, catalog,
         result = Ukidss.query_region(target_coord, radius=match_distance * u.arcsecond,
                                      programme_id=catalog, database=data_release)
     else:
-        raise KeyError('Astroquery class not recognized. Implemented classes '
-                       'are: Vizier, Irsa, VSA, Ukidss')
+        raise KeyError('Astroquery service not recognized. Implemented '
+                       'services include: Vizier, Irsa, VSA, Ukidss')
 
     return result.to_pandas()
 

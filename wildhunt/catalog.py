@@ -267,7 +267,7 @@ class Catalog(object):
         elif file_format == 'csv':
             self.df.to_csv('{}'.format(filepath), index=False)
         elif file_format == 'hdf5':
-            self.df.to_hdf('{}'.format(filepath), format='table')
+            self.df.to_hdf('{}'.format(filepath), format='table', key='data')
         else:
             msgs.error('Provided file format {} not supported'.format(
                 file_format))
@@ -364,26 +364,51 @@ class Catalog(object):
 
     def online_cross_match(self, survey='DELS', columns='default',
                            match_distance=3, astro_datalab_table=None,
-                           astroquery_table=None):
-        """Positional cross-match to online catalog with a maximum match
+                           astroquery_service=None, astroquery_catalog=None,
+                           astroquery_dr=None, output_dir=None):
+        """Positional cross-match to online catalogs with a maximum match
         distance of match_distance (in arcseconds).
 
-        Specifically implemented online cross-matches:
-             - Dark Energy Legacy Survey (DELS): DR9 Tractor
-             table (ls_dr9.tractor)
-             - The UNWISE catalog (UNWISE): unwise_dr1_object
+        A number of survey presets can be selected with the "survey" keyword
+        argument:
+            - DELS: Dark Energy Legacy Survey: DR9 Tractor
+            table (ls_dr9.tractor)
+            - UNWISE: The UNWISE catalog (unwise_dr1.object)
+            - CATWISE: The CatWISE 2020 catalog (catwise2020.main)
+            - UKIDSSDR11LAS: The UKIDSS LAS DR11 catalog
 
-        ToDo: Make this a general function that can be used for any
-         datalab or astroquery online catalog. Implement a few surveys with
-         specific column information.
+        The columns keyword argument (default: 'default') can be used to
+        retrieve a subset of the available columns from the online catalog.
+        This option is only available for the astro datalab cross-matches of
+        the survey presets.
 
-        :param survey: Survey identifier
+        Alternatively the user can specify the astro-datalab table name to
+        merge or the astroquery service, catalog and data release for online
+        cross-matches beyond the survey presets.
+
+        :param survey: Internal predefined survey name
         :type survey: string
         :param columns: List of column names to merge from online catalog.
-         Only used for astro datalab cross matches.
+         Only used for astro datalab cross-matches. The default value is
+         'default'. If columns is set to None all columns will be retrieved.
         :type columns: list
         :param match_distance: Match distance in arcseconds.
         :type match_distance: float
+        :param astro_datalab_table: Astro datalab table name. Only used for
+            astro datalab cross-matches.
+        :type astro_datalab_table: string
+        :param astroquery_service: Astroquery service name. Only used for
+            astroquery cross-matches.
+        :type astroquery_service: string
+        :param astroquery_catalog: Astroquery catalog name. Only used for
+            astroquery cross-matches.
+        :type astroquery_catalog: string
+        :param astroquery_dr: Astroquery data release. Only used for
+            astroquery cross-matches.
+        :type astroquery_dr: string
+        :param output_dir: Output directory for the merged catalog.
+        :type output_dir: string
+
         :return:
         """
 
@@ -397,11 +422,21 @@ class Catalog(object):
 
             msgs.info('was found in the catalog presets.')
             msgs.info('Using service: {}'.format(service))
-            msgs.info('Using table: {}'.format(table))
+
+            if service == 'datalab':
+                msgs.info('Using table: {}'.format(table))
 
             if columns == 'default' and service == 'datalab':
                 columns = whcd.catalog_presets[survey]['columns']
                 msgs.info('Using default columns')
+
+            if service == 'astroquery':
+                aq_service = whcq.astroquery_dict[table]['service']
+                aq_catalog = whcq.astroquery_dict[table]['catalog']
+                aq_dr = whcq.astroquery_dict[table]['data_release']
+                msgs.info('Using astroquery service: {}'.format(aq_service))
+                msgs.info('Using astroquery catalog: {}'.format(aq_catalog))
+                msgs.info('Using astroquery data release: {}'.format(aq_dr))
 
         elif survey is None and astro_datalab_table is not None:
             service = 'datalab'
@@ -411,21 +446,21 @@ class Catalog(object):
                 columns = None
 
             msgs.info('Using astro-datalab table: {}'.format(table))
-        elif survey is None and astroquery_table is not None:
-            service = 'astroquery'
-            table = astroquery_table
 
-            if table in whcq.astroquery_dict:
-                msgs.info('Using astroquery table: {}'.format(table))
-            else:
-                raise ValueError('Table not recognized in astroquery_dict. '
-                                 'The following tables are '
-                                 'implemented: {}.'.format(
-                                  list(whcq.astroquery_dict.keys()))
-                                 )
+        elif survey is None and astroquery_service is not None and \
+                astroquery_catalog is not None and astroquery_dr is not None:
+            service = 'astroquery'
+            aq_service = astroquery_service
+            aq_catalog = astroquery_catalog
+            aq_dr = astroquery_dr
+
+            msgs.info('Using astroquery service: {}'.format(aq_service))
+            msgs.info('Using astroquery catalog: {}'.format(aq_catalog))
+            msgs.info('Using astroquery data release: {}'.format(aq_dr))
+
         else:
-            raise ValueError('Survey not recognized and no service table '
-                             'specified.')
+            raise ValueError('Survey not recognized and no service '
+                             'information was specified.')
 
         # Check if temporary folder exists
         if not os.path.exists(self.temp_dir):
@@ -450,7 +485,7 @@ class Catalog(object):
             if service == 'datalab':
                 cross_match_name = '_'.join(table.split('.'))
             elif service == 'astroquery':
-                cross_match_name = table
+                cross_match_name = '{}_{}'.format(aq_catalog, aq_dr)
             else:
                 raise ValueError('Service not recognized.')
 
@@ -470,8 +505,9 @@ class Catalog(object):
                                                            columns,
                                                            match_distance)
                 elif service == 'astroquery':
-                    cross_match = self.astroquery_cross_match(table,
-                                                              match_distance)
+                    cross_match = self.astroquery_cross_match(
+                        aq_service, aq_catalog,
+                        aq_dr, match_distance)
                 else:
                     raise ValueError('Service not recognized.')
 
@@ -498,16 +534,22 @@ class Catalog(object):
                      how='left',
                      suffixes=('_source', '_match'))
 
+        # Construct file path
+        if output_dir is None:
+            filepath = cross_match_name
+        else:
+            filepath = os.path.join(output_dir, cross_match_name)
+
         # Save merged dataframe
         msgs.info('Saving cross-matched dataframe to {}'.format(
-            cross_match_name))
+            filepath))
 
         try:
-            merge.to_parquet('{}'.format(cross_match_name))
+            merge.to_parquet('{}'.format(filepath))
         except:
             msgs.warn('Merged catalog could not be save in .parquet format')
             msgs.warn('Instead it has been saved in .csv.')
-            merge.to_csv('{}_csv'.format(cross_match_name))
+            merge.to_csv('{}_csv'.format(filepath))
 
         # Remove the temporary folder (default)
         if self.clear_temp_dir:
@@ -558,9 +600,6 @@ class Catalog(object):
 
         upload_table = 'mydb://wild_upload'
 
-        survey = datalab_table.split('.')[0]
-        datalab_table = datalab_table.split('.')[1]
-
         # Build SQL query
         if columns is not None:
             sql_query = '''SELECT s.{} as source_id,
@@ -570,17 +609,29 @@ class Catalog(object):
                 self.ra_colname,
                 self.dec_colname)
             sql_query += '{}'.format(columns)
-        else:
-            sql_query = 'SELECT * '
 
-        sql_query += \
-            '(q3c_dist(s.ra, s.dec, match.ra, match.dec)*3600) as dist_arcsec '
+            sql_query += \
+                '(q3c_dist(s.ra, s.dec, match.ra, match.dec)*3600) as dist_arcsec '
+        else:
+
+            sql_query = '''SELECT s.{} as source_id,
+                                            s.{} as source_ra,
+                                            s.{} as source_dec, '''.format(
+                self.id_colname,
+                self.ra_colname,
+                self.dec_colname)
+
+            sql_query += \
+                '(q3c_dist(s.ra, s.dec, match.ra, match.dec)*3600) as ' \
+                'dist_arcsec, '
+
+            sql_query += 'match.* '
 
         sql_query += 'FROM {} AS s '.format(upload_table)
 
         sql_query += 'LEFT JOIN LATERAL ('
 
-        sql_query += 'SELECT g.* FROM {}.{} AS g '.format(survey, datalab_table)
+        sql_query += 'SELECT g.* FROM {} AS g '.format(datalab_table)
 
         sql_query += 'WHERE q3c_join(s.ra, s.dec, g.ra, g.dec, {}) '.format(
             match_distance)
@@ -604,20 +655,31 @@ class Catalog(object):
 
         return cross_match
 
-    def astroquery_cross_match(self, catalog, match_distance):
+    def astroquery_cross_match(self, astroquery_service, astroquery_catalog,
+                               astroquery_data_release, match_distance):
+        """ Cross-match catalog to online catalogs using the astroquery
+        service.
 
-        service = whcq.astroquery_dict[catalog]['service']
-        cat = whcq.astroquery_dict[catalog]['catalog']
-        ra = whcq.astroquery_dict[catalog]['ra']
-        dec = whcq.astroquery_dict[catalog]['dec']
-        mag = whcq.astroquery_dict[catalog]['mag']
-        mag_name = whcq.astroquery_dict[catalog]['mag_name']
-        distance = whcq.astroquery_dict[catalog]['distance']
-        dr = whcq.astroquery_dict[catalog]['data_release']
+        :param astroquery_service: The astroquery service class to use. The
+         implemented services are defined in the catalog_queries.py module in
+         the function query_region_astroquery.
+        :type astroquery_service: string
+        :param astroquery_catalog: The catalog name to query from.
+         service.
+        :type astroquery_catalog: string
+        :param astroquery_data_release: The data release name to query from.
+        :type astroquery_data_release: string
+        :param match_distance: The maximum match distance in arcseconds.
+        :type match_distance: float
+
+        :return: The cross-matched catalog
+        :rtype: Catalog
+        """
 
         result_df = None
 
-        match_name = '{}_x_{}'.format(self.name, catalog)
+        match_name = '{}_x_{}_{}'.format(self.name, astroquery_catalog,
+                                         astroquery_data_release)
 
         # Loop over all sources in the chunk
         for idx in self.chunk.index:
@@ -626,10 +688,9 @@ class Catalog(object):
             source_dec = self.chunk.loc[idx, self.dec_colname]
             source_id = self.chunk.loc[idx, self.id_colname]
 
-            astroquery_df = whcq.query_region_astroquery(source_ra, source_dec,
-                                                         match_distance,
-                                                         service, cat,
-                                                         data_release=dr)
+            astroquery_df = whcq.query_region_astroquery(
+                source_ra, source_dec, match_distance, astroquery_service,
+                astroquery_catalog, data_release=astroquery_data_release)
 
             if astroquery_df.shape[0] > 0:
                 astroquery_df.drop(columns='sourceID', inplace=True)
@@ -660,11 +721,7 @@ class Catalog(object):
                               dec_column_name=self.dec_colname,
                               table_data=result_df)
 
-
-
         return cross_match
-
-
 
     def get_offset_stars_datalab(self, match_distance, datalab_dict,
                                  n=3, where=None, minimum_distance=3):
