@@ -94,6 +94,11 @@ class CutoutViewCanvas(FigureCanvas):
 
 
     def plot(self, in_dict):
+        """
+
+        :param in_dict:
+        :return:
+        """
 
         # Clear axes
         plt.clf()
