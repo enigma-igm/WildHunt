@@ -774,7 +774,7 @@ class Image(object):
         wcs_img = wcs.WCS(self.header)
 
         pixcrd = wcs_img.wcs_world2pix(self.ra, self.dec, 0)
-        positions = (np.float(pixcrd[0]), np.float(pixcrd[1]))
+        positions = (np.float64(pixcrd[0]), np.float64(pixcrd[1]))
 
         try:
             cutout_data = Cutout2D(self.data, positions, size=fov * u.arcsec,

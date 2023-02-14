@@ -1,4 +1,5 @@
 
+
 ls_dr9_default_columns = """
       match.objid,
       match.ls_id,
@@ -31,6 +32,7 @@ ls_dr9_default_columns = """
       match.type, 
       match.ebv, 
   """
+
 
 unwise_dr1_default_columns = """
     match.ra,
@@ -65,3 +67,18 @@ catwise2020_default_columns = """
     match.cc_flags,
     match.ab_flags,
 """
+
+catalog_presets = {
+    'DELS': {'service': 'datalab', 'table': 'ls_dr9.tractor',
+             'columns': ls_dr9_default_columns},
+    'UNWISE': {'service': 'datalab', 'table': 'unwise_dr1.object',
+               'columns': unwise_dr1_default_columns},
+    'CATWISE': {'service': 'datalab', 'table': 'catwise2020.main',
+                'columns': catwise2020_default_columns},
+    'UKIDSSDR11LAS': {'service': 'astroquery', 'table': 'ukidssdr11las'},
+    'VIKINGDR5': {'service': 'astroquery', 'table': 'vikingdr5'},
+}
+
+
+
+

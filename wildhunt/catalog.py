@@ -65,7 +65,7 @@ def retrieve_survey(survey_name, bands, fov, verbosity=1):
     return survey
 
 class Catalog(object):
-    """ Catalog class to handle small to large operations on photometric
+    """ Catalog class to handleoperations on small to large  photometric
     catalogs.
 
     Catalogs are operated on internally as dask dataframes to guarantee
@@ -363,17 +363,24 @@ class Catalog(object):
             df_merged.to_parquet(filename)
 
     def online_cross_match(self, survey='DELS', columns='default',
-                           match_distance=3):
+                           match_distance=3, astro_datalab_table=None,
+                           astroquery_table=None):
         """Positional cross-match to online catalog with a maximum match
         distance of match_distance (in arcseconds).
 
-        Implemented online cross-matches:
+        Specifically implemented online cross-matches:
              - Dark Energy Legacy Survey (DELS): DR9 Tractor
              table (ls_dr9.tractor)
+             - The UNWISE catalog (UNWISE): unwise_dr1_object
+
+        ToDo: Make this a general function that can be used for any
+         datalab or astroquery online catalog. Implement a few surveys with
+         specific column information.
 
         :param survey: Survey identifier
         :type survey: string
         :param columns: List of column names to merge from online catalog.
+         Only used for astro datalab cross matches.
         :type columns: list
         :param match_distance: Match distance in arcseconds.
         :type match_distance: float
@@ -381,15 +388,52 @@ class Catalog(object):
         """
 
         msgs.info('Starting online cross match')
-        msgs.info('Survey: {} '.format(survey))
+
+        # Set up the service and data table
+        if survey in whcd.catalog_presets:
+            msgs.info('Specified survey: {} '.format(survey))
+            service = whcd.catalog_presets[survey]['service']
+            table = whcd.catalog_presets[survey]['table']
+
+            msgs.info('was found in the catalog presets.')
+            msgs.info('Using service: {}'.format(service))
+            msgs.info('Using table: {}'.format(table))
+
+            if columns == 'default' and service == 'datalab':
+                columns = whcd.catalog_presets[survey]['columns']
+                msgs.info('Using default columns')
+
+        elif survey is None and astro_datalab_table is not None:
+            service = 'datalab'
+            table = astro_datalab_table
+
+            if columns == 'default':
+                columns = None
+
+            msgs.info('Using astro-datalab table: {}'.format(table))
+        elif survey is None and astroquery_table is not None:
+            service = 'astroquery'
+            table = astroquery_table
+
+            if table in whcq.astroquery_dict:
+                msgs.info('Using astroquery table: {}'.format(table))
+            else:
+                raise ValueError('Table not recognized in astroquery_dict. '
+                                 'The following tables are '
+                                 'implemented: {}.'.format(
+                                  list(whcq.astroquery_dict.keys()))
+                                 )
+        else:
+            raise ValueError('Survey not recognized and no service table '
+                             'specified.')
 
         # Check if temporary folder exists
         if not os.path.exists(self.temp_dir):
             os.mkdir(self.temp_dir)
             msgs.info('Creating WildHunt temporary directory')
 
-        # For datalab surveys log in to datalb
-        if survey in ['DELS', 'UNWISE', 'CATWISE']:
+        if service == 'datalab':
+
             response = ac.whoAmI()
             if response == 'anonymous':
                 msgs.info('Log in to NOIRLAB Astro Data Lab')
@@ -398,28 +442,18 @@ class Catalog(object):
             msgs.info('Astro Data Lab USER: {}'.format(ac.whoAmI()))
             msgs.info('Astro Data Lab TABLES: {}'.format(qc.mydb_list()))
 
-        if survey in ['UKIDSSDR11PLUSLAS', 'VIKINGDR5']:
-
-            msgs.info('Using astroquery to get sources from the WSA archive.')
-
         # Serialized cross-match over partitions
         for idx, partition in enumerate(self.df.partitions):
             msgs.info('Beginning crossmatch on partition {}'.format(idx))
 
-            # TODO a quick hack to fix later
-            # I suggest to implement a survey + table structure for the future.
-            if survey == 'DELS':
-                cross_match_name = 'ls_dr9_tractor'
-            elif survey == 'UNWISE':
-                cross_match_name = 'unwise_dr1_object'
-            elif survey == 'CATWISE':
-                cross_match_name = 'catwise2020_main'
-            elif survey == 'UKIDSSDR11LAS':
-                cross_match_name = 'ukidssdr11las'
-            elif survey == 'VIKINGDR5':
-                cross_match_name = 'vikingdr5'
-
             # Set up cross-match name
+            if service == 'datalab':
+                cross_match_name = '_'.join(table.split('.'))
+            elif service == 'astroquery':
+                cross_match_name = table
+            else:
+                raise ValueError('Service not recognized.')
+
             filename = '{}/{}_{}.parquet'.format(self.temp_dir,
                                                  cross_match_name,
                                                  idx)
@@ -431,31 +465,15 @@ class Catalog(object):
 
                 self.chunk = partition.compute()[self.columns]
 
-                if survey == 'DELS':
-                    cross_match = self.datalab_cross_match(
-                        'ls_dr9.tractor',
-                        columns,
-                        match_distance=match_distance)
-
-                elif survey == 'UNWISE':
-                    cross_match = self.datalab_cross_match(
-                        'unwise_dr1.object',
-                        columns,
-                        match_distance)
-
-                elif survey == 'CATWISE':
-                    cross_match = self.datalab_cross_match(
-                        'catwise2020.main',
-                        columns,
-                        match_distance)
-
-                elif survey == 'UKIDSSDR11LAS':
-                    cross_match = self.astroquery_cross_match('ukidssdr11',
+                if service == 'datalab':
+                    cross_match = self.datalab_cross_match(table,
+                                                           columns,
+                                                           match_distance)
+                elif service == 'astroquery':
+                    cross_match = self.astroquery_cross_match(table,
                                                               match_distance)
-
-                elif survey == 'VIKINGDR5':
-                    cross_match = self.astroquery_cross_match('vikingdr5',
-                                                              match_distance)
+                else:
+                    raise ValueError('Service not recognized.')
 
                 # Save cross-matched chunk to temporary folder
                 cross_match_df = cross_match.df.compute()
@@ -464,7 +482,7 @@ class Catalog(object):
                           'folder'.format(idx))
 
         # Log out of datalab
-        if survey in ['DELS']:
+        if service == 'datalab':
             logout_status = ac.logout()
             msgs.info('Log out of NOIRLAB Astro Data Lab'
                       ' - Status: {}'.format(logout_status))
@@ -480,11 +498,9 @@ class Catalog(object):
                      how='left',
                      suffixes=('_source', '_match'))
 
-
         # Save merged dataframe
         msgs.info('Saving cross-matched dataframe to {}'.format(
             cross_match_name))
-
 
         try:
             merge.to_parquet('{}'.format(cross_match_name))
@@ -512,7 +528,6 @@ class Catalog(object):
 
         merge.to_parquet('{}'.format(input_catalog.name))
 
-
     def datalab_cross_match(self, datalab_table, columns, match_distance):
         """Cross-match catalog to online catalog from the NOIRLAB Astro data
         lab.
@@ -533,22 +548,8 @@ class Catalog(object):
         # Convert match_distance to degrees
         match_distance = match_distance/3600.
 
-        # Loading default column values
-        # TODO expand this to more catalogs and take care of columns = None
-        if datalab_table == 'ls_dr9.tractor' and columns == 'default':
-            columns = whcd.ls_dr9_default_columns
-            match_name = '{}_x_ls_dr9_tractor'.format(self.name)
-
-        elif datalab_table == 'unwise_dr1.object' and columns == 'default':
-            columns = whcd.unwise_dr1_default_columns
-            match_name = '{}_x_unwise_dr1'.format(self.name)
-
-        elif datalab_table == 'catwise2020.main' and columns == 'default':
-            columns = whcd.catwise2020_default_columns
-            match_name = '{}_x_catwise2020'.format(self.name)
-
-        else:
-            msgs.warn('Datalab Table not implemented yet')
+        # Set up cross-match table name
+        match_name = '{}_'+'_'.join(datalab_table.split('.'))
 
         # Upload table to Astro Data Lab
         msgs.info('Uploading dataframe to Astro Data Lab')
@@ -556,15 +557,9 @@ class Catalog(object):
                   + qc.mydb_import('wild_upload', self.chunk, drop=True))
 
         upload_table = 'mydb://wild_upload'
-        if datalab_table == 'ls_dr9.tractor':
-            survey = 'ls_dr9'
-            datalab_table = 'tractor'
-        elif datalab_table == 'unwise_dr1.object':
-            survey = 'unwise_dr1'
-            datalab_table = 'object'
-        elif datalab_table == 'catwise2020.main':
-            survey = 'catwise2020'
-            datalab_table = 'main'
+
+        survey = datalab_table.split('.')[0]
+        datalab_table = datalab_table.split('.')[1]
 
         # Build SQL query
         if columns is not None:
@@ -608,7 +603,6 @@ class Catalog(object):
                               table_data=result_df)
 
         return cross_match
-
 
     def astroquery_cross_match(self, catalog, match_distance):
 
@@ -654,13 +648,11 @@ class Catalog(object):
                 astroquery_df['source_dec'] = source_dec
                 astroquery_df['source_id'] = source_id
 
-
                 # Series of the closest match
                 new_row = astroquery_df.loc[astroquery_df.index[0], :]
 
                 result_df = pd.concat([result_df, new_row.to_frame().T],
                                       ignore_index=True)
-
 
         cross_match = Catalog(match_name,
                               id_column_name=self.id_colname,
