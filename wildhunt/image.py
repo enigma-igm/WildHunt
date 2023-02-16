@@ -44,8 +44,9 @@ from IPython import embed
 msgs = pypmsgs.Messages()
 
 
-def forced_photometry(ra, dec, survey_dicts, table_name, image_folder_path='cutouts', radii=[1.], radius_in=7.0,
-                radius_out=10.0, epoch='J', n_jobs=5, remove=True):
+def forced_photometry(ra, dec, survey_dicts, table_name,
+                      image_folder_path='cutouts', radii=[1.], radius_in=7.0,
+                      radius_out=10.0, epoch='J', n_jobs=5, remove=True):
     """Main function that calls all the other functions used to perform forced photometry
     :param ra: np.array(), right ascensions in degrees
     :param dec: np.array(), declinations in degrees
@@ -120,8 +121,9 @@ def mp_get_forced_photometry(work_queue, out_tab, n_jobs, survey_dicts, image_fo
         out_tab = vstack([out_tab, phot])
     out_tab.write('process_' + str(n_jobs) + '_forced_photometry.csv', format='csv', overwrite=True)
 
-def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts', radii=[1.], radius_in=7.0,
-                            radius_out=10.0, epoch='J'):
+def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts',
+                            radii=[1.], radius_in=7.0, radius_out=10.0,
+                            epoch='J'):
     '''Perform forced photometry for a given target on images from a given imaging survey.
 
     :param ra: right ascension in degrees
@@ -283,7 +285,6 @@ def aperture_inpixels(aperture, hdr):
     aperture /= pixelscale #pixels
 
     return aperture
-
 
 
 def make_mult_png_fig(ra, dec, surveys, bands,
@@ -607,7 +608,7 @@ class Image(object):
 
         subplot = 111
 
-        self._simple_plot(fov, n_sigma=n_sigma, fig=fig, subplot=subplot,
+        self._simple_plot(n_sigma=n_sigma, fig=fig, subplot=subplot,
                           color_map=color_map, north=True,)
 
         plt.show()
@@ -817,7 +818,7 @@ class Image(object):
         wcs_img = wcs.WCS(self.header)
 
         pixcrd = wcs_img.wcs_world2pix(ra, dec, 0)
-        positions = (np.float(pixcrd[0]), np.float(pixcrd[1]))
+        positions = (np.float64(pixcrd[0]), np.float64(pixcrd[1]))
 
         try:
             cutout = Cutout2D(self.data, positions, size=fov * u.arcsec,
@@ -862,6 +863,10 @@ class Image(object):
         hdu.writeto(filename, overwrite=overwrite)
 
     def calculate_aperture_photometry(self, ra, dec,
+                                      zero_point=None,
+                                      nanomag_correction=None,
+                                      ab_correction=None,
+                                      exptime=1,
                                       aperture_radii=[1.],
                                       background_aperture=[7., 10.],
                                       ref_frame='icrs',
@@ -894,7 +899,7 @@ class Image(object):
 
             background_area = background_aperture[1] ** 2 - \
                               background_aperture[0] ** 2
-            background_diff = background_area * aperture_radii ** 2
+            background_diff = background_area * np.power(aperture_radii, 2)
             background = [
                 float(background_flux['aperture_sum']) / background_diff[i]
                 for i in range(len(aperture_radii))]
@@ -905,15 +910,79 @@ class Image(object):
 
         # Measure the source flux
         source_flux = aperture_photometry(img_data, aperture, wcs=img_wcs)
-        flux = [float(source_flux['aperture_sum_' + str(i)]) for i in range(
-            len(aperture_radii))]
 
-        # Estimate the SNR
-        snr = [(flux[i] - background[i]) /
-               (std * np.sqrt(pix_aperture[i].area)) for i in
-              range(len(aperture_radii))]
+        # Convert fluxes physical units (nanomaggy)
+        # This includes exposure time corrections as needed for some surveys
+        # (e.g., PS1)
 
-        return flux, snr
+        flux_list = []
+        flux_err_list = []
+        snr_list = []
+        mag_list = []
+        mag_err_list = []
+
+        for idx in range(len(aperture_radii)):
+
+            # Calculate the flux in nanomaggies
+            flux = float(source_flux['aperture_sum_' + str(idx)])
+            flux = (flux - background[idx]) / exptime * nanomag_correction
+            # Calculate the flux error in nanomaggies
+            flux_err = std * np.sqrt(pix_aperture[idx].area) / exptime * \
+                       nanomag_correction
+            # Estimate the SNR
+            snr = flux/flux_err
+
+            # Calculate the magnitude for positive fluxes
+            if flux > 0:
+                mag = 22.5 - 2.5 * np.log10(flux)
+                mag_err = (2.5 / np.log(10)) / snr
+            else:
+                mag = np.NaN
+                mag_err = np.NaN
+
+            flux_list.append(flux)
+            flux_err_list.append(flux_err)
+            snr_list.append(snr)
+            mag_list.append(mag)
+            mag_err_list.append(mag_err)
+
+        # Package all results into a dictionary
+        result_dict = {'aperture_radii': aperture_radii,
+                       'flux': flux_list,
+                       'flux_err': flux_err_list,
+                       'snr': snr_list,
+                       'mag': mag_list,
+                       'mag_err': mag_err_list,
+                       'zero_point': zero_point}
+
+        return result_dict
+
+
+
+    def forced_aperture_photometry(self):
+
+        pass
+
+    def get_coordinate_bounds(self):
+        """Get the RA and Dec minimum and maximum values for an image.
+
+        :return: The minimum and maximum values in RA and Dec for the image.
+        :rtype: tuple
+        """
+
+        image_wcs = WCS(self.header)
+
+        img_ra_bounds = []
+        img_dec_bounds = []
+        for x in [0, self.data.shape[1] - 1]:
+            for y in [0, self.data.shape[0] - 1]:
+                ra, dec = image_wcs.wcs_pix2world(x, y, 0)
+                img_ra_bounds.append(ra)
+                img_dec_bounds.append(dec)
+
+        return np.min(img_ra_bounds), np.max(img_ra_bounds), \
+               np.min(img_dec_bounds), np.max(img_dec_bounds)
+
 
 
 
@@ -941,10 +1010,8 @@ class SurveyImage(Image):
         elif data is not None and header is not None:
             msgs.info('User supplied image header and data')
 
-
         super(SurveyImage, self).__init__(data=data, header=header,
                                           fov=min_fov)
-
 
     def open(self):
         """Open the survey image fits file
@@ -989,7 +1056,40 @@ class SurveyImage(Image):
                                        self.source_name, self.fov,
                                        self.image_dir))
 
+    def get_aperture_photometry(self, aperture_radii=[1.],
+                                      background_aperture=[7., 10.],
+                                      ref_frame='icrs'):
 
+        survey = catalog.retrieve_survey(self.survey,
+                                         self.band,
+                                         self.fov)
 
+        filepath = self.image_dir + '/' + self.source_name + "_" + \
+                   self.survey + "_" + self.band + "*fov*.fits"
 
+        # Retrieve survey specific information
+        image_params = survey.force_photometry_params(self.header,
+                                                      self.band,
+                                                      filepath)
+        exptime = image_params.exp
+        back = image_params.back
+        zero_point = image_params.zpt
+        nanomag_corr = image_params.nanomag_corr
+        ab_correction = image_params.ABcorr
 
+        if back == 'no_back':
+            background = False
+        else:
+            background = True
+
+        result = self.calculate_aperture_photometry(self.ra, self.dec,
+                                      zero_point=zero_point,
+                                      nanomag_correction=nanomag_corr,
+                                      ab_correction=ab_correction,
+                                      exptime=exptime,
+                                      aperture_radii=aperture_radii,
+                                      background_aperture=background_aperture,
+                                      ref_frame=ref_frame,
+                                      background=background)
+
+        return result

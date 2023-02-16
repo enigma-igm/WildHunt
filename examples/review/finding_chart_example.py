@@ -17,7 +17,7 @@ def single_chart_example():
     aperture = 2
     fov = 120
 
-    image_folder_path = './cutouts'
+    image_folder_path = '../cutouts'
 
     offsets = pd.read_csv('offset_stars.csv')
 
@@ -51,7 +51,7 @@ def charts_from_table_example():
     band = 'J'
     aperture = 2
     fov = 50
-    image_folder_path = './cutouts'
+    image_folder_path = '../cutouts'
 
     fc.make_finding_charts(df, ra_column_name, dec_column_name,
                         target_column_name, survey, band,

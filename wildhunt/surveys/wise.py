@@ -89,7 +89,7 @@ class WISE(imagingsurvey.ImagingSurvey):
                 url = ("http://unwise.me/cutout_fits?version={}&ra={}&dec={}"
                        "&size={}&bands={}&file_img_m=on").format(release,ra,dec,str(int(size)),band)
 
-                # Implementing concat instead of deprecated append
+                # Implementing concat instead of review append
                 new_entry = pd.DataFrame(data={'image_name': image_name,
                                                'url': url},
                                          index=[0])

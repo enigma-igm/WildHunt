@@ -32,6 +32,18 @@ msgs = pypmsgs.Messages()
 # os.environ["DASK_TEMPORARY_DIRECTORY"] = './dask_temp'
 
 
+def catalog_forced_photometry(catalog,
+                              survey_dicts,
+                              image_folder_path='cutouts',
+                              aperture_radii=[1.],
+                              radius_in=7.0,
+                              radius_out=10.0,
+                              epoch='J',
+                              n_jobs=1):
+
+
+
+    pass
 
 
 def retrieve_survey(survey_name, bands, fov, verbosity=1):
@@ -249,7 +261,8 @@ class Catalog(object):
 
         msgs.info('Catalog dataframe initialized.')
 
-    def save_catalog(self, filepath=None, file_format='parquet'):
+    def save_catalog(self, filepath=None,
+                     output_dir=None, file_format='parquet'):
         """ Save catalog to filepath
 
         :param filepath: Filepath to save the catalog
@@ -260,7 +273,10 @@ class Catalog(object):
         """
 
         if filepath is None:
-            filepath = self.name
+            if output_dir is None:
+                filepath = self.name
+            else:
+                filepath = os.path.join(output_dir, self.name)
 
         if file_format == 'parquet':
             self.df.to_parquet('{}'.format(filepath))
@@ -365,7 +381,8 @@ class Catalog(object):
     def online_cross_match(self, survey='DELS', columns='default',
                            match_distance=3, astro_datalab_table=None,
                            astroquery_service=None, astroquery_catalog=None,
-                           astroquery_dr=None, output_dir=None):
+                           astroquery_dr=None, output_dir=None,
+                           datalab_logout=True):
         """Positional cross-match to online catalogs with a maximum match
         distance of match_distance (in arcseconds).
 
@@ -462,6 +479,14 @@ class Catalog(object):
             raise ValueError('Survey not recognized and no service '
                              'information was specified.')
 
+        # Create the matched catalog name
+        if service == 'datalab':
+            match_name = '{}_x_'.format(self.name)+ \
+                         '_'.join(table.split('.'))
+        elif service == 'astroquery':
+            match_name = '{}_x_{}_{}'.format(self.name, aq_catalog, aq_dr)
+
+
         # Check if temporary folder exists
         if not os.path.exists(self.temp_dir):
             os.mkdir(self.temp_dir)
@@ -518,10 +543,12 @@ class Catalog(object):
                           'folder'.format(idx))
 
         # Log out of datalab
-        if service == 'datalab':
+        if service == 'datalab' and datalab_logout:
             logout_status = ac.logout()
             msgs.info('Log out of NOIRLAB Astro Data Lab'
                       ' - Status: {}'.format(logout_status))
+        elif service == 'datalab' and not datalab_logout:
+            msgs.info('Not logging out of NOIRLAB Astro Data Lab')
 
         # Merge downloaded tables with source table
         match = dd.read_parquet(self.temp_dir)
@@ -534,29 +561,40 @@ class Catalog(object):
                      how='left',
                      suffixes=('_source', '_match'))
 
-        # Construct file path
-        if output_dir is None:
-            filepath = cross_match_name
-        else:
-            filepath = os.path.join(output_dir, cross_match_name)
+        merged_cat = Catalog(match_name,
+                             ra_column_name=self.ra_colname,
+                             dec_column_name=self.dec_colname,
+                             id_column_name=self.id_colname,
+                             table_data=merge.compute())
 
         # Save merged dataframe
         msgs.info('Saving cross-matched dataframe to {}'.format(
-            filepath))
+            output_dir))
 
         try:
-            merge.to_parquet('{}'.format(filepath))
+            merged_cat.save_catalog(output_dir=output_dir,
+                               file_format='parquet')
         except:
             msgs.warn('Merged catalog could not be save in .parquet format')
             msgs.warn('Instead it has been saved in .csv.')
-            merge.to_csv('{}_csv'.format(filepath))
+            merged_cat.save_catalog(output_dir=output_dir,
+                               file_format='csv')
 
         # Remove the temporary folder (default)
         if self.clear_temp_dir:
             msgs.info('Removing temporary folder ({})'.format(self.temp_dir))
             shutil.rmtree(self.temp_dir)
 
+        return merged_cat
+
     def merge_catalog_on_column(self, input_catalog, left_on, right_on):
+        """Merge input catalog to source catalog on a specified column.
+
+        :param input_catalog: input catalog to merge
+        :param left_on: column name in source catalog
+        :param right_on: column name in input catalog
+        :return: None
+        """
 
         merge = self.df.merge(input_catalog,
                               left_on=left_on,
@@ -591,7 +629,7 @@ class Catalog(object):
         match_distance = match_distance/3600.
 
         # Set up cross-match table name
-        match_name = '{}_'+'_'.join(datalab_table.split('.'))
+        match_name = '{}_'.format(self.name)+'_'.join(datalab_table.split('.'))
 
         # Upload table to Astro Data Lab
         msgs.info('Uploading dataframe to Astro Data Lab')
@@ -603,15 +641,17 @@ class Catalog(object):
         # Build SQL query
         if columns is not None:
             sql_query = '''SELECT s.{} as source_id,
-                                s.{} as source_ra,
-                                s.{} as source_dec, '''.format(
+                           s.{} as source_ra,
+                           s.{} as source_dec, '''.format(
                 self.id_colname,
                 self.ra_colname,
                 self.dec_colname)
             sql_query += '{}'.format(columns)
 
             sql_query += \
-                '(q3c_dist(s.ra, s.dec, match.ra, match.dec)*3600) as dist_arcsec '
+                '(q3c_dist(s.{}, s.{}, match.ra, ' \
+                'match.dec)*3600) as ' \
+                'dist_arcsec '.format(self.ra_colname, self.dec_colname)
         else:
 
             sql_query = '''SELECT s.{} as source_id,
@@ -622,8 +662,9 @@ class Catalog(object):
                 self.dec_colname)
 
             sql_query += \
-                '(q3c_dist(s.ra, s.dec, match.ra, match.dec)*3600) as ' \
-                'dist_arcsec, '
+                '(q3c_dist(s.{}, s.{}, match.ra, ' \
+                'match.dec)*3600) as ' \
+                'dist_arcsec, '.format(self.ra_colname, self.dec_colname)
 
             sql_query += 'match.* '
 
@@ -633,10 +674,12 @@ class Catalog(object):
 
         sql_query += 'SELECT g.* FROM {} AS g '.format(datalab_table)
 
-        sql_query += 'WHERE q3c_join(s.ra, s.dec, g.ra, g.dec, {}) '.format(
-            match_distance)
+        sql_query += 'WHERE q3c_join(s.{}, s.{}, g.ra, g.dec, {:.7f}) ' \
+                     ''.format(self.ra_colname, self.dec_colname,
+                               match_distance)
 
-        sql_query += 'ORDER BY q3c_dist(s.ra,s.dec,g.ra,g.dec) ASC LIMIT 1) '
+        sql_query += 'ORDER BY q3c_dist(s.{},s.{},g.ra,g.dec) ASC LIMIT 1) ' \
+                     ''.format(self.ra_colname, self.dec_colname)
 
         sql_query += 'AS match on true'
 
@@ -963,14 +1006,17 @@ class Catalog(object):
                                      survey_dict['fov'])
 
             for partition in self.df.partitions:
-                ra = partition.compute()[self.ra_colname]
-                dec = partition.compute()[self.dec_colname]
+                ra = partition.compute()[self.ra_colname].values
+                dec = partition.compute()[self.dec_colname].values
+
                 survey.download_images(ra, dec, image_folder_path, n_jobs)
 
-    def get_forced_photometry(self, survey_dicts, table_name, image_folder_path='cutouts', radii=[1.], radius_in=7.0,
-                radius_out=10.0, epoch='J', n_jobs=1, remove=True):
+    def get_forced_photometry(self, survey_dict, table_name,
+                              image_folder_path='cutouts', radii=[1.],
+                              radius_in=7.0, radius_out=10.0, epoch='J',
+                              n_jobs=1, remove=True):
         """ Perform the forced photometry for all the sources in the catalog
-        :param survey_dicts: survey dictionaries
+        :param survey_dict: survey dictionary
         :param table_name: table where the data from forced photometry are stored
         :param image_folder_path: string, path where the images are stored
         :param radii: arcesc, forced photometry aperture radius
@@ -981,11 +1027,14 @@ class Catalog(object):
         :param remove: bool, remove the sub catalogs produced in the multiprocess forced photometry
         """
 
-        ra = self.df.compute()[self.ra_colname]
-        dec = self.df.compute()[self.dec_colname]
+        ra = self.df.compute()[self.ra_colname].values
+        dec = self.df.compute()[self.dec_colname].values
 
-        image.forced_photometry(ra, dec, survey_dicts, table_name, image_folder_path=image_folder_path, radii=radii,
-                          radius_in=radius_in, radius_out=radius_out, epoch=epoch, n_jobs=n_jobs, remove=remove)
+        image.forced_photometry(ra, dec, survey_dict, table_name,
+                                image_folder_path=image_folder_path,
+                                radii=radii,
+                                radius_in=radius_in, radius_out=radius_out,
+                                epoch=epoch, n_jobs=n_jobs, remove=remove)
 
 
 

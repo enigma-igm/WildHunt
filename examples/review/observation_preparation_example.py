@@ -55,7 +55,7 @@ if __name__ == '__main__':
     band = 'r'
     aperture = 2
     fov = 150
-    image_folder_path = './cutouts'
+    image_folder_path = '../cutouts'
 
     offsets = pd.read_csv('qso_candidates_ls_dr9_OFFSETS.csv')
 

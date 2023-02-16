@@ -10,7 +10,7 @@ from astropy.table import Table
 from astropy.io import fits
 
 from wildhunt.surveys import imagingsurvey
-
+from wildhunt import utils
 
 from IPython import embed
 
@@ -45,16 +45,15 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
 
         self.survey_setup(ra, dec, image_folder_path, epoch='J', n_jobs=n_jobs)
 
-        if self.source_table.shape[0] > 0 :
+        if self.source_table.shape[0] > 0:
 
             self.batch_setup()
 
             for i in range(self.nbatch):
-                self.retrieve_image_url_list(imagetypes="stack", batch_number = i)
+                self.retrieve_image_url_list(imagetypes="stack",
+                                             batch_number=i)
 
                 self.check_for_existing_images_before_download()
-
-
 
                 if self.n_jobs > 1:
                     self.mp_download_image_from_url()
@@ -82,7 +81,7 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
         if np.size(self.ra) > self.batch_size:
             self.nbatch = int(np.ceil(np.size(self.ra) / self.batch_size))
 
-    def retrieve_image_url_list(self, batch_number = 0, imagetypes="stack"):
+    def retrieve_image_url_list(self, batch_number=0, imagetypes="stack"):
 
         # Convert field of view in arcsecond to pixel size (1 pixel = 0.25 arcseconds)
         self.size = self.fov * 4
@@ -92,8 +91,11 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
         # Retrieve bulk file table
         url_ps1filename = 'http://ps1images.stsci.edu/cgi-bin/ps1filenames.py'
 
-        ra_batch = self.ra[batch_number * self.batch_size : batch_number * self.batch_size + self.batch_size]
-        dec_batch = self.dec[batch_number * self.batch_size : batch_number * self.batch_size + self.batch_size]
+        ra_batch = self.ra[batch_number * self.batch_size:
+                           batch_number * self.batch_size + self.batch_size]
+        dec_batch = self.dec[batch_number * self.batch_size:
+                             batch_number * self.batch_size + self.batch_size]
+
         # Put the positions in an in-memory file object
         cbuf = StringIO()
         cbuf.write(
@@ -113,30 +115,66 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
         # Group table by filter and do not sort!
         groupby = df.groupby(by='filter', sort=False)
 
-        for idx in range(len(ra_batch)):
+        for group_key in groupby.groups.keys():
 
-            obj_name = self.source_table.iloc[batch_number * self.batch_size + idx]['obj_name']
+            group_df = groupby.get_group(group_key)
+            band = group_key
 
-            for jdx, (key, group) in enumerate(groupby):
-                    band = group.loc[jdx, 'filter']
-                    filename = df.loc[jdx+idx*len(self.bands), 'filename']
+            for idx in group_df.index:
 
-                    # Create image name
-                    image_name = obj_name + "_" + self.name + "_" + \
-                                    band + "_fov" + '{:d}'.format(self.fov)
+                filename = group_df.loc[idx, 'filename']
 
-                    url = ("https://ps1images.stsci.edu/cgi-bin/fitscut.cgi?"
-                                   "ra={}&dec={}&size={}&format=fits").format(ra_batch[idx],
-                                                                              dec_batch[idx],
-                                                                              self.size)
-                    urlbase = url + "&red="
+                obj_name = utils.coord_to_name(group_df.loc[idx, 'ra'],
+                                               group_df.loc[idx, 'dec'])[0]
 
-                    new_entry = pd.DataFrame(data={'image_name': image_name,
-                                                   'url': urlbase + filename},
-                                             index=[0])
-                    self.download_table = pd.concat([self.download_table,
-                                                   new_entry],
-                                                   ignore_index=True)
+                # Create image name
+                image_name = obj_name + "_" + self.name + "_" + \
+                             band + "_fov" + '{:d}'.format(self.fov)
+
+                print(image_name)
+
+                url = ("https://ps1images.stsci.edu/cgi-bin/fitscut.cgi?"
+                       "ra={}&dec={}&size={}&format=fits").format(
+                    group_df.loc[idx, 'ra'],
+                    group_df.loc[idx, 'dec'],
+                    self.size)
+                urlbase = url + "&red="
+
+                new_entry = pd.DataFrame(data={'image_name': image_name,
+                                               'url': urlbase + filename},
+                                         index=[0])
+                self.download_table = pd.concat([self.download_table,
+                                                 new_entry],
+                                                ignore_index=True)
+
+        # for idx in range(len(ra_batch)):
+        #
+        #     obj_name = self.source_table.iloc[batch_number * self.batch_size + idx]['obj_name']
+        #     # TODO fix groupby query for cases where there are different
+        #     #  numbers of images for different bands.
+        #     for jdx, (key, group) in enumerate(groupby):
+        #
+        #             print(key)
+        #             band = group.loc[jdx, 'filter']
+        #             filename = df.loc[jdx+idx*len(self.bands), 'filename']
+        #             print(idx, jdx, jdx+idx*len(self.bands))
+        #
+        #             # Create image name
+        #             image_name = obj_name + "_" + self.name + "_" + \
+        #                             band + "_fov" + '{:d}'.format(self.fov)
+        #
+        #             url = ("https://ps1images.stsci.edu/cgi-bin/fitscut.cgi?"
+        #                            "ra={}&dec={}&size={}&format=fits").format(ra_batch[idx],
+        #                                                                       dec_batch[idx],
+        #                                                                       self.size)
+        #             urlbase = url + "&red="
+        #
+        #             new_entry = pd.DataFrame(data={'image_name': image_name,
+        #                                            'url': urlbase + filename},
+        #                                      index=[0])
+        #             self.download_table = pd.concat([self.download_table,
+        #                                            new_entry],
+        #                                            ignore_index=True)
 
                     # self.download_table = self.download_table.append(
                     #             {'image_name': image_name,
