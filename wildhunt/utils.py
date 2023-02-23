@@ -4,13 +4,14 @@ from astropy.coordinates import Angle
 
 import numpy as np
 
+
 def coord_to_name(dra, ddec, epoch='J'):
     """Return an object name based on its Right Ascension and Declination.
 
     :param dra: Right Ascension of the target in decimal degrees
-    :type dra: float
+    :type dra: float or numpy.ndarray
     :param ddec: Declination of the target in decimal degrees
-    :type ddec: float
+    :type ddec: float or numpy.ndarray
     :param epoch:  Epoch string (default: J), can also be substituted for survey
         abbreviation.
     :type: string

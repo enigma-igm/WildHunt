@@ -6,7 +6,7 @@ import pandas as pd
 import astropy.units as u
 from astropy.coordinates import SkyCoord
 
-from urllib.request import urlopen  # python3
+from urllib.request import urlopen
 
 from astroquery.vizier import Vizier
 from astroquery.irsa import Irsa
@@ -18,15 +18,6 @@ from dl import queryClient as qc
 from wildhunt import pypmsgs
 
 msgs = pypmsgs.Messages()
-
-# def get_offset_stars(target_df, ra_column_name, dec_column_name,
-#                      offset_survey='UKIDSSDR11PLUSLAS', offset_columns,
-#                      n_star=3):
-#
-#     if statements with
-#
-#     if survey_name[:3] in ['VHS', 'VVV', 'VMC', 'VIK', 'VID', 'UKI']
-# FOCUS ON GETTING UKIDSS and LEGACY SURVEY RUNNING
 
 
 # ------------------------------------------------------------------------------
@@ -97,19 +88,24 @@ def query_region_astroquery(ra, dec, match_distance, service, catalog,
     target_coord = SkyCoord(ra=ra, dec=dec, unit=(u.deg, u.deg), frame='icrs')
 
     if service == 'VIZIER':
-        result = Vizier.query_region(target_coord, radius=match_distance * u.arcsecond,
+        result = Vizier.query_region(target_coord,
+                                     radius=match_distance * u.arcsecond,
                                      catalog=catalog, spatial='Cone')
         result = result[0]
 
     elif service == 'IRSA':
-        result = Irsa.query_region(target_coord, radius=match_distance * u.arcsecond,
+        result = Irsa.query_region(target_coord,
+                                   radius=match_distance * u.arcsecond,
                                    catalog=catalog, spatial='Cone')
     elif service == 'VSA':
-        result = Vsa.query_region(target_coord, radius=match_distance * u.arcsecond,
+        result = Vsa.query_region(target_coord,
+                                  radius=match_distance * u.arcsecond,
                                   programme_id=catalog, database=data_release)
     elif service == 'UKIDSS':
-        result = Ukidss.query_region(target_coord, radius=match_distance * u.arcsecond,
-                                     programme_id=catalog, database=data_release)
+        result = Ukidss.query_region(target_coord,
+                                     radius=match_distance * u.arcsecond,
+                                     programme_id=catalog,
+                                     database=data_release)
     else:
         raise KeyError('Astroquery service not recognized. Implemented '
                        'services include: Vizier, Irsa, VSA, Ukidss')
@@ -119,7 +115,7 @@ def query_region_astroquery(ra, dec, match_distance, service, catalog,
 
 def get_astroquery_offset(target_name, target_ra, target_dec, match_distance,
                           catalog,  quality_query=None, n=3,
-                          minimum_distance=3, verbosity=0):
+                          minimum_distance=3):
     """Return the nth nearest offset stars specified by the quality criteria
     around a given target using astroquery.
 
@@ -131,8 +127,8 @@ def get_astroquery_offset(target_name, target_ra, target_dec, match_distance,
     :type target_dec: float
     :param match_distance: Maximum search radius in arcseconds
     :type match_distance: float
-    :param catalog: Catalog (and data release) to retrieve the offset star data from. See
-        astroquery_dict for implemented catalogs.
+    :param catalog: Catalog (and data release) to retrieve the offset star
+     data from. See astroquery_dict for implemented catalogs.
     :type: string
     :param quality_query:  A string written in pandas query syntax to apply
         quality criteria on potential offset stars around the target.
@@ -141,10 +137,8 @@ def get_astroquery_offset(target_name, target_ra, target_dec, match_distance,
     :type n: int
     :param minimum_distance: Minimum distance to the target in arcsec
     :type minimum_distance: float
-    :param verbosity:
-        Verbosity > 0 will print verbose statements during the execution.
-    :return: Returns the dataframe with the retrieved offset stars for the given
-        target.
+    :return: Returns the dataframe with the retrieved offset stars for the
+     given target.
     :rtype: pandas.core.frame.DataFrame
     """
 
@@ -180,7 +174,7 @@ def get_astroquery_offset(target_name, target_ra, target_dec, match_distance,
         offset_df.loc[:, 'offset_ra'] = df[ra]
         offset_df.loc[:, 'offset_dec'] = df[dec]
         for jdx, idx in enumerate(offset_df.index):
-            abc_dict = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4:'E'}
+            abc_dict = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E'}
 
             letter = abc_dict[jdx]
 
@@ -236,7 +230,7 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius,
     :param datalab_dict: Survey dictionary for the datalab query.
     :type datalab_dict: dict
     :param columns: Columns names returned from datalab table.
-    :type columns: list
+    :type columns: list or None
     :param where: A string written in ADQL syntax to apply quality criteria on
         potential offset stars around the target.
     :type where: string
@@ -290,7 +284,7 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius,
 
             offset_df.loc[:, mag_name] = df[mag]
 
-        # GET THIS INTO A SEPARATE FUNCTION
+        # ToDo: GET THIS INTO A SEPARATE FUNCTION
         target_coords = SkyCoord(ra=target_ra, dec=target_dec,
                                  unit=(u.deg, u.deg),
                                  frame='icrs')
@@ -369,7 +363,7 @@ def query_region_datalab(ra, dec, radius, datalab_dict,
     sql_query += 'FROM {} WHERE '.format(table)
 
     sql_query += 'q3c_radial_query(ra, dec, {}, {}, {}) '.format(ra, dec,
-                                                                radius_deg)
+                                                                 radius_deg)
     if where is not None:
         sql_query += 'AND {}'.format(where)
 
@@ -410,7 +404,7 @@ def query_region_ps1(ra, dec, radius, survey='dr2', catalog='mean',
     :type catalog: string
     :param add_criteria:  A string with conditions to apply additional
         quality criteria on potential offset stars around the target.
-    :type add_criteria: string
+    :type add_criteria: string or None
     :param verbosity: Verbosity > 0 will print verbose statements during the
         execution.
     :type verbosity: int
@@ -429,7 +423,7 @@ def query_region_ps1(ra, dec, radius, survey='dr2', catalog='mean',
         url = urlbase + '{}/{}?ra={}&dec={}&radius={}&' + \
               add_criteria + 'format=csv'.format(survey, catalog, ra, dec,
                                                  radius)
-    if verbosity>0:
+    if verbosity > 0:
         print('Opening {}'.format(url))
 
     response = urlopen(url)
@@ -487,7 +481,7 @@ def get_ps1_offset_star(target_name, target_ra, target_dec, radius=300,
     # Convert radius in degrees
     radius_degree = radius / 3600.
 
-    if verbosity>1:
+    if verbosity > 1:
         print('Querying PS1 Archive ({},{}) for {}'.format(catalog,
                                                            data_release,
                                                            target_name))
@@ -532,13 +526,14 @@ def get_ps1_offset_star(target_name, target_ra, target_dec, radius=300,
             offset_df.loc[:, mag] = df.yPSFMag
         else:
             raise ValueError(
-                'Catalog value not understood ["mean","stack"] :{}'.format(catalog))
+                'Catalog value not understood ["mean","stack"] :{}'.format(
+                    catalog))
 
-        target_coords = SkyCoord(ra=target_ra, dec=target_dec, unit=(u.deg, u.deg),
-                                 frame='icrs')
+        target_coords = SkyCoord(ra=target_ra, dec=target_dec,
+                                 unit=(u.deg, u.deg), frame='icrs')
         offset_coords = SkyCoord(ra=offset_df.offset_ra.values,
-                                 dec=offset_df.offset_dec, unit=(u.deg, u.deg),
-                                 frame='icrs')
+                                 dec=offset_df.offset_dec,
+                                 unit=(u.deg, u.deg), frame='icrs')
         # Calculate position angles and separations (East of North)
         pos_angles = offset_coords.position_angle(target_coords).to(u.deg)
         separations = offset_coords.separation(target_coords).to(u.arcsecond)
@@ -555,10 +550,10 @@ def get_ps1_offset_star(target_name, target_ra, target_dec, radius=300,
         offset_df.loc[:, 'dra_offset'] = dra.to(u.arcsecond).value
         offset_df.loc[:, 'ddec_offset'] = ddec.to(u.arcsecond).value
 
-        return offset_df[['target_name', 'target_ra', 'target_dec', 'offset_name',
-                          'offset_shortname', 'offset_ra', 'offset_dec',
-                          mag, 'separation', 'pos_angle', 'dra_offset',
-                          'ddec_offset']]
+        return offset_df[['target_name', 'target_ra', 'target_dec',
+                          'offset_name', 'offset_shortname', 'offset_ra',
+                          'offset_dec', mag, 'separation', 'pos_angle',
+                          'dra_offset', 'ddec_offset']]
     else:
         print("Offset star for {} not found.".format(target_name))
         return pd.DataFrame()

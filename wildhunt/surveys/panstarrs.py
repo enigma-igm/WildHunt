@@ -131,8 +131,6 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
                 image_name = obj_name + "_" + self.name + "_" + \
                              band + "_fov" + '{:d}'.format(self.fov)
 
-                print(image_name)
-
                 url = ("https://ps1images.stsci.edu/cgi-bin/fitscut.cgi?"
                        "ra={}&dec={}&size={}&format=fits").format(
                     group_df.loc[idx, 'ra'],

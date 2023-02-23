@@ -4,8 +4,11 @@ import os
 import glob
 import getpass
 import shutil
+import pathlib
 import numpy as np
 import pandas as pd
+
+import multiprocessing as mp
 
 import dask
 import dask.dataframe as dd
@@ -21,6 +24,7 @@ from IPython import embed
 
 from wildhunt import catalog_defaults as whcd
 from wildhunt import catalog_queries as whcq
+from wildhunt import image as whim
 from wildhunt import pypmsgs
 from wildhunt import utils
 from wildhunt import image
@@ -32,27 +36,27 @@ msgs = pypmsgs.Messages()
 # os.environ["DASK_TEMPORARY_DIRECTORY"] = './dask_temp'
 
 
-def catalog_forced_photometry(catalog,
-                              survey_dicts,
-                              image_folder_path='cutouts',
-                              aperture_radii=[1.],
-                              radius_in=7.0,
-                              radius_out=10.0,
-                              epoch='J',
-                              n_jobs=1):
-
-
-
-    pass
-
-
 def retrieve_survey(survey_name, bands, fov, verbosity=1):
     """ Retrieve survey class according to the survey name.
 
-    :param survey_name:
-    :param bands:
-    :param fov:
-    :return:
+    This function instantiates the appropriate survey class for the given
+    survey name and filter bands. The survey class is then returned.
+
+    The currently available surveys are:
+    PS1, VHS, VVV, VMC, VIK, VID, UKI, UHS, DELS, WISE
+
+    :param survey_name: Name of the imaging survey to download images from.
+    :type survey_name: str
+    :param bands: list of filter bands to download images for in the given
+     survey.
+    :type bands: list
+    :param fov: Field of view in arcseconds for image downloads from the
+     imaging survey(s).
+    :type fov: float
+    :param verbosity: Level of verbose output (default=1)
+    :type verbosity: int
+    :return: Imaging survey class
+    :rtype: wildhunt.surveys.imagingsurvey.ImagingSurvey
     """
 
     survey = None
@@ -68,13 +72,13 @@ def retrieve_survey(survey_name, bands, fov, verbosity=1):
                                            verbosity=verbosity)
 
     if 'WISE' in survey_name:
-        survey = wise.WISE(bands, fov, survey_name,
-                                           verbosity=verbosity)
+        survey = wise.WISE(bands, fov, survey_name, verbosity=verbosity)
 
     if survey is None:
         print('ERROR')
 
     return survey
+
 
 class Catalog(object):
     """ Catalog class to handleoperations on small to large  photometric
@@ -261,13 +265,15 @@ class Catalog(object):
 
         msgs.info('Catalog dataframe initialized.')
 
-    def save_catalog(self, filepath=None,
-                     output_dir=None, file_format='parquet'):
+    def save_catalog(self, filepath=None, output_dir=None,
+                     file_format='parquet'):
         """ Save catalog to filepath
 
-        :param filepath: Filepath to save the catalog
+        :param filepath: Filepath to save the catalog.
         :type filepath: string
-        :param file_format: Format to save the catalog in
+        :param output_dir: Directory to save the catalog to.
+        :type output_dir: string
+        :param file_format: Format to save the catalog in.
         :type file_format: string (default: parquet)
         :return: None
         """
@@ -314,8 +320,7 @@ class Catalog(object):
                   'memory.')
 
         # Create output directory
-        output_dir = '{}_{}_merged'.format(self.name,
-                                                  match_catalog.name)
+        output_dir = '{}_{}_merged'.format(self.name, match_catalog.name)
         if not os.path.exists(output_dir):
             os.mkdir(output_dir)
             msgs.info('Creating output directory')
@@ -349,13 +354,14 @@ class Catalog(object):
 
             # Generate columns for merge
             source.loc[:, '{}_match'.format(column_prefix)] = False
-            cat_idx = source.query('{}_distance < {}'.format(column_prefix,
-                                                              match_distance)).index
+            cat_idx = source.query('{}_distance < {}'.format(
+                column_prefix, match_distance)).index
             source.loc[cat_idx, '{}_match'.format(column_prefix)] = True
 
-            # Remove match_distance in cases the source exceeds the match distance
-            cat_idx = source.query('{}_distance > {}'.format(column_prefix,
-                                                              match_distance)).index
+            # Remove match_distance in cases the source exceeds the match
+            # distance
+            cat_idx = source.query('{}_distance > {}'.format(
+                column_prefix, match_distance)).index
             source.loc[cat_idx, 'match_index'] = np.NaN
             source.loc[cat_idx, '{}_distance'.format(column_prefix)] = np.NaN
 
@@ -363,19 +369,19 @@ class Catalog(object):
             if columns == 'all':
 
                 df_merged = source.merge(match_df,
-                                           how='left',
-                                           left_on='match_index',
-                                           right_index=True)
+                                         how='left',
+                                         left_on='match_index',
+                                         right_index=True)
             else:
 
                 df_merged = source.merge(match_df[columns],
-                                           how='left',
-                                           left_on='match_index',
-                                           right_index=True)
+                                         how='left',
+                                         left_on='match_index',
+                                         right_index=True)
 
-            filename = '{}_{}_merged/part.{}.parquet'.format(self.name,
-                                                  match_catalog.name,
-                                                  idx)
+            filename = '{}_{}_merged/part.{}.parquet'.format(
+                self.name, match_catalog.name, idx)
+
             df_merged.to_parquet(filename)
 
     def online_cross_match(self, survey='DELS', columns='default',
@@ -425,8 +431,11 @@ class Catalog(object):
         :type astroquery_dr: string
         :param output_dir: Output directory for the merged catalog.
         :type output_dir: string
+        :param datalab_logout: Boolean to indicate whether to log out from
+         datalab service after cross-match (default=True).
 
-        :return:
+        :return: Merged catalog
+        :rtype: Catalog
         """
 
         msgs.info('Starting online cross match')
@@ -436,6 +445,10 @@ class Catalog(object):
             msgs.info('Specified survey: {} '.format(survey))
             service = whcd.catalog_presets[survey]['service']
             table = whcd.catalog_presets[survey]['table']
+
+            aq_service = None
+            aq_catalog = None
+            aq_dr = None
 
             msgs.info('was found in the catalog presets.')
             msgs.info('Using service: {}'.format(service))
@@ -455,9 +468,14 @@ class Catalog(object):
                 msgs.info('Using astroquery catalog: {}'.format(aq_catalog))
                 msgs.info('Using astroquery data release: {}'.format(aq_dr))
 
-        elif survey is None and astro_datalab_table is not None:
+        elif survey is None and astro_datalab_table is not None and \
+            astroquery_service is None and astroquery_catalog is None and \
+                astroquery_dr is None:
             service = 'datalab'
             table = astro_datalab_table
+            aq_service = None
+            aq_catalog = None
+            aq_dr = None
 
             if columns == 'default':
                 columns = None
@@ -465,27 +483,30 @@ class Catalog(object):
             msgs.info('Using astro-datalab table: {}'.format(table))
 
         elif survey is None and astroquery_service is not None and \
-                astroquery_catalog is not None and astroquery_dr is not None:
+                astroquery_catalog is not None and astroquery_dr is not None \
+                and astro_datalab_table is None:
             service = 'astroquery'
             aq_service = astroquery_service
             aq_catalog = astroquery_catalog
             aq_dr = astroquery_dr
+            table = astroquery_catalog
 
             msgs.info('Using astroquery service: {}'.format(aq_service))
             msgs.info('Using astroquery catalog: {}'.format(aq_catalog))
             msgs.info('Using astroquery data release: {}'.format(aq_dr))
 
         else:
-            raise ValueError('Survey not recognized and no service '
+            raise ValueError('Survey not recognized and no unique service '
                              'information was specified.')
 
         # Create the matched catalog name
         if service == 'datalab':
-            match_name = '{}_x_'.format(self.name)+ \
+            match_name = '{}_x_'.format(self.name) + \
                          '_'.join(table.split('.'))
         elif service == 'astroquery':
             match_name = '{}_x_{}_{}'.format(self.name, aq_catalog, aq_dr)
-
+        else:
+            raise ValueError('Service not recognized.')
 
         # Check if temporary folder exists
         if not os.path.exists(self.temp_dir):
@@ -555,11 +576,9 @@ class Catalog(object):
 
         # Merge dataframes
         msgs.info('Creating cross-matched dataframe.')
-        merge = self.df.merge(match,
-                     left_on=self.id_colname,
-                     right_on='source_id',
-                     how='left',
-                     suffixes=('_source', '_match'))
+        merge = self.df.merge(match, left_on=self.id_colname,
+                              right_on='source_id', how='left',
+                              suffixes=('_source', '_match'))
 
         merged_cat = Catalog(match_name,
                              ra_column_name=self.ra_colname,
@@ -573,12 +592,12 @@ class Catalog(object):
 
         try:
             merged_cat.save_catalog(output_dir=output_dir,
-                               file_format='parquet')
+                                    file_format='parquet')
         except:
             msgs.warn('Merged catalog could not be save in .parquet format')
             msgs.warn('Instead it has been saved in .csv.')
             merged_cat.save_catalog(output_dir=output_dir,
-                               file_format='csv')
+                                    file_format='csv')
 
         # Remove the temporary folder (default)
         if self.clear_temp_dir:
@@ -588,15 +607,26 @@ class Catalog(object):
         return merged_cat
 
     def merge_catalog_on_column(self, input_catalog, left_on, right_on):
-        """Merge input catalog to source catalog on a specified column.
+        """Merge an input catalog to the catalog on a specified column.
 
-        :param input_catalog: input catalog to merge
-        :param left_on: column name in source catalog
-        :param right_on: column name in input catalog
+        The combined catalog is saved to in parquet format to a folder with
+        the same name as the catalog.
+
+        ToDo: Add option to return a new merged catalog or modify the
+         existing one instead of saving to disk.
+
+        :param input_catalog: The input catalog to merge with the catalog.
+        :type input_catalog: Catalog
+        :param left_on: The column name in catalog.
+        :type left_on: string
+        :param right_on: The column name in the input catalog.
+        :type right_on: string
         :return: None
         """
 
-        merge = self.df.merge(input_catalog,
+        input_df = input_catalog.df.compute()
+
+        merge = self.df.merge(input_df,
                               left_on=left_on,
                               right_on=right_on,
                               how='left',
@@ -893,8 +923,7 @@ class Catalog(object):
                     target_name, target_ra, target_dec,
                     match_distance, catalog,
                     quality_query=quality_query, n=n,
-                    minimum_distance=minimum_distance,
-                    verbosity=self.verbose)
+                    minimum_distance=minimum_distance)
 
                 offset_df = pd.concat([offset_df, temp_df], ignore_index=True)
 
@@ -993,8 +1022,8 @@ class Catalog(object):
 
         :param image_folder_path: Storage path for the downloaded images.
         :type image_folder_path: string
-        :param survey_dicts: Survey dictionaries
-        :type survey_dicts: dict
+        :param survey_dicts: List of survey dictionaries
+        :type survey_dicts: list
         :param n_jobs: Number of parallel jobs
         :type n_jobs: int
         :return: None
@@ -1011,30 +1040,273 @@ class Catalog(object):
 
                 survey.download_images(ra, dec, image_folder_path, n_jobs)
 
-    def get_forced_photometry(self, survey_dict, table_name,
-                              image_folder_path='cutouts', radii=[1.],
-                              radius_in=7.0, radius_out=10.0, epoch='J',
-                              n_jobs=1, remove=True):
-        """ Perform the forced photometry for all the sources in the catalog
-        :param survey_dict: survey dictionary
-        :param table_name: table where the data from forced photometry are stored
-        :param image_folder_path: string, path where the images are stored
-        :param radii: arcesc, forced photometry aperture radius
-        :param radius_in: arcesc, background extraction inner annulus radius
-        :param radius_out: arcesc, background extraction outer annulus radius
-        :param epoch: string, the epoch that specify the initial letter of the source names
-        :param n_jobs: int, number of forced photometry processes performed in parallel
-        :param remove: bool, remove the sub catalogs produced in the multiprocess forced photometry
+    def get_forced_photometry(self, survey_dicts,  image_folder_path=None,
+                              aperture_radii=np.array([1.]),
+                              background_aperture=np.array([7., 10.]),
+                              n_jobs=1, ref_frame='icrs', output_path=None,
+                              inplace=False):
+        """ Perform forced photometry for all surveys/bands on all catalog
+        sources.
+
+        :param survey_dicts: List of survey dictionaries to calculate forced
+         photometry for.
+        :type survey_dicts: list
+        :param image_folder_path: Path to the folder with the survey images. If
+         the path is not specified, the images are downloaded automatically
+         to a folder called 'survey_images' in the current working directory.
+        :type image_folder_path: string
+        :param aperture_radii: List of aperture radii in arcseconds to
+        calculate the forced photometry for. Default: [1.]
+        :type aperture_radii: np.ndarray
+        :param background_aperture: The inner and outer radii of the background
+         annulus in arcseconds. Default: [7., 10.]
+        :type background_aperture: np.ndarray
+        :param n_jobs: The number of parallel processes to use for the forced
+         photometry. Default: 1
+        :param ref_frame: The WCS reference frame to use for the coordinates
+         of the catalog sources. Default: 'icrs'
+        :type ref_frame: string
+        :param output_path: Path to save the catalog merged with the forced
+         photometry results to. If None, the catalog is not saved.
+        :type output_path: string
+        :param inplace: If True, the catalog is updated with the forced
+         photometry results. If False, a new catalog is returned.
+         Default: False
+        :return: Catalog or None
         """
 
-        ra = self.df.compute()[self.ra_colname].values
-        dec = self.df.compute()[self.dec_colname].values
+        if image_folder_path is None:
+            image_folder_path = './survey_images'
+            pathlib.Path(image_folder_path).mkdir(parents=True, exist_ok=True)
+            self.get_survey_images(image_folder_path, survey_dicts,
+                                   n_jobs=n_jobs)
 
-        image.forced_photometry(ra, dec, survey_dict, table_name,
-                                image_folder_path=image_folder_path,
-                                radii=radii,
-                                radius_in=radius_in, radius_out=radius_out,
-                                epoch=epoch, n_jobs=n_jobs, remove=remove)
+        # Set the file base name
+        file_base_name = '{}_aper_phot_part'.format(self.name)
 
+        # Remove all previous forced photometry files from temp folder
+        for filename in glob.glob(os.path.join('./dask_temp',
+                                              file_base_name+'*.csv')):
+            os.remove(filename)
+
+        # Loop over all partitions in the catalog dask dataframe
+        for pdx, partition in enumerate(self.df.partitions):
+
+            df = partition.compute()
+
+            # Regulate the number of jobs according to catalog size and number
+            # of CPUs
+            n_files = df.shape[0]
+            n_cpu = mp.cpu_count()
+            if n_jobs > n_cpu:
+                n_jobs = n_cpu - 1
+            if n_jobs > n_files:
+                n_jobs = n_files
+
+            if n_jobs > 1:
+                # Create a queue to communicate with the worker processes
+                work_queue = mp.Queue()
+                processes = []
+                # Loop over all sources in the catalog partition and put them
+                # into the work queue
+                for idx in partition.compute().index:
+                    target_id = df.loc[idx, self.id_colname]
+                    target_ra = df.loc[idx, self.ra_colname]
+                    target_dec = df.loc[idx, self.dec_colname]
+
+                    work_queue.put((target_ra, target_dec, target_id, idx))
+
+                # Start worker processes
+                for n_job in range(n_jobs):
+                    p = mp.Process(
+                        target=mp_forced_photometry,
+                        args=(work_queue, pdx, n_job, file_base_name,
+                              survey_dicts, self.id_colname),
+                        kwargs={'image_folder_path': image_folder_path,
+                                'aperture_radii': aperture_radii,
+                                'background_aperture': background_aperture,
+                                'ref_frame': ref_frame})
+                    processes.append(p)
+                    p.start()
+
+                for p in processes:
+                    p.join()
+
+                filename = file_base_name + '_part_{}_process_*.csv'.format(pdx)
+                filepath = os.path.join('./dask_temp', filename)
+
+                result_df = dd.read_csv(filepath).compute()
+
+                # Remove temporary multiprocess files
+                for filename in glob.glob(filepath):
+                    os.remove(filename)
+
+            else:
+                # Case for n_jobs = 1
+                result_df = None
+
+                for idx in partition.compute().index:
+                    target_id = df.loc[idx, self.id_colname]
+                    target_ra = df.loc[idx, self.ra_colname]
+                    target_dec = df.loc[idx, self.dec_colname]
+
+                    result_dict = forced_photometry(
+                        target_ra, target_dec, survey_dicts,
+                        image_folder_path=image_folder_path,
+                        aperture_radii=aperture_radii,
+                        background_aperture=background_aperture,
+                        ref_frame=ref_frame)
+
+                    result_dict.update({self.id_colname: target_id})
+
+                    if result_df is None:
+                        result_df = pd.DataFrame(result_dict, index=[idx])
+                    else:
+                        result_df = result_df.append(
+                            pd.DataFrame(result_dict, index=[idx]))
+
+            # Merge the forced photometry results with the original catalog
+            partition = partition.merge(result_df, on=self.id_colname)
+
+            # Save the merged partition to a temporary folder
+            filename = file_base_name+'_{}.csv'.format(pdx)
+            filepath = os.path.join('./dask_temp', filename)
+            partition.compute().to_csv(filepath, index=False)
+
+
+        # Combine the temporary files into a single file catalog
+        new_ddf = dd.read_csv(os.path.join('./dask_temp',
+                                           file_base_name+'*.csv'))
+
+        if output_path is not None:
+            new_ddf.to_parquet(output_path)
+
+        if inplace:
+            self.df = new_ddf
+
+        else:
+            return new_ddf
+
+
+def mp_forced_photometry(work_queue, pdx, n_jobs, file_base_name,
+                         survey_dicts, id_column_name,
+                         image_folder_path='cutouts',
+                         aperture_radii=np.array([1.]),
+                         background_aperture=np.array([7., 10.]),
+                         ref_frame='icrs'):
+    """ Multiprocessing wrapper for forced photometry calculation on a catalog.
+
+    :param work_queue: The multiprocessing queue containing the ra, dec,
+     id for all catalog sources.
+    :type work_queue: multiprocessing.Queue
+    :param pdx: Process index.
+    :type pdx: int
+    :param n_jobs: The number of jobs to run in parallel.
+    :type n_jobs: int
+    :param file_base_name: The base name of the temporary output file.
+    :type file_base_name: str
+    :param survey_dicts: The list of survey dictionaries.
+    :type survey_dicts: list
+    :param id_column_name: The name of the column containing the source id.
+    :type id_column_name: str
+    :param image_folder_path: The path to the folder containing the survey
+     images to calculate the forced photometry on.
+    :param aperture_radii: List of aperture radii in arcseconds to
+    calculate the forced photometry for. Default: [1.]
+    :type aperture_radii: np.ndarray
+    :param background_aperture: The inner and outer radii of the background
+     annulus in arcseconds. Default: [7., 10.]
+    :type background_aperture: np.ndarray
+    :param ref_frame: The WCS reference frame to use for the coordinates
+     of the catalog sources. Default: 'icrs'
+    :type ref_frame: string
+    :return: None
+    """
+
+    result_df = None
+
+    while not work_queue.empty():
+        ra, dec, id, idx = work_queue.get()
+
+        result_dict = forced_photometry(
+            ra, dec, survey_dicts, image_folder_path=image_folder_path,
+            aperture_radii=aperture_radii,
+            background_aperture=background_aperture, ref_frame=ref_frame)
+
+        result_dict.update({id_column_name: id})
+
+        if result_df is None:
+            result_df = pd.DataFrame(result_dict, index=[idx])
+        else:
+            result_df = result_df.append(
+                pd.DataFrame(result_dict, index=[idx]))
+
+    # Save the merged partition to a temporary folder
+    filename = file_base_name + '_part_{}_process_{}.csv'.format(pdx, n_jobs)
+    filepath = os.path.join('./dask_temp', filename)
+    result_df.to_csv(filepath, index=False)
+
+
+def forced_photometry(ra, dec, survey_dicts,
+                      image_folder_path='cutouts',
+                      aperture_radii=np.array([1.]),
+                      background_aperture=np.array([7., 10.]),
+                      ref_frame='icrs'):
+    """ Calculate the forced photometry for a single catalog source.
+
+    :param ra: The Right Ascension of the catalog source in decimal degrees.
+    :type ra: float
+    :param dec: The declination of the catalog source in decimal degrees.
+    :type dec: float
+    :param survey_dicts: The list of survey dictionaries.
+    :type survey_dicts: list
+    :param image_folder_path: The path to the folder containing the survey
+     images to calculate the forced photometry on.
+    :param aperture_radii: List of aperture radii in arcseconds to
+    calculate the forced photometry for. Default: [1.]
+    :type aperture_radii: np.ndarray
+    :param background_aperture: The inner and outer radii of the background
+     annulus in arcseconds. Default: [7., 10.]
+    :type background_aperture: np.ndarray
+    :param ref_frame: The WCS reference frame to use for the coordinates
+     of the catalog sources. Default: 'icrs'
+    :type ref_frame: string
+    :return:
+    """
+
+    result_dict = {}
+
+    for survey_dict in survey_dicts:
+
+        for band in survey_dict['bands']:
+
+            skip = False
+
+            # Open the survey image
+            try:
+                image = whim.SurveyImage(ra, dec, survey_dict['survey'], band,
+                                         image_folder_path,
+                                         min_fov=survey_dict['fov'],
+                                         instantiate_empty=True)
+            except:
+                survey_band = '{}_{}'.format(survey_dict['survey'], band)
+                result_dict.update({'{}_status'.format(survey_band):
+                                    'image_corrupted'})
+                skip = True
+
+            if image.data is None or skip:
+                survey_band = '{}_{}'.format(survey_dict['survey'], band)
+                result_dict.update({'{}_status'.format(survey_band):
+                                    'image_not_found'})
+            else:
+
+                aperture_photometry = image.get_aperture_photometry(
+                    aperture_radii=aperture_radii,
+                    background_aperture=background_aperture,
+                    ref_frame=ref_frame)
+
+                result_dict.update(aperture_photometry)
+
+    return result_dict
 
 

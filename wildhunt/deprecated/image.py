@@ -8,11 +8,14 @@ Main module for downloading and manipulating image data.
 import os
 import glob
 import math
+import multiprocessing
+from multiprocessing import Process, Queue
 
 import numpy as np
 import pandas as pd
 
 
+from astropy.table import Table, vstack
 from astropy import wcs, stats
 import astropy.units as u
 from astropy.io import fits
@@ -20,7 +23,7 @@ from astropy.wcs import WCS
 from astropy.nddata.utils import Cutout2D
 from astropy.coordinates import SkyCoord, ICRS
 from astropy.wcs.utils import proj_plane_pixel_scales
-
+from astropy.visualization import ZScaleInterval
 
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
@@ -42,31 +45,245 @@ from IPython import embed
 msgs = pypmsgs.Messages()
 
 
-def get_pixelscale(hdr):
-    """ Returns the pixel scale in arcsec/pixel
-
-    :param hdr: Fits header of an image
-    :type hdr: astropy.io.fits.header.Header
-    :return:
+def forced_photometry(ra, dec, survey_dicts, table_name,
+                      image_folder_path='cutouts', radii=[1.], radius_in=7.0,
+                      radius_out=10.0, epoch='J', n_jobs=5, remove=True):
+    """Main function that calls all the other functions used to perform forced photometry
+    :param ra: np.array(), right ascensions in degrees
+    :param dec: np.array(), declinations in degrees
+    :param survey_dicts: survey dictionaries
+    :param table_name: table where the data from forced photometry are stored
+    :param image_folder_path: string, path where the images are stored
+    :param radii: arcesc, forced photometry aperture radius
+    :param radius_in: arcesc, background extraction inner annulus radius
+    :param radius_out: arcesc, background extraction outer annulus radius
+    :param epoch: string, the epoch that specify the initial letter of the source names
+    :param n_jobs: int, number of forced photometry processes performed in parallel
+    :param remove: bool, remove the sub catalogs produced in the multiprocess forced photometry
     """
+
+    n_file = np.size(ra)
+    n_cpu = multiprocessing.cpu_count()
+
+    if n_jobs > n_cpu - 1:
+        n_jobs = n_cpu - 1
+    if n_jobs > n_file:
+        n_jobs = n_file
+
+    if n_jobs > 1:
+        work_queue = Queue()
+        processes = []
+        out_tab = Table()
+        for ii in range(n_file):
+            work_queue.put((ra[ii], dec[ii]))
+
+        for n_job in range(n_jobs):
+            p = Process(target=mp_get_forced_photometry, args=(work_queue, out_tab, n_job), kwargs={
+                'survey_dicts': survey_dicts,
+                'image_folder_path': image_folder_path,
+                'radii': radii,
+                'radius_in': radius_in,
+                'radius_out': radius_out,
+                'epoch': epoch})
+            processes.append(p)
+            p.start()
+
+        for p in processes:
+            p.join()
+
+        # Merge together the different forced photometry data tables that are generated in each process
+        save_master_table(n_jobs, table_name=table_name, remove=remove)
+
+    else:
+        final_tab = Table()
+        for idx, num in enumerate(ra):
+            phot_tab = get_aperture_photometry(ra[idx], dec[idx], survey_dicts, image_folder_path=image_folder_path,
+                                           radii=radii, radius_in=radius_in, radius_out=radius_out, epoch=epoch)
+            final_tab = vstack([final_tab, phot_tab])
+        final_tab.write(table_name + '_forced_photometry.csv', format='csv', overwrite=True)
+
+def mp_get_forced_photometry(work_queue, out_tab, n_jobs, survey_dicts, image_folder_path='cutouts',
+                             radii=[1.], radius_in=7.0, radius_out=10.0, epoch='J'):
+    ''' Get aperture photometry for one source but all bands/surveys in multiprocess
+    :param out_tab: table where the data from forced photometry are stored
+    :param n_jobs: int, number of forced photometry processes performed in parallel
+    :param survey_dicts: survey dictionaries
+    :param image_folder_path: string, path where the images are stored
+    :param radii: arcesc, forced photometry aperture radius
+    :param radius_in: arcesc, background extraction inner annulus radius
+    :param radius_out: arcesc, background extraction outer annulus radius
+    :param epoch: string, the epoch that specify the initial letter of the source names
+    '''
+
+    while not work_queue.empty():
+        ra, dec = work_queue.get()
+        phot = get_aperture_photometry(ra, dec, survey_dicts, image_folder_path=image_folder_path, radii=radii,
+                                       radius_in=radius_in, radius_out=radius_out, epoch=epoch)
+        out_tab = vstack([out_tab, phot])
+    out_tab.write('process_' + str(n_jobs) + '_forced_photometry.csv', format='csv', overwrite=True)
+
+def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts',
+                            radii=[1.], radius_in=7.0, radius_out=10.0,
+                            epoch='J'):
+    '''Perform forced photometry for a given target on images from a given imaging survey.
+
+    :param ra: right ascension in degrees
+    :param dec: right ascension in degrees
+    :param survey_dicts: survey dictionaries
+    :param image_folder_path: string, path where the images are stored
+    :param radii: forced photometry aperture radius in arcsec
+    :param radius_in: background extraction inner annulus radius in arcsec
+    :param radius_out: background extraction outer annulus radius in arcsec
+    :param epoch: string, the epoch that specify the initial letter of the source names
+
+    Returns:
+        astropy Table
+    '''
+
+    # open an astropy table to store the data
+    source_name = utils.coord_to_name(ra, dec, epoch=epoch)[0]
+    photo_table = Table()
+    photo_table['Name'] = [source_name]
+    photo_table['RA'] = [ra]
+    photo_table['DEC'] = [dec]
+
+    # Apply aperture photometry to every survey and band specified
+    for survey_dict in survey_dicts:
+
+        survey = catalog.retrieve_survey(survey_dict['survey'],
+                                 survey_dict['bands'],
+                                 survey_dict['fov'])
+        for band in survey_dict['bands']:
+
+            try:
+                # Open the image
+                image_data = SurveyImage(ra, dec, survey_dict['survey'], band,
+                                    image_folder_path, min_fov=survey_dict[
+                        'fov'])
+                header = image_data.header
+                data = image_data.data
+
+                # Retrieve the important info from the header
+                filepath = image_folder_path + '/' + source_name + "_" + survey_dict['survey'] + "_" + band \
+                           + "_fov" + str(survey_dict['fov']) + ".fits"
+                image_params = survey.force_photometry_params(header, band, filepath)
+                exp = image_params.exp
+                back = image_params.back
+                zpt = image_params.zpt
+                nanomag_corr = image_params.nanomag_corr
+                ABcorr = image_params.ABcorr
+                photo_table['{:}_ZP_{:}'.format(survey_dict['survey'], band)] = [zpt]
+
+                if 'w' in band:
+                    data = data.copy() * 10 ** (-image_params.ABcorr / 2.5)
+
+                try:
+                    # define WCS
+                    wcs_img = wcs.WCS(header)
+                    # define coordinates and apertures
+                    position = SkyCoord(ra * u.deg, dec * u.deg, frame='fk5')
+                    aperture = [SkyCircularAperture(position, r=r * u.arcsec) for r in radii]
+                    pix_aperture = [aperture[i].to_pixel(wcs_img) for i in range(len(radii))]
+                    back_aperture = SkyCircularAnnulus(position, r_in=radius_in * u.arcsec,
+                                                       r_out=radius_out * u.arcsec)
+
+                    # estimate background
+                    if back == "no_back":
+                        background = np.zeros(len(radii))
+                    else:
+                        f_back = aperture_photometry(data, back_aperture, wcs=wcs_img)
+                        background = [
+                            float(f_back['aperture_sum']) / (radius_out ** 2 - radius_in ** 2) * radii[i] ** 2 for i
+                            in
+                            range(len(radii))]
+                    # compute the std from the whole image
+                    ## ToDo: we might need to improve this part (remove source in the image or use variance image): look at Eduardo's method
+                    mean, median, std = stats.sigma_clipped_stats(data, sigma=3.0, maxiters=5)
+
+                    # measure the flux
+                    f = aperture_photometry(data, aperture, wcs=wcs_img)
+                    flux = [float(f['aperture_sum_' + str(i)]) for i in range(len(radii))]
+                    # Estimate the SNR
+                    SN = [(flux[i] - background[i]) / (std * np.sqrt(pix_aperture[i].area)) for i in
+                          range(len(radii))]
+                    # Measure fluxes/magnitudes
+                    for i in range(len(radii)):
+                        radii_namei = str(radii[i] * 2.0).replace('.', 'p')
+                        photo_table['{:}_{:}_flux_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                            (flux[i] - background[i]) / exp * nanomag_corr
+                        photo_table['{:}_{:}_flux_aper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                            std * np.sqrt(pix_aperture[i].area) / exp * nanomag_corr
+                        photo_table['{:}_{:}_snr_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = SN[i]
+                        if (flux[i] - background[i]) > 0.:
+                            photo_table['{:}_{:}_mag_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = 22.5 \
+                                -2.5 * np.log10(photo_table['{:}_{:}_flux_aper_{:}'.format(survey_dict['survey'], band,
+                                radii_namei)])
+                            photo_table['{:}_{:}_magaper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                                (2.5 / np.log(10)) * (1.0 / SN[i])
+                        else:
+                            photo_table['{:}_{:}_mag_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                                np.NAN
+                            photo_table['{:}_{:}_magaper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                                np.NAN
+                        msgs.info('The {:}-band magnitude is {:}+/-{:}'.format(band, float(
+                            photo_table['{:}_{:}_mag_aper_{:}'.format(survey_dict['survey'], band, radii_namei)]),
+                                float(photo_table['{:}_{:}_magaper_err_{:}'.format(survey_dict['survey'], band,
+                                                                                         radii_namei)])))
+                    photo_table['{:}_success_{:}'.format(survey_dict['survey'], band)] = 1
+
+                except:
+                    photo_table['{:}_ZP_{:}'.format(survey_dict['survey'], band)] = np.NAN
+                    msgs.warn('Photometry on image ' + str(source_name) + '.' + str(band) + '.fits failed')
+                    for i in range(len(radii)):
+                        radii_namei = str(radii[i] * 2.0).replace('.', 'p')
+                        photo_table['{:}_{:}_flux_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = np.NAN
+                        photo_table['{:}_{:}_flux_aper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = \
+                            np.NAN
+                        photo_table['{:}_{:}_snr_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = np.NAN
+                        photo_table['{:}_{:}_mag_aper_{:}'.format(survey_dict['survey'], band, radii_namei)] = np.NAN
+                        photo_table['{:}_{:}_magaper_err_{:}'.format(survey_dict['survey'], band, radii_namei)] = np.NAN
+                    photo_table['{:}_success_{:}'.format(survey_dict['survey'], band)] = 0
+
+            except:
+                msgs.error('The image {} is corrupted and cannot be opened'.format(source_name))
+
+    return photo_table
+
+def save_master_table(n_jobs, table_name, remove=True):
+    '''Merge the data tables generated during each forced photometry process into a single table
+
+    :param n_jobs: int, number of forced photometry processes performed in parallel
+    :param table_name: table where the data from forced photometry are stored
+    :param remove: bool, remove the sub catalogs produced in the multiprocess forced photometry
+    '''
+    pd_table = pd.read_csv('process_' + str(0) + '_forced_photometry.csv')
+    master_table = Table.from_pandas(pd_table)
+
+    if remove == True: os.remove('process_' + str(0) + '_forced_photometry.csv')
+    for i in range(1, n_jobs):
+        pd_table = pd.read_csv('process_' + str(i) + '_forced_photometry.csv')
+        par = Table.from_pandas(pd_table)
+        master_table = vstack((master_table, par))
+        if remove == True: os.remove('process_' + str(i) + '_forced_photometry.csv')
+    master_table.write(table_name + '_forced_photometry.csv', format='csv', overwrite=True)
+
+
+def get_pixelscale(hdr):
+    '''
+    Get pixelscale from header and return in it in arcsec/pixel
+    '''
+
     wcs_img = wcs.WCS(hdr)
     scale = np.mean(proj_plane_pixel_scales(wcs_img)) * 3600
 
     return scale
 
-
 def aperture_inpixels(aperture, hdr):
-    """ Converts aperture size from arcsec to pixels
-
-    :param aperture: Aperture size in arcsec.
-    :type aperture: float
-    :param hdr: Fits header of an image
-    :type hdr: astropy.io.fits.header.Header
-    :return:
-    """
-
+    '''
+    receives aperture in arcsec. Returns aperture in pixels
+    '''
     pixelscale = get_pixelscale(hdr)
-    aperture /= pixelscale # convert to pixels
+    aperture /= pixelscale #pixels
 
     return aperture
 
@@ -119,12 +336,12 @@ def make_mult_png_fig(ra, dec, surveys, bands,
         boundaries for the color map.
     :param color_map_name: string
         Name of the color map
-    :param scalebar: Scalebar size in arcseconds
-    :type scalebar: astropy.units.quantity.Quantity
     :param add_info_value : string
         Value for additional information added to the title of the figure
     :param add_info_label : string
         Label for additional information added to the title of the figure
+    :param verbosity:
+        Verbosity > 0 will print verbose statements during the execution
     :return: matplotlib.figure
         Figure with the plot.
     """
@@ -143,8 +360,8 @@ def make_mult_png_fig(ra, dec, surveys, bands,
                               color_map_name)
 
     coord_name = utils.coord_to_name(np.array([ra]),
-                                     np.array([dec]),
-                                     epoch="J")
+                                  np.array([dec]),
+                                  epoch="J")
 
     if add_info_label is None or add_info_value is None:
         fig.suptitle(coord_name[0])
@@ -159,7 +376,7 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
                         magerr_list=None, sn_list=None,
                         forced_mag_list=None, forced_magerr_list=None,
                         forced_sn_list=None, scalebar=5 * u.arcsecond,
-                        n_sigma=3, color_map_name='viridis'):
+                        n_sigma=3, color_map_name='viridis', show_axes=True):
     """ Create axes components to plot one source in all specified surveys
     and bands.
 
@@ -206,6 +423,8 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
         boundaries for the color map.
     :param color_map_name: string
         Name of the color map
+    :param verbosity:
+        Verbosity > 0 will print verbose statements during the execution
     :return: matplotlib.figure
         Figure with the plot.
     """
@@ -241,29 +460,29 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
         else:
             forced_sn = None
 
+
         image = SurveyImage(ra, dec, survey, band, image_dir, min_fov=fov)
 
         cutout = image.get_cutout_image(ra, dec, fov)
-        img_wcs = WCS(cutout.header)
+        wcs = WCS(cutout.header)
 
-        axs = fig.add_subplot(int(f"{n_row}{n_col}{idx + 1}"),
-                              projection=img_wcs)
+        axs = fig.add_subplot(int(f"{n_row}{n_col}{idx + 1}"), projection=wcs)
 
         axs = cutout._simple_plot(n_sigma=n_sigma, fig=fig,
-                                  subplot=None,
-                                  color_map=color_map_name, axis=axs,
-                                  north=True,
-                                  scalebar=scalebar, sb_pad=0.5,
-                                  sb_borderpad=0.4,
-                                  corner='lower right', frameon=False,
-                                  low_lim=None,
-                                  upp_lim=None, logscale=False)
+                                 subplot=None,
+                                 color_map=color_map_name, axis=axs,
+                                 north=True,
+                                 scalebar=scalebar, sb_pad=0.5,
+                                 sb_borderpad=0.4,
+                                 corner='lower right', frameon=False,
+                                 low_lim=None,
+                                 upp_lim=None, logscale=False)
 
         axs.get_xaxis().set_visible(False)
         axs.get_yaxis().set_visible(False)
 
         # Plot circular aperture (forced photometry flux)
-        circx, circy = img_wcs.wcs_world2pix(ra, dec, 0)
+        circx, circy = wcs.wcs_world2pix(ra, dec, 0)
 
         aper_pix = aperture_inpixels(aperture, cutout.header)
         circle = plt.Circle((circx, circy), aper_pix, color='r', fill=False,
@@ -279,7 +498,7 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
         fig.gca().add_artist(square)
 
         # Create forced photometry label
-        if forced_mag is not None:
+        if (forced_mag is not None):
             if (forced_sn is not None) & (forced_magerr is not None):
                 forcedlabel = r'${0:s} = {1:.2f} \pm {2:.2f} (SN=' \
                               r'{3:.1f})$'.format(band + "_{forced}",
@@ -294,9 +513,9 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
                     band + "_{forced}", forced_mag)
 
             fig.gca().text(0.03, 0.16, forcedlabel, color='black',
-                           weight='bold', fontsize='large',
-                           bbox=dict(facecolor='white', alpha=0.6),
-                           transform=fig.gca().transAxes)
+                     weight='bold', fontsize='large',
+                     bbox=dict(facecolor='white', alpha=0.6),
+                     transform=fig.gca().transAxes)
 
         # Create catalog magnitude label
         if catmag is not None:
@@ -312,57 +531,24 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
                     band + "_{cat}", catmag)
 
             fig.gca().text(0.03, 0.04, maglabel, color='black',
-                           weight='bold', fontsize='large',
-                           bbox=dict(facecolor='white', alpha=0.6),
-                           transform=fig.gca().transAxes)
+                     weight='bold',
+                     fontsize='large',
+                     bbox=dict(facecolor='white', alpha=0.6),
+                     transform=fig.gca().transAxes)
 
         fig.gca().set_title(survey + " " + band)
 
     return fig
 
 
+
+
 class Image(object):
-    """ Class to handle astronomical images in the framework of wild_hunt.
-    """
+
 
     def __init__(self, filename=None, data=None, header=None, exten=0,
-                 ra=None, dec=None, survey=None, band=None, verbosity=1,
+                 fov=None, ra=None, dec=None, verbosity=1,
                  instantiate_empty=False):
-        """ Initialize an image.
-
-        A filename for a fits image can be specified, alternatively the data
-        and header of a fits image can be specified directly.
-
-        If no filename or data/header are provided and instantiate_empty is
-        set to True, an empty Image object is created. This is dangerous and
-        should only be used if the user knows what they are doing.
-
-        :param filename: The filename of an image (fits format) to be loaded.
-        :type filename: str
-        :param data: Image data.
-        :type data: numpy.ndarray
-        :param header: Image header.
-        :type header: astropy.io.fits.header.Header
-        :param exten: Fits extension to be loaded, holding the science image.
-        :type exten: int
-        :param ra: Right ascension of the image center in degrees. If this
-         is None and the image has a WCS, the central coordinates will be
-         extracted from the header.
-        :type ra: float
-        :param dec: Declination of the image center in degrees. If this
-         is None and the image has a WCS, the central coordinates will be
-         extracted from the header.
-        :type dec: float
-        :param survey: Name of the survey the image is from.
-        :type survey: str
-        :param band: Name of the band the image is from.
-        :type band: str
-        :param verbosity: Verbosity level. Default: 1.
-        :type verbosity: int
-        :param instantiate_empty: Boolean to indicate whether to allow
-         instantiation of an empty Image object. Default: False.
-        :type instantiate_empty: bool
-        """
 
         self.verbosity = verbosity
 
@@ -396,17 +582,13 @@ class Image(object):
                 self.ra = ra
                 self.dec = dec
 
-        # Set band and survey variables
-        self.band = band
-        self.survey = survey
+        self.fov = fov   # Field of view
+
+        self.aperture = None  # Photutils aperture for aperture photometry
+
+
 
     def get_central_coordinates_from_wcs(self):
-        """ Get the central coordinates of the image from the WCS information
-
-        :return: Right Ascention and Declination of the image center in
-         degrees.
-        :rtype: tuple
-        """
 
         naxis_1 = self.header['NAXIS1']
         naxis_2 = self.header['NAXIS2']
@@ -421,12 +603,12 @@ class Image(object):
         return ra, dec
 
     def show(self, n_sigma=3, color_map='viridis'):
-        """ Show the image data using matplotlib.
+        """ Show the image data.
 
         :param n_sigma: Number of sigma for image color scale sigma clipping.
         :type n_sigma: int
         :param color_map: Matplotlib color map
-        :type color_map: str
+        :type color_map:
         :return:
         """
         fig = plt.figure(figsize=(5, 5))
@@ -438,29 +620,27 @@ class Image(object):
 
         plt.show()
 
-    def _rotate_north_up(self):
-        """ Rotate the image so that North is up.
 
-        :return: None
-        """
+    def _rotate_north_up(self):
 
         # Get image WCS
-        img_wcs = WCS(self.header)
+        wcs = WCS(self.header)
 
         frame = ICRS()
 
         new_wcs, shape = find_optimal_celestial_wcs([(self.data,
-                                                      img_wcs)],
-                                                    frame=frame)
+                                                   wcs)],
+                                                 frame=frame)
 
-        data, _ = reproject_interp((self.data, img_wcs), new_wcs,
-                                   shape_out=shape)
+        data, _ = reproject_interp((self.data, wcs), new_wcs,
+                                             shape_out=shape)
         header = new_wcs.to_header()
         header['NAXIS1'] = shape[1]
         header['NAXIS2'] = shape[0]
 
         self.header = header
         self.data = data
+
 
     def _simple_plot(self, n_sigma=3, fig=None, subplot=None,
                      color_map='viridis', axis=None, north=False,
@@ -556,8 +736,6 @@ class Image(object):
                 length = scalebar.to(u.degree).value
             elif isinstance(scalebar, u.Unit):
                 length = scalebar.to(u.degree)
-            else:
-                raise TypeError('Scalebar must be a Quantity or a Unit.')
 
             self._add_scalebar(axs, length, pad=sb_pad,
                                borderpad=sb_borderpad,
@@ -568,24 +746,7 @@ class Image(object):
 
     def _add_scalebar(self, axis, length, corner='lower right',
                       pad=0.5, borderpad=0.4, frameon=False):
-        """ Add a scalebar to the image.
-
-        Function adopted from Aplpy.
-
-        :param axis: The matplotlib axis to add the scalebar to.
-        :type axis: matplotlib.axes._subplots.AxesSubplot
-        :param length: The length of the scalebar in degrees.
-        :param corner: The corner position of the scalebar.
-        :type corner: str
-        :param pad: The padding of the scalebar in fraction of the font size.
-        :type pad: float
-        :param borderpad: The border padding of the scalebar in fraction of
-         the font size.
-        :type borderpad: float
-        :param frameon: Boolean to indicate whether to add a frame around the
-         scalebar.
-        :return: None
-        """
+        # Code adapted from Aplpy
 
         pix_scale = proj_plane_pixel_scales(WCS(self.header))
 
@@ -598,6 +759,8 @@ class Image(object):
         length = length / degrees_per_pixel
 
         size_vertical = length/20
+
+
 
         artist = AnchoredSizeBar(axis.transData, length, label,
                                  corner, pad=pad, borderpad=borderpad,
@@ -698,78 +861,21 @@ class Image(object):
                 msgs.info("Returning generated cutout")
             return cutout_image
 
-    def to_fits(self, filepath, overwrite=True):
-        """ Save the image to a fits file.
-
-        :param filepath: Filepath of the fits file to save the image to.
-        :param overwrite: Boolean to indicate whether to overwrite the file
-         if it already exists.
-        :return: None
-        """
+    def to_fits(self, filename, overwrite=True):
 
         hdu = fits.PrimaryHDU(self.data, header=self.header)
-        hdu.writeto(filepath, overwrite=overwrite)
+        hdu.writeto(filename, overwrite=overwrite)
 
-    def calculate_aperture_photometry(self, ra, dec, nanomag_correction,
+    def calculate_aperture_photometry(self, ra, dec,
                                       zero_point=None,
+                                      nanomag_correction=None,
                                       ab_correction=None,
-                                      exptime_norm=1,
+                                      exptime=1,
                                       aperture_radii=np.array([1.]),
                                       background_aperture=np.array([7., 10.]),
                                       ref_frame='icrs',
                                       background=True,
                                       band=None, survey=None):
-        """ Calculate the aperture photometry of a source in the image.
-
-        The correction factor to convert from image flux/counts to nanomaggies
-        is a required argument. This should include zero point and AB
-        correction factors.
-
-        An example of how to calculate the correction factor is shown below:
-        nanomag_correction = np.power(10, 0.4 * (22.5 - zero_point -
-        ab_correction))
-
-        The zero point and AB correction factor keyword arguments are not
-        used in the photometric calculation but are included in the output.
-
-        :param ra: The Right Ascension of the source in decimal degrees.
-        :type ra: float
-        :param dec: The Declination of the source in decimal degrees.
-        :type dec: float
-        :param nanomag_correction: The correction factor to convert from
-        image flux/counts to nanomaggies. This should include zero point and
-         AB correction.
-        :type nanomag_correction: float
-        :param zero_point: The photometric zero point of the image in
-         magnitudes.
-        :type zero_point: float
-        :param ab_correction: The AB correction factor to convert from
-         survey filter band magnitude to AB magnitude.
-        :type ab_correction: float
-        :param exptime_norm: The exposure time normalization factor. This
-         should be set to the exposure time of the image in seconds if the
-         values of the image are in counts instead of fluxes. Default: 1.
-        :type exptime_norm: float
-        :param aperture_radii: List of aperture radii in arcseconds to
-        calculate the forced photometry for. Default: [1.]
-        :type aperture_radii: np.ndarray
-        :param background_aperture: The inner and outer radii of the background
-         annulus in arcseconds. Default: [7., 10.]
-        :type background_aperture: np.ndarray
-        :param ref_frame: The WCS reference frame to use for the coordinates
-         of the catalog sources. Default: 'icrs'
-        :type ref_frame: string
-        :param background: Boolean to indicate whether to calculate the
-         local background level in an annulus around the source and subtract
-         it. Default: True
-        :param band: The filter band name of the image used for the key
-        names of the result dictionary. If not provided, the band name
-        will be set to 'band'.
-        :type band: str
-        :param survey:
-        :return: Dictionary containing the aperture photometry results.
-        :rtype: dict
-        """
 
         # Package all results into a dictionary
         if band is None:
@@ -805,7 +911,6 @@ class Image(object):
                                            u.arcsec,
                                            r_out=background_aperture[1] *
                                            u.arcsec)
-
         # Calculate background flux level
         if not background:
             background = np.zeros(len(aperture_radii))
@@ -839,16 +944,14 @@ class Image(object):
 
         result_dict = {}
 
-        survey_band = '{}_{}'.format(survey, band)
-
         for idx in range(len(aperture_radii)):
 
             # Calculate the flux in nanomaggies
             flux = float(source_flux['aperture_sum_' + str(idx)])
-            flux = (flux - background[idx]) / exptime_norm * nanomag_correction
+            flux = (flux - background[idx]) / exptime * nanomag_correction
             # Calculate the flux error in nanomaggies
-            flux_err = std * np.sqrt(pix_aperture[idx].area) / exptime_norm * \
-                       nanomag_correction
+            flux_err = std * np.sqrt(pix_aperture[idx].area) / exptime * \
+                      nanomag_correction
             # Estimate the SNR
             snr = flux/flux_err
 
@@ -865,6 +968,8 @@ class Image(object):
             snr_list.append(snr)
             mag_list.append(mag)
             mag_err_list.append(mag_err)
+
+            survey_band = '{}_{}'.format(survey, band)
 
             flux_name = '{}_flux_aper_{}arcsec'.format(
                 survey_band, aperture_radii[idx])
@@ -897,6 +1002,11 @@ class Image(object):
 
         return result_dict
 
+
+    def forced_aperture_photometry(self):
+
+        pass
+
     def get_coordinate_bounds(self):
         """Get the RA and Dec minimum and maximum values for an image.
 
@@ -915,60 +1025,17 @@ class Image(object):
                 img_dec_bounds.append(dec)
 
         return np.min(img_ra_bounds), np.max(img_ra_bounds), \
-            np.min(img_dec_bounds), np.max(img_dec_bounds)
+               np.min(img_dec_bounds), np.max(img_dec_bounds)
+
+
 
 
 class SurveyImage(Image):
-    """ A class to handles astronomical images directly related to specific
-    imaging surveys.
 
-    This class dervies from the Image class.
-
-    It adds the functionality to the Image class to automatically open survey
-    images downloaded using the Catalog and ImagingSurvey classes. These
-    downloaded images have a specific naming convention that the SurveyImage
-    class operates on.
-
-    It further expands the functionality of the Image class to calculate
-    aperture photometry by interacting with the ImagingSurvey class, which
-    contains the survey specific information needed to perform the source
-    flux measurements.
-
-    """
 
     def __init__(self, ra, dec, survey, band, image_dir, min_fov,
                  data=None, header=None, verbosity=1,
                  instantiate_empty=False):
-        """ Initialize the SurveyImage class.
-
-        :param ra: The RA coordinate of the image center in decimal degrees.
-         For survey images this should also be the RA position of a specific
-         source of interest.
-        :type ra: float
-        :param dec: The Dec coordinate of the image center in decimal degrees.
-         For survey images this should also be the declination position of a
-         specific source of interest.
-        :type dec: float
-        :param survey: The survey name the image is from.
-        :type survey: str
-        :param band: The survey filter band of the image.
-        :type band: str
-        :param image_dir: The directory where the image is located.
-        :type image_dir: str
-        :param min_fov: The minimum field of view the image should have in
-         arcseconds.
-        :type min_fov: float
-        :param data: The image data array.
-        :type data: numpy.ndarray
-        :param header: The image header.
-        :type header: astropy.io.fits.Header
-        :param verbosity: Verbosity level.
-        :type verbosity: int
-        :param instantiate_empty:
-        :param instantiate_empty: Boolean to indicate whether to allow
-         instantiation of an empty Image object. Default: False.
-        :type instantiate_empty: bool
-        """
 
         self.ra = ra
         self.dec = dec
@@ -989,11 +1056,11 @@ class SurveyImage(Image):
             msgs.info('User supplied image header and data')
 
         super(SurveyImage, self).__init__(data=data, header=header,
+                                          fov=min_fov,
                                           instantiate_empty=instantiate_empty)
 
     def open(self):
-        """This function opens an image from the image directory
-        based on the RA, Dec, survey, and band and minimum field of view.
+        """Open the survey image fits file
 
         :return: None
         """
@@ -1029,34 +1096,18 @@ class SurveyImage(Image):
 
         else:
             msgs.warn("{} {}-band image of source {} with a minimum FOV of "
-                      "{} in folder {} not found.".format(self.survey,
-                                                          self.band,
-                                                          self.source_name,
-                                                          self.fov,
-                                                          self.image_dir))
+                       "{} in folder {} not found.".format(self.survey, self.band,
+                                       self.source_name, self.fov,
+                                       self.image_dir))
 
             return None, None
 
     def get_aperture_photometry(self, aperture_radii=np.array([1.]),
                                 background_aperture=np.array([7., 10.]),
                                 ref_frame='icrs'):
-        """ Perform aperture photometry on the SurveyImage at the RA and Dec
-        position initialized with the class.
-
-        :param aperture_radii: List of aperture radii in arcseconds to
-        calculate the forced photometry for. Default: [1.]
-        :type aperture_radii: np.ndarray
-        :param background_aperture: The inner and outer radii of the background
-         annulus in arcseconds. Default: [7., 10.]
-        :type background_aperture: np.ndarray
-        :param ref_frame: The WCS reference frame to use for the coordinates
-         of the catalog sources. Default: 'icrs'
-        :type ref_frame: string
-        :return:
-        """
 
         survey = catalog.retrieve_survey(self.survey,
-                                         [self.band],
+                                         self.band,
                                          self.fov)
 
         filepath = self.image_dir + '/' + self.source_name + "_" + \
@@ -1081,7 +1132,7 @@ class SurveyImage(Image):
         result = self.calculate_aperture_photometry(
             self.ra, self.dec, zero_point=zero_point,
             nanomag_correction=nanomag_corr, ab_correction=ab_correction,
-            exptime_norm=exptime, aperture_radii=aperture_radii,
+            exptime=exptime, aperture_radii=aperture_radii,
             background_aperture=background_aperture, ref_frame=ref_frame,
             background=background)
 
