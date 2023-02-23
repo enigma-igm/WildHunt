@@ -7,10 +7,10 @@ Functionality:
 - Observation preparation: Getting offset stars [x]
 - Observation preparation: Making finding charts [x]
 
-- Image downloads [x] - Review [ ]
-- Forced Photometry [x] - Review [ ]
-- Online cross-matches [ ]
-- Disk cross-matches [ ]
+- Image downloads [x] - Review [x]
+- Forced Photometry [x] - Review [x]
+- Online cross-matches [x]
+- Disk cross-matches [x]
 
 
 
@@ -28,12 +28,12 @@ Catalog [x]
 - Online cross-match [x] (only datalab for now)
 - Disk cross-match (match_coordinates_sky) [x]
 - Get images (ImagingSurvey) [x]
-- Do forced photometry (Image) [x] - Review[]
+- Do forced photometry (Image) [x] - Review[x]
 - Get offset stars (related to online cross-match) [x]
 - Generate finding charts (Image, ImagingSurvey) [x]
 
 Image [x]
-- Calculate forced photometry [x] - Review[]
+- Calculate forced photometry [x] - Review[x]
 - Plot cutout images (for visual inspection) [x]
 - Plot finding charts [x]
 

@@ -1,4 +1,12 @@
+#!/usr/bin/env python
 
+""" This module contains default dictionaries used in the wildhunt Catalog
+class.
+
+Specifically it defines presets for online cross-matching of catalogs, including
+the default columns to be returned from the cross-matching service.
+
+"""
 
 ls_dr9_default_columns = """
       match.objid,
