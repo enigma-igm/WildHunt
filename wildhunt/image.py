@@ -989,6 +989,8 @@ class SurveyImage(Image):
             msgs.info('User supplied image header and data')
 
         super(SurveyImage, self).__init__(data=data, header=header,
+                                          ra=ra, dec=dec, survey=survey,
+                                          band=band, verbosity=verbosity,
                                           instantiate_empty=instantiate_empty)
 
     def open(self):
@@ -1006,6 +1008,7 @@ class SurveyImage(Image):
         file_found = False
         open_file_fov = None
         file_path = None
+
         if len(filenames_available) > 0:
             for filename in filenames_available:
 

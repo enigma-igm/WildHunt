@@ -1,5 +1,12 @@
 
 
+New TODOs:
+
+- [ ] Review FindingChart functionality
+- [ ] Review Offset star functionality
+- [ ] Implement PS1 catalog search (cross-match)
+- [ ] Get DELSDR9 image downloads working again
+
 
 Functionality:
 
@@ -13,13 +20,7 @@ Functionality:
 - Disk cross-matches [x]
 
 
-
-
-
-
 Core classes:
-
-
 
 ImagingSurvey [x]
 - Download images

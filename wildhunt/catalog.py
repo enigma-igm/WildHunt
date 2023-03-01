@@ -377,9 +377,9 @@ class Catalog(object):
             df_merged.to_parquet(filename)
 
     def online_cross_match(self, survey='DELS', columns='default',
-                           match_distance=3, astro_datalab_table=None,
-                           astroquery_service=None, astroquery_catalog=None,
-                           astroquery_dr=None, output_dir=None,
+                           match_distance=3, output_dir=None,
+                           astro_datalab_table=None, astroquery_service=None,
+                           astroquery_catalog=None, astroquery_dr=None,
                            datalab_logout=True):
         """Positional cross-match to online catalogs with a maximum match
         distance of match_distance (in arcseconds).
@@ -401,6 +401,10 @@ class Catalog(object):
         merge or the astroquery service, catalog and data release for online
         cross-matches beyond the survey presets.
 
+        The merged cross-matched catalog is always returned as a Catalog
+        object. If an output directory is specified the merged catalog is also
+        saved to disk.
+
         :param survey: Internal predefined survey name
         :type survey: string
         :param columns: List of column names to merge from online catalog.
@@ -409,6 +413,8 @@ class Catalog(object):
         :type columns: list
         :param match_distance: Match distance in arcseconds.
         :type match_distance: float
+        :param output_dir: Output directory for the merged catalog.
+        :type output_dir: string
         :param astro_datalab_table: Astro datalab table name. Only used for
             astro datalab cross-matches.
         :type astro_datalab_table: string
@@ -421,8 +427,6 @@ class Catalog(object):
         :param astroquery_dr: Astroquery data release. Only used for
             astroquery cross-matches.
         :type astroquery_dr: string
-        :param output_dir: Output directory for the merged catalog.
-        :type output_dir: string
         :param datalab_logout: Boolean to indicate whether to log out from
          datalab service after cross-match (default=True).
 
@@ -570,7 +574,7 @@ class Catalog(object):
         msgs.info('Creating cross-matched dataframe.')
         merge = self.df.merge(match, left_on=self.id_colname,
                               right_on='source_id', how='left',
-                              suffixes=('_source', '_match'))
+                              suffixes=('', '_{}'.format(table.split('.')[0])))
 
         merged_cat = Catalog(match_name,
                              ra_column_name=self.ra_colname,
@@ -579,17 +583,21 @@ class Catalog(object):
                              table_data=merge.compute())
 
         # Save merged dataframe
-        msgs.info('Saving cross-matched dataframe to {}'.format(
+        if output_dir is None:
+            msgs.info('No output directory specified. Catalog is not saved '
+                      'to disk.')
+        else:
+            msgs.info('Saving cross-matched dataframe to {}'.format(
             output_dir))
 
-        try:
-            merged_cat.save_catalog(output_dir=output_dir,
-                                    file_format='parquet')
-        except:
-            msgs.warn('Merged catalog could not be save in .parquet format')
-            msgs.warn('Instead it has been saved in .csv.')
-            merged_cat.save_catalog(output_dir=output_dir,
-                                    file_format='csv')
+            try:
+                merged_cat.save_catalog(output_dir=output_dir,
+                                        file_format='parquet')
+            except:
+                msgs.warn('Merged catalog could not be save in .parquet format')
+                msgs.warn('Instead it has been saved in .csv.')
+                merged_cat.save_catalog(output_dir=output_dir,
+                                        file_format='csv')
 
         # Remove the temporary folder (default)
         if self.clear_temp_dir:
@@ -780,13 +788,18 @@ class Catalog(object):
                 result_df = pd.concat([result_df, new_row.to_frame().T],
                                       ignore_index=True)
 
-        cross_match = Catalog(match_name,
-                              id_column_name=self.id_colname,
-                              ra_column_name=self.ra_colname,
-                              dec_column_name=self.dec_colname,
-                              table_data=result_df)
+        if result_df is None:
+            msgs.warn('No matches found for any source in the catalog')
+            msgs.warn('Returning None')
+            return None
+        else:
+            cross_match = Catalog(match_name,
+                                  id_column_name=self.id_colname,
+                                  ra_column_name=self.ra_colname,
+                                  dec_column_name=self.dec_colname,
+                                  table_data=result_df)
 
-        return cross_match
+            return cross_match
 
     def get_offset_stars_datalab(self, match_distance, datalab_dict,
                                  n=3, where=None, minimum_distance=3):
@@ -1070,15 +1083,17 @@ class Catalog(object):
         if image_folder_path is None:
             image_folder_path = './survey_images'
             pathlib.Path(image_folder_path).mkdir(parents=True, exist_ok=True)
-            self.get_survey_images(image_folder_path, survey_dicts,
-                                   n_jobs=n_jobs)
+
+        # Download survey images if they are not already present
+        self.get_survey_images(image_folder_path, survey_dicts,
+                               n_jobs=n_jobs)
 
         # Set the file base name
         file_base_name = '{}_aper_phot_part'.format(self.name)
 
         # Remove all previous forced photometry files from temp folder
         for filename in glob.glob(os.path.join('./dask_temp',
-                                              file_base_name+'*.csv')):
+                                               file_base_name+'*.csv')):
             os.remove(filename)
 
         # Loop over all partitions in the catalog dask dataframe
@@ -1154,8 +1169,12 @@ class Catalog(object):
                     if result_df is None:
                         result_df = pd.DataFrame(result_dict, index=[idx])
                     else:
-                        result_df = result_df.append(
-                            pd.DataFrame(result_dict, index=[idx]))
+                        result_df = pd.concat([result_df,
+                                               pd.DataFrame(result_dict,
+                                                            index=[idx])])
+                        # result_df = result_df.append(
+                        #     pd.DataFrame([result_dict, index=[idx]))
+
 
             # Merge the forced photometry results with the original catalog
             partition = partition.merge(result_df, on=self.id_colname)
@@ -1172,6 +1191,8 @@ class Catalog(object):
 
         if output_path is not None:
             new_ddf.to_parquet(output_path)
+            msgs.info('Saved forced photometry catalog to {}'.format(
+                output_path))
 
         if inplace:
             self.df = new_ddf
