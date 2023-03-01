@@ -1060,23 +1060,16 @@ class SurveyImage(Image):
                                          self.fov)
 
         filepath = self.image_dir + '/' + self.source_name + "_" + \
-                   self.survey + "_" + self.band + "_fov{}.fits".format(
+                  self.survey + "_" + self.band + "_fov{}.fits".format(
                    self.fov)
 
         # Retrieve survey specific information
-        image_params = survey.force_photometry_params(self.header,
-                                                      self.band,
-                                                      filepath)
-        exptime = image_params.exp
-        back = image_params.back
-        zero_point = image_params.zpt
-        nanomag_corr = image_params.nanomag_corr
-        ab_correction = image_params.ABcorr
-
-        if back == 'no_back':
-            background = False
-        else:
-            background = True
+        survey.force_photometry_params(self.header, self.band, filepath)
+        exptime = survey.exp
+        background = survey.back
+        zero_point = survey.zpt
+        nanomag_corr = survey.nanomag_corr
+        ab_correction = survey.ab_corr
 
         result = self.calculate_aperture_photometry(
             self.ra, self.dec, zero_point=zero_point,

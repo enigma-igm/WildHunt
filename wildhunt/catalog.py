@@ -7,33 +7,25 @@ import shutil
 import pathlib
 import numpy as np
 import pandas as pd
-
 import multiprocessing as mp
-
 import dask
 import dask.dataframe as dd
-
 import astropy.units as u
 from astropy.table import Table
 from astropy.coordinates import SkyCoord, match_coordinates_sky
-
-from dl import authClient as ac, queryClient as qc, storeClient as sc
 from dl.helpers.utils import convert
+from dl import authClient as ac, queryClient as qc
 
 from IPython import embed
 
+from wildhunt import utils
+from wildhunt import pypmsgs
+from wildhunt import image as whim
 from wildhunt import catalog_defaults as whcd
 from wildhunt import catalog_queries as whcq
-from wildhunt import image as whim
-from wildhunt import pypmsgs
-from wildhunt import utils
-from wildhunt import image
-from wildhunt.surveys import panstarrs, vsa_wsa, legacysurvey, wise
-msgs = pypmsgs.Messages()
+from wildhunt.surveys import panstarrs, vsa_wsa, legacysurvey, unwise
 
-# Set dask temporary directory
-# os.environ.get("DASK_TEMPORARY_DIRECTORY")
-# os.environ["DASK_TEMPORARY_DIRECTORY"] = './dask_temp'
+msgs = pypmsgs.Messages()
 
 
 def retrieve_survey(survey_name, bands, fov, verbosity=1):
@@ -72,7 +64,7 @@ def retrieve_survey(survey_name, bands, fov, verbosity=1):
                                            verbosity=verbosity)
 
     if 'WISE' in survey_name:
-        survey = wise.WISE(bands, fov, survey_name, verbosity=verbosity)
+        survey = unwise.UnWise(bands, fov, survey_name, verbosity=verbosity)
 
     if survey is None:
         print('ERROR')
