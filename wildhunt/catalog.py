@@ -363,12 +363,18 @@ class Catalog(object):
                 df_merged = source.merge(match_df,
                                          how='left',
                                          left_on='match_index',
+                                         suffixes=('',
+                                                   '_{}'.format(
+                                                       column_prefix)),
                                          right_index=True)
             else:
 
                 df_merged = source.merge(match_df[columns],
                                          how='left',
                                          left_on='match_index',
+                                         suffixes=('',
+                                                   '_{}'.format(
+                                                       column_prefix)),
                                          right_index=True)
 
             filename = '{}_{}_merged/part.{}.parquet'.format(

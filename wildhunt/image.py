@@ -21,7 +21,7 @@ from astropy.nddata.utils import Cutout2D
 from astropy.coordinates import SkyCoord, ICRS
 from astropy.wcs.utils import proj_plane_pixel_scales
 
-
+from matplotlib.patches import Circle, Ellipse
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 
@@ -434,7 +434,7 @@ class Image(object):
         subplot = 111
 
         self._simple_plot(n_sigma=n_sigma, fig=fig, subplot=subplot,
-                          color_map=color_map, north=True,)
+                          color_map=color_map, north=True)
 
         plt.show()
 
@@ -606,6 +606,63 @@ class Image(object):
                                  fontproperties={'size': 15, 'weight': 'bold'})
 
         axis.add_artist(artist)
+
+    def _add_aperture_ellipse(self, axis, ra, dec, a, b, angle,
+                              edgecolor='red', linewidth=2):
+        """ Add an aperture ellipse to the image.
+
+        :param axis: The matplotlib axis.
+        :type axis: matplotlib.axes._subplots.AxesSubplot
+        :param ra: The right ascension of the center of the ellipse.
+        :type ra: float
+        :param dec: The declination of the center of the ellipse.
+        :type dec: float
+        :param a: The major axis (2 * semi-major axis) in pixels
+        :type a: float
+        :param b: The minor axis (2 * semi-minor axis) in pixels
+        :type b: float
+        :param angle: The position angle of the major axis in degrees.
+        :type angle: float
+        :param edgecolor: The color of the ellipse (default: red).
+        :type edgecolor: str
+        :param linewidth: The line width of the ellipse (default: 2).
+        :type linewidth: int
+        :return: None
+        """
+
+        artist = Ellipse(xy=(WCS(self.header).wcs_world2pix(ra, dec, 0)),
+                         width=a, height=b, angle=angle,
+                         edgecolor=edgecolor, linewidth=linewidth,
+                         facecolor='None')
+
+        axis.add_artist(artist)
+
+    def _add_aperture_circle(self, axis, ra, dec, radius, edgecolor='red',
+                             linewidth=2):
+        """ Add a circular aperture to the image.
+
+        ToDo: Test this function.
+
+        :param axis: The matplotlib axis.
+        :param ra: The right ascension of the center of the circle.
+        :param dec: The declination of the center of the circle.
+        :param radius: The radius of the circle in arcseconds.
+        :param edgecolor: The color of the circle (default: red).
+        :param linewidth: The line width of the circle (default: 2).
+        :return: None
+        """
+
+        img_wcs = WCS(self.header)
+
+        radius_pix = img_wcs.proj_plane_pixel_scales() * radius
+
+        artist = Circle(xy=(img_wcs.wcs_world2pix(ra, dec, 0)),
+                        radius=radius_pix, edgecolor=edgecolor,
+                        linewidth=linewidth, facecolor='None')
+
+        axis.add_artist(artist)
+
+
 
     def _get_cutout(self, fov):
         """Create a cutout from the image with a given field of view (fov)
