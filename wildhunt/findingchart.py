@@ -447,8 +447,8 @@ def _plot_offset_stars(fig, ra, dec, offset_df, fov, offset_id,
                                   verticalalignment='center', family='serif')
 
                 else:
-                    fig.add_label(ra_off + ra_pos * radius/5., dec_off + dec_pos *
-                              radius/5., label,
+                    fig.add_label(ra_off + ra_pos * radius/5.,
+                                  dec_off + dec_pos * radius/5., label,
                               color=blue, size='large',
                               verticalalignment='center', family='serif')
 

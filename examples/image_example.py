@@ -14,4 +14,9 @@ if __name__ == '__main__':
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111)
     img._simple_plot(axis=ax, north=False)
+    img._add_aperture_circle(ax, img.ra, img.dec, 10, edgecolor='red')
+    img.add_aperture_rectangle(ax, img.ra, img.dec, 10, 20,
+                               angle=20, edgecolor='blue')
+    img._add_slit(ax, img.ra, img.dec, 12, 30,
+                               angle=20, edgecolor='green')
     plt.show()

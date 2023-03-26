@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-A simple example of how to download images from the online image servers
+A simple example showing how to download images from the online image servers
 implemented in wildhunt.
 """
 

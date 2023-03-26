@@ -828,7 +828,7 @@ class Catalog(object):
         :param datalab_dict: Dictionary with keywords to identify offset
         star information.
         :type: dict
-        :param n: Number of offset stars to retrieve. (Maximum: n=5)
+        :param n: Number of offset stars to retrieve. (Maximum: n=26)
         type n: int
         :param where: string
             A string written in ADQL syntax to apply quality criteria on
@@ -840,11 +840,10 @@ class Catalog(object):
 
         msgs.info('Retrieving offset stars for catalog from NOIRLAB Astro '
                   'Datalab.')
-        # Restrict the number of offset stars to be returned to n=5
-        if n > 5:
-            n = 5
-        elif n < 0:
-            n = 1
+        # Restrict the number of offset stars to be returned to n=26
+        if n > 26:
+            msgs.info('Maximum number of offset stars is 26. Setting n to 26.')
+            n = 26
 
         # Serialized offset star query over all catalog partitions
         for idx, partition in enumerate(self.df.partitions):
@@ -899,7 +898,7 @@ class Catalog(object):
             Catalog (and data release) to retrieve the offset star data from.
             See astroquery_dict for implemented catalogs.
         :param n: int
-            Number of offset stars to retrieve. (Maximum: n=5)
+            Number of offset stars to retrieve. (Maximum: n=26)
         :param quality_query: string
             A string written in pandas query syntax to apply quality criteria
             on potential offset stars around the target.
@@ -909,11 +908,10 @@ class Catalog(object):
         """
         msgs.info('Retrieving offset stars for catalog using astroquery.')
 
-        # Restrict the number of offset stars to be returned to n=5
-        if n > 5:
-            n = 5
-        elif n < 0:
-            n = 1
+        # Restrict the number of offset stars to be returned to n=26
+        if n > 26:
+            msgs.info('Maximum number of offset stars is 26. Setting n to 26.')
+            n = 26
 
         # Serialized offset star query over all catalog partitions
         for idx, partition in enumerate(self.df.partitions):
@@ -955,7 +953,7 @@ class Catalog(object):
                 offset_df.to_csv(filename)
 
     def get_offset_stars_ps1(self, radius, data_release='dr2',
-                             catalog='mean', quality_query=None, n=3):
+                             catalog='stack', quality_query=None, n=3):
         """Get offset stars for all targets in the catalog for PanSTARRS
         using the MAST website.
 
@@ -976,17 +974,16 @@ class Catalog(object):
         :param quality_query: A string written in pandas query syntax to apply
             quality criteria on potential offset stars around the target.
         :param n: int
-            Number of offset stars to retrieve. (Maximum: n=5)
+            Number of offset stars to retrieve. (Maximum: n=26)
         :return:
         """
 
         msgs.info('Retrieving offset stars for catalog from PanSTARRS1.')
 
-        # Restrict the number of offset stars to be returned to n=5
-        if n > 5:
-            n = 5
-        elif n < 0:
-            n = 1
+        # Restrict the number of offset stars to be returned to n=26
+        if n > 25:
+            msgs.info('Maximum number of offset stars is 26. Setting n to 26.')
+            n = 25
 
         # Serialized offset star query over all catalog partitions
         for idx, partition in enumerate(self.df.partitions):
@@ -1329,3 +1326,6 @@ def forced_photometry(ra, dec, survey_dicts,
     return result_dict
 
 
+def create_finding_charts(self):
+
+    pass

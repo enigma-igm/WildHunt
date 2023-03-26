@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import string
 import pandas as pd
 
 import astropy.units as u
@@ -16,6 +17,10 @@ from astroquery.ukidss import Ukidss
 from dl import queryClient as qc
 
 from wildhunt import pypmsgs
+
+
+
+from IPython import embed
 
 msgs = pypmsgs.Messages()
 
@@ -59,7 +64,7 @@ example_datalab_dict = {'table': 'ls_dr9.tractor',
                         'mag_name': 'lsdr9_z'}
 
 # ------------------------------------------------------------------------------
-#  Supported surveys, data releases, bands
+#  Query functions for different services
 # ------------------------------------------------------------------------------
 
 
@@ -133,7 +138,7 @@ def get_astroquery_offset(target_name, target_ra, target_dec, match_distance,
     :param quality_query:  A string written in pandas query syntax to apply
         quality criteria on potential offset stars around the target.
     :type quality_query: string
-    :param n: Number of offset stars to retrieve. (Maximum: n=5)
+    :param n: Number of offset stars to retrieve. (Maximum: n=26)
     :type n: int
     :param minimum_distance: Minimum distance to the target in arcsec
     :type minimum_distance: float
@@ -141,6 +146,11 @@ def get_astroquery_offset(target_name, target_ra, target_dec, match_distance,
      given target.
     :rtype: pandas.core.frame.DataFrame
     """
+
+    # Restrict the number of offset stars to be returned to n=26
+    if n > 26:
+        msgs.info('Maximum number of offset stars is 26. Setting n to 26.')
+        n = 26
 
     service = astroquery_dict[catalog]['service']
     cat = astroquery_dict[catalog]['catalog']
@@ -154,6 +164,8 @@ def get_astroquery_offset(target_name, target_ra, target_dec, match_distance,
     df = query_region_astroquery(target_ra, target_dec, match_distance,
                                  service, cat, dr).copy()
 
+    letters = string.ascii_uppercase
+
     if quality_query is not None:
         df.query(quality_query, inplace=True)
 
@@ -164,7 +176,7 @@ def get_astroquery_offset(target_name, target_ra, target_dec, match_distance,
         # Sort DataFrame by match distance
 
         df.sort_values(distance, ascending=True, inplace=True)
-        # Keep only the first three entries
+        # Keep only the first three n entries
         offset_df = df[:n].copy()
 
         # Build the offset DataFrame
@@ -174,9 +186,7 @@ def get_astroquery_offset(target_name, target_ra, target_dec, match_distance,
         offset_df.loc[:, 'offset_ra'] = df[ra]
         offset_df.loc[:, 'offset_dec'] = df[dec]
         for jdx, idx in enumerate(offset_df.index):
-            abc_dict = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E'}
-
-            letter = abc_dict[jdx]
+            letter = letters[jdx]
 
             offset_df.loc[idx, 'offset_name'] = target_name + '_offset_' +  \
                                                 letter
@@ -246,6 +256,11 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius,
     :rtype: pandas.core.frame.DataFrame
     """
 
+    # Restrict the number of offset stars to be returned to n=26
+    if n > 26:
+        msgs.info('Maximum number of offset stars is 26. Setting n to 26.')
+        n = 26
+
     df = query_region_datalab(target_ra, target_dec, radius,
                               datalab_dict=datalab_dict,
                               columns=columns, where=where,
@@ -257,7 +272,7 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius,
     mag = datalab_dict['mag']
     mag_name = datalab_dict['mag_name']
 
-    # distance column is in arcminutes!!
+    letters = string.ascii_uppercase
 
     if df.shape[0] > 0:
         # Sort DataFrame by match distance
@@ -273,9 +288,7 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius,
         offset_df.loc[:, 'offset_dec'] = df[dec]
 
         for jdx, idx in enumerate(offset_df.index):
-            abc_dict = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E'}
-
-            letter = abc_dict[jdx]
+            letter = letters[jdx]
 
             offset_df.loc[idx, 'offset_name'] = target_name + '_offset_' + \
                                                 letter
@@ -411,6 +424,7 @@ def query_region_ps1(ra, dec, radius, survey='dr2', catalog='mean',
     :return: pandas.core.frame.DataFrame
         Returns the dataframe with the returned matches
     """
+
     urlbase = 'https://catalogs.mast.stsci.edu/api/v0.1/panstarrs/'
 
     if add_criteria is None:
@@ -424,7 +438,7 @@ def query_region_ps1(ra, dec, radius, survey='dr2', catalog='mean',
               add_criteria + 'format=csv'.format(survey, catalog, ra, dec,
                                                  radius)
     if verbosity > 0:
-        print('Opening {}'.format(url))
+        msgs.info('Opening {}'.format(url))
 
     response = urlopen(url)
     check_ok = response.msg == 'OK'
@@ -478,11 +492,18 @@ def get_ps1_offset_star(target_name, target_ra, target_dec, radius=300,
         Returns the dataframe with the returned matches
     """
 
+    # Restrict the number of offset stars to be returned to n=26
+    if n > 26:
+        msgs.info('Maximum number of offset stars is 26. Setting n to 26.')
+        n = 26
+
     # Convert radius in degrees
     radius_degree = radius / 3600.
 
-    if verbosity > 1:
-        print('Querying PS1 Archive ({},{}) for {}'.format(catalog,
+    letters = string.ascii_uppercase
+
+    if verbosity > 0:
+        msgs.info('Querying PS1 Archive ({},{}) for {}'.format(catalog,
                                                            data_release,
                                                            target_name))
     # Query the PanStarrs 1 archive
@@ -500,18 +521,17 @@ def get_ps1_offset_star(target_name, target_ra, target_dec, radius=300,
         # Sort DataFrame by match distance
         df.sort_values('distance', ascending=True, inplace=True)
         # Keep only the first three entries
-        offset_df = df[:n]
+        offset_df = df[:n].copy()
 
         # Build the offset DataFrame
         offset_df.loc[:, 'target_name'] = target_name
         offset_df.loc[:, 'target_ra'] = target_ra
         offset_df.loc[:, 'target_dec'] = target_dec
-        offset_df.loc[:, 'offset_ra'] = df.raMean
-        offset_df.loc[:, 'offset_dec'] = df.decMean
+        offset_df.loc[:, 'offset_ra'] = offset_df.loc[:, 'raMean']
+        offset_df.loc[:, 'offset_dec'] = offset_df.loc[:, 'decMean']
         for jdx, idx in enumerate(offset_df.index):
-            abc_dict = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E'}
 
-            letter = abc_dict[jdx]
+            letter = letters[jdx]
 
             offset_df.loc[idx, 'offset_name'] = target_name + '_offset_' + \
                                                 letter

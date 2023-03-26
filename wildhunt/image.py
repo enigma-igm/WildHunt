@@ -12,7 +12,7 @@ import math
 import numpy as np
 import pandas as pd
 
-
+import string
 from astropy import wcs, stats
 import astropy.units as u
 from astropy.io import fits
@@ -20,8 +20,10 @@ from astropy.wcs import WCS
 from astropy.nddata.utils import Cutout2D
 from astropy.coordinates import SkyCoord, ICRS
 from astropy.wcs.utils import proj_plane_pixel_scales
+from astropy.visualization import ZScaleInterval
 
-from matplotlib.patches import Circle, Ellipse
+from matplotlib.patches import Circle, Ellipse, Rectangle
+from matplotlib.collections import PatchCollection
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 
@@ -566,8 +568,186 @@ class Image(object):
 
         return axs
 
+    # TODO: Document and clean up!
+    def finding_chart(self, fov, target_aperture=5, color_scale='zscale',
+                      n_sigma=3, color_map='Greys', scalebar=0.2*u.arcmin,
+                      sb_pad=0.5, sb_borderpad=0.4, corner='lower right',
+                      frameon=True, low_lim=None, upp_lim=None, offset_df=None,
+                      offset_focus=False, offset_id=0,
+                      offset_ra_column_name='offset_ra',
+                      offset_dec_column_name='offset_dec',
+                      offset_mag_column_name='mag_z',
+                      offset_id_column_name='offset_shortname',
+                      label_position='bottom'):
+
+        if offset_focus:
+            im_ra = offset_df.loc[offset_id, offset_ra_column_name]
+            im_dec = offset_df.loc[offset_id, offset_dec_column_name]
+        else:
+            im_ra = self.ra
+            im_dec = self.dec
+
+        self._rotate_north_up()
+
+        chart_img = self.get_cutout_image(im_ra, im_dec, fov)
+        self.data = chart_img.data
+        self.header = chart_img.header
+
+        # Setting up the figure
+        fig = plt.figure(figsize=(12, 12))
+        if offset_df is not None:
+            fig.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.15)
+        else:
+            fig.subplots_adjust(left=0.1, right=0.95, top=0.95, bottom=0.1)
+
+        wcs = WCS(self.header)
+        axs = fig.add_subplot(111, projection=wcs)
+
+        if color_scale == 'zscale':
+            zscale = ZScaleInterval()
+            low_lim, upp_lim = zscale.get_limits(self.data)
+        else:
+            if isinstance(upp_lim, float) and isinstance(low_lim, float):
+                msgs.info('Using user defined color scale limits.')
+            else:
+                msgs.info('Determining color scale limits by sigma clipping.')
+
+                # Sigma-clipping of the color scale
+                mean = np.mean(self.data[~np.isnan(self.data)])
+                std = np.std(self.data[~np.isnan(self.data)])
+                upp_lim = mean + n_sigma * std
+                low_lim = mean - n_sigma * std
+
+        # Plot the image
+        axs.imshow(self.data, origin='lower',
+                   vmin=low_lim,
+                   vmax=upp_lim,
+                   cmap=color_map)
+
+        # Plot the scalebar
+        if scalebar is not None:
+            if isinstance(scalebar, u.Quantity):
+                length = scalebar.to(u.degree).value
+            elif isinstance(scalebar, u.Unit):
+                length = scalebar.to(u.degree)
+            else:
+                raise TypeError('Scalebar must be a Quantity or a Unit.')
+
+            self._add_scalebar(axs, length, pad=sb_pad,
+                               borderpad=sb_borderpad,
+                               corner=corner,
+                               frameon=frameon,
+                               fontsize=12, fontweight='normal')
+
+        # Plot a circular aperture around the target
+        self._add_aperture_circle(axs, self.ra, self.dec, target_aperture)
+
+        # Plot offset stars
+        if offset_df is not None and offset_ra_column_name is not None and \
+            offset_dec_column_name is not None and offset_mag_column_name is \
+                not None and offset_id_column_name is not None:
+            # Mark the offsets on the finding chart
+            self.mark_offset_stars(axs, offset_df, offset_id,
+                                   offset_ra_column_name,
+                                   offset_dec_column_name,
+                                   aperture_radius=2,
+                                   label_position=label_position)
+            # Add the offset star info box
+            self.plot_offset_info_box(axs, offset_df,
+                                      offset_ra_column_name,
+                                      offset_dec_column_name,
+                                      offset_mag_column_name)
+
+        # Add title
+        c = SkyCoord(ra=self.ra, dec=self.dec, unit=(u.degree, u.degree))
+        title = 'RA= {0} ; DEC = {1}'.format(
+            c.ra.to_string(precision=3, sep=":", unit=u.hour),
+            c.dec.to_string(precision=3, sep=":", unit=u.degree,
+                            alwayssign=True))
+        plt.title(title, fontsize=20)
+
+        axs.grid(color='white', ls='dotted')
+
+        axs.set_xlabel('Right Ascension', fontsize=20)
+        axs.set_ylabel('Declination', fontsize=20)
+
+        return fig
+
+    # TODO: Document and clean up!
+    def mark_offset_stars(self, axs, offset_df, offset_id=0,
+                          offset_ra_column_name='offset_ra',
+                          offset_dec_column_name='offset_dec',
+                          aperture_radius=4,
+                          label_position='bottom'):
+
+        position_dict = {"left": [8, 0], "right": [-8, 0], "top": [0, 5],
+                         "bottom": [0, -5], "topleft": [8, 5]}
+
+        ra_pos, dec_pos = position_dict[label_position]
+
+        for num, idx in enumerate(offset_df.index):
+
+            ra_off = offset_df.loc[idx, offset_ra_column_name]
+            dec_off = offset_df.loc[idx, offset_dec_column_name]
+            # Plot circular apertures
+            self._add_aperture_circle(axs, ra_off, dec_off, aperture_radius,
+                                      edgecolor='blue')
+            # Create the labels
+            letters = list(string.ascii_uppercase)
+            label = letters[num]
+            img_wcs = WCS(self.header)
+            x, y = img_wcs.wcs_world2pix(ra_off, dec_off, 0)
+            label_fac = 5
+            if num == offset_id:
+                axs.text(x+ra_pos*label_fac, y+dec_pos*label_fac, label,
+                         color='blue',
+                         size='x-large',
+                         verticalalignment='center', family='serif',)
+
+            else:
+                axs.text(x+ra_pos*label_fac, y+dec_pos*label_fac, label,
+                         color='blue',
+                         size='large',
+                         verticalalignment='center', family='serif')
+
+    # TODO: Document and clean up!
+    def plot_offset_info_box(self, axs, offset_df, ra_column_name,
+                             dec_column_name, mag_column_name):
+
+        target_info = 'Target: RA={:.4f}, DEC={:.4f}'.format(self.ra, self.dec)
+
+        info_list = [target_info]
+
+        for num, idx in enumerate(offset_df.index):
+
+            if True:
+                ra_off = offset_df.loc[idx, ra_column_name]
+                dec_off = offset_df.loc[idx, dec_column_name]
+
+                # Set position angles and separations (East of North)
+                pos_angle = offset_df.loc[idx, 'pos_angle']
+                separation = offset_df.loc[idx, 'separation']
+                dra = offset_df.loc[idx, 'dra_offset']
+                ddec = offset_df.loc[idx, 'ddec_offset']
+                mag = offset_df.loc[idx, mag_column_name]
+
+                info = '{}: RA={:.4f}, DEC={:.4f}, {}={:.2f}, PosAngle={' \
+                       ':.2f}'.format(string.ascii_uppercase[num],
+                                      ra_off,
+                                      dec_off, mag_column_name,
+                                      mag, pos_angle)
+                info_off = 'Sep={:.2f}, Dra={:.2f}, ' \
+                           'Ddec={:.2f}'.format(separation, dra, ddec)
+                info_list.append(info+' '+info_off)
+
+        boxdict = dict(facecolor='white', alpha=1.0, edgecolor='none')
+        axs.text(.02, -0.15, "\n".join(info_list), transform=axs.transAxes,
+                fontsize='small',
+                bbox=boxdict)
+
     def _add_scalebar(self, axis, length, corner='lower right',
-                      pad=0.5, borderpad=0.4, frameon=False):
+                      pad=0.5, borderpad=0.4, fontsize=15,
+                      fontweight='bold', frameon=False):
         """ Add a scalebar to the image.
 
         Function adopted from Aplpy.
@@ -603,7 +783,8 @@ class Image(object):
                                  corner, pad=pad, borderpad=borderpad,
                                  size_vertical=size_vertical,
                                  sep=3, frameon=frameon,
-                                 fontproperties={'size': 15, 'weight': 'bold'})
+                                 fontproperties={'size': fontsize,
+                                                 'weight': fontweight})
 
         axis.add_artist(artist)
 
@@ -641,20 +822,24 @@ class Image(object):
                              linewidth=2):
         """ Add a circular aperture to the image.
 
-        ToDo: Test this function.
-
         :param axis: The matplotlib axis.
+        :type axis: matplotlib.axes._subplots.AxesSubplot
         :param ra: The right ascension of the center of the circle.
+        :type ra: float
         :param dec: The declination of the center of the circle.
+        :type dec: float
         :param radius: The radius of the circle in arcseconds.
+        :type radius: float
         :param edgecolor: The color of the circle (default: red).
+        :type edgecolor: str
         :param linewidth: The line width of the circle (default: 2).
+        :type linewidth: int
         :return: None
         """
 
         img_wcs = WCS(self.header)
-
-        radius_pix = img_wcs.proj_plane_pixel_scales() * radius
+        radius = radius / 3600  # Convert to degrees
+        radius_pix = radius / img_wcs.proj_plane_pixel_scales()[0].value
 
         artist = Circle(xy=(img_wcs.wcs_world2pix(ra, dec, 0)),
                         radius=radius_pix, edgecolor=edgecolor,
@@ -662,7 +847,95 @@ class Image(object):
 
         axis.add_artist(artist)
 
+    def add_aperture_rectangle(self, axis, ra, dec, width, height, angle=0,
+                               frame='world',
+                               edgecolor='red', linewidth=2):
+        """ Add a rectangular aperture to the image.
 
+        This function is adapted from aplpy: https://github.com/aplpy/aplpy
+
+        It correctly rotates the
+        rectangle around its center position, see discussion here
+        https://github.com/aplpy/aplpy/pull/327
+
+        :param axis: The matplotlib axis.
+        :type axis: matplotlib.axes._subplots.AxesSubplot
+        :param ra: The right ascension of the center of the rectangle.
+        :type ra: float
+        :param dec: The declination of the center of the rectangle.
+        :type dec: float
+        :param width: The width of the rectangle in pixels/arcseconds.
+        :type width: float
+        :param height: The height of the rectangle in pixels/arcseconds.
+        :type height: float
+        :param angle: The position angle of the rectangle in degrees.
+        :type angle: float
+        :param frame: The coordinate frame for the width and height dimensions.
+         Can be 'pixel' or 'world' (default: 'world').
+        :type frame: str
+        :param edgecolor: The color of the circle (default: red).
+        :type edgecolor: str
+        :param linewidth: The line width of the circle (default: 2).
+        :type linewidth: int
+        :return:
+        """
+
+        img_wcs = WCS(self.header)
+
+        if frame == 'pixel':
+            pix_x, pix_y = ra, dec
+            pix_w = width
+            pix_h = height
+            transform = axis.transData
+        else:
+            pix_x, pix_y = img_wcs.wcs_world2pix(ra, dec, 0)
+            pix_scale = img_wcs.proj_plane_pixel_scales()
+            sx, sy = pix_scale[0].value, pix_scale[1].value
+
+            pix_w = width / sx / 3600
+            pix_h = height / sy / 3600
+            transform = axis.transData
+
+        xp = pix_x - pix_w / 2.
+        yp = pix_y - pix_h / 2.
+        radeg = np.pi / 180
+        xr = (xp - pix_x) * np.cos((angle) * radeg) - (yp - pix_y) * np.sin(
+            (angle) * radeg) + pix_x
+        yr = (xp - pix_x) * np.sin((angle) * radeg) + (yp - pix_y) * np.cos(
+            (angle) * radeg) + pix_y
+
+        artist = Rectangle(xy=(xr, yr), width=pix_w, height=pix_h, angle=angle,
+                           edgecolor=edgecolor, linewidth=linewidth,
+                           facecolor='None', transform=transform)
+
+        axis.add_artist(artist)
+
+    def _add_slit(self, axis, ra, dec, width, length, angle, edgecolor='red',
+                  linewidth=2):
+        """ Add a slit rectangle to the image.
+
+        :param axis: The matplotlib axis.
+        :type axis: matplotlib.axes._subplots.AxesSubplot
+        :param ra: The right ascension of the center of the slit.
+        :type ra: float
+        :param dec: The declination of the center of the slit.
+        :type dec: float
+        :param width: The length of the slit in arcseconds.
+        :type width: float
+        :param length: The length of the slit in arcseconds.
+        :type length: float
+        :param angle: The position angle of the slit in degrees.
+        :type angle: float
+        :param edgecolor: The color of the slit (default: red).
+        :type edgecolor: str
+        :param linewidth: The line width of the slit (default: 2).
+        :type linewidth: int
+        :return: None
+        """
+
+        self.add_aperture_rectangle(axis, ra, dec, width, length, angle=angle,
+                                    frame='world', edgecolor=edgecolor,
+                                    linewidth=linewidth)
 
     def _get_cutout(self, fov):
         """Create a cutout from the image with a given field of view (fov)
