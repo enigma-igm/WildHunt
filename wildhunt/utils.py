@@ -1,8 +1,32 @@
 
+from astropy import stats
 from astropy import units as u
 from astropy.coordinates import Angle
 
 import numpy as np
+
+
+def nan_mad_std(data, axis=None, func=None):
+    """
+
+    Wrapper for astropy.stats.mad_std which ignores nans, so as to
+    prevent bugs when using sigma_clipped_stats with the axis keyword
+    and stdfunc=astropy.stats.mad_std
+
+    Args:
+        data (array-like):
+            Data array or object that can be converted to an array.
+        axis (int, sequence of int, None, optional):
+            Axis along which the robust standard deviations are
+            computed.  The default (`None`) is to compute the robust
+            standard deviation of the flattened array.
+
+    Returns:
+        float, `numpy.ndarray`: The robust standard deviation of the
+        input data.  If ``axis`` is `None` then a scalar will be
+        returned, otherwise a `~numpy.ndarray` will be returned.
+    """
+    return stats.mad_std(data, axis=axis, func=func, ignore_nan=True)
 
 
 def coord_to_name(dra, ddec, epoch='J'):

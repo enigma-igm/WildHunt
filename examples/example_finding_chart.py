@@ -63,7 +63,8 @@ def show_single_finding_chart():
                       offset_df=offset_target,
                       # If you want to focus on the offset star uncomment
                       offset_focus=True, offset_id=offset_target.index[0],
-                      offset_mag_column_name='ps1_dr2_stack_psfmag_y')
+                      offset_mag_column_name='ps1_dr2_stack_psfmag_y',
+                      color_scale='zscale')
     # Show the plot
     plt.show()
 
@@ -79,16 +80,16 @@ def generate_finding_charts():
     cat = whcat.Catalog('example', 'ps_ra', 'ps_dec', 'wise_designation',
                         table_data=df[:100])
 
-    # offset_star_file = 'example_ps1_OFFSETS.csv'
+    offset_star_file = 'example_ps1_OFFSETS.csv'
 
-    # cat.create_finding_charts(finding_chart_fov,
-    #                           offset_star_file=offset_star_file,
-    #                           survey='PS1', band='i',
-    #                           image_folder_path='./cutouts',
-    #                           offset_focus=True, offset_focus_id=0,
-    #                           offset_mag_colname='ps1_dr2_stack_psfmag_y')
+    cat.create_finding_charts(finding_chart_fov,
+                              offset_star_file=offset_star_file,
+                              survey='PS1', band='i',
+                              image_folder_path='./cutouts',
+                              offset_focus=True, offset_focus_id=0,
+                              offset_mag_colname='ps1_dr2_stack_psfmag_y')
 
-    # offset_star_file = 'example_ls_dr9_OFFSETS.csv'
+    offset_star_file = 'example_ls_dr9_OFFSETS.csv'
 
     # cat.create_finding_charts(finding_chart_fov,
     #                           offset_star_file=offset_star_file,
@@ -97,14 +98,14 @@ def generate_finding_charts():
     #                           offset_focus=True, offset_focus_id=0,
     #                           offset_mag_colname='mag_z')
 
-    offset_star_file = 'example_ukidssdr11las_OFFSETS.csv'
-
-    cat.create_finding_charts(finding_chart_fov,
-                              offset_star_file=offset_star_file,
-                              survey='UKIDSSDR11PLUSLAS', band='J',
-                              image_folder_path='./cutouts',
-                              offset_focus=False, offset_focus_id=0,
-                              offset_mag_colname='jAperMag3')
+    # offset_star_file = 'example_ukidssdr11las_OFFSETS.csv'
+    #
+    # cat.create_finding_charts(finding_chart_fov,
+    #                           offset_star_file=offset_star_file,
+    #                           survey='UKIDSSDR11PLUSLAS', band='J',
+    #                           image_folder_path='./cutouts',
+    #                           offset_focus=False, offset_focus_id=0,
+    #                           offset_mag_colname='jAperMag3')
 
 if __name__ == '__main__':
 

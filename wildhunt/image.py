@@ -580,8 +580,8 @@ class Image(object):
         :param target_aperture: The size of the target aperture in arcseconds.
         :type target_aperture: float
         :param color_scale: The color scale option to use for the image. The
-         default option is 'zscale'. At the moment all other input string will
-         default to sigma clipping if the color scale limits are not provided.
+         default option is 'zscale'. The alternative option is 'sigma_clip',
+         which uses the n_sigma parameter to determine the color scale limits.
         :type color_scale: str
         :param n_sigma: The number of sigma for the color scale sigma clipping.
         :type n_sigma: int
@@ -601,10 +601,12 @@ class Image(object):
          scalebar.
         :type frameon: bool
         :param low_lim: The lower limit of the color scale. This overrides
-        the n_sigma parameter if both low_lim and upp_lim are provided.
+         the automatic color scale method if both low_lim and upp_lim are
+         provided.
         :type low_lim: float
         :param upp_lim: The upper limit of the color scale. This overrides
-        the n_sigma parameter if both low_lim and upp_lim are provided.
+         the automatic color scale method if both low_lim and upp_lim are
+         provided.
         :type upp_lim: float
         :param offset_df: The offset star dataframe.
         :type offset_df: pandas.DataFrame
@@ -655,20 +657,28 @@ class Image(object):
         wcs = WCS(self.header)
         axs = fig.add_subplot(111, projection=wcs)
 
-        if color_scale == 'zscale':
-            zscale = ZScaleInterval()
-            low_lim, upp_lim = zscale.get_limits(self.data)
+        if isinstance(upp_lim, float) and isinstance(low_lim, float):
+            msgs.info('Using user defined color scale limits.')
         else:
-            if isinstance(upp_lim, float) and isinstance(low_lim, float):
-                msgs.info('Using user defined color scale limits.')
-            else:
-                msgs.info('Determining color scale limits by sigma clipping.')
 
-                # Sigma-clipping of the color scale
-                mean = np.mean(self.data[~np.isnan(self.data)])
-                std = np.std(self.data[~np.isnan(self.data)])
-                upp_lim = mean + n_sigma * std
-                low_lim = mean - n_sigma * std
+            if color_scale == 'zscale':
+                msgs.info('Determining color scale limits by zscale.')
+                zscale = ZScaleInterval()
+                low_lim, upp_lim = zscale.get_limits(self.data)
+            elif color_scale == 'sigma_clip':
+                    msgs.info('Determining color scale limits by sigma clipping.')
+
+                    # Sigma-clipping of the color scale
+                    mean, median, sigma = stats.sigma_clipped_stats(
+                        self.data, mask=np.logical_not(
+                            np.isfinite(self.data) & (self.data != 0.0)),
+                        sigma=3.0, cenfunc='median', stdfunc=utils.nan_mad_std,
+                        maxiters=10)
+
+                    upp_lim = median + n_sigma * sigma
+                    low_lim = median - n_sigma * sigma
+            else:
+                raise ValueError('Color scale option not recognized.')
 
         # Plot the image
         axs.imshow(self.data, origin='lower',
@@ -1448,7 +1458,8 @@ class SurveyImage(Image):
 
                 if self.fov <= file_fov:
 
-                    data, header = fits.getdata(filename, header=True)
+                    data, header = fits.getdata(filename, header=True,
+                                                ignore_missing_simple=True)
                     file_found = True
                     file_path = filename
                     open_file_fov = file_fov
