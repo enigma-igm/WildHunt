@@ -526,8 +526,8 @@ class Image(object):
             msgs.info('Determining color scale limits by sigma clipping.')
 
             # Sigma-clipping of the color scale
-            mean = np.mean(self.data[~np.isnan(self.data)])
-            std = np.std(self.data[~np.isnan(self.data)])
+            mean = np.nanmean(self.data[~np.isnan(self.data)])
+            std = np.nanstd(self.data[~np.isnan(self.data)])
             upp_lim = mean + n_sigma * std
             low_lim = mean - n_sigma * std
 
