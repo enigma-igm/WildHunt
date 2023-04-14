@@ -463,7 +463,7 @@ class Image(object):
                      color_map='viridis', axis=None, north=False,
                      scalebar=5*u.arcsecond, sb_pad=0.5, sb_borderpad=0.4,
                      corner='lower right', frameon=False, low_lim=None,
-                     upp_lim=None, logscale=False):
+                     upp_lim=None, logscale=False, color_scale='sigma_clip'):
         """ Simple plot function for the image data.
 
         :param n_sigma: The number of sigma for the color scale.
@@ -502,6 +502,10 @@ class Image(object):
         :param logscale: A boolean to indicate whether to use a log scale
         for the color scale.
         :type logscale: bool
+        :param color_scale: The color scale option to use for the image. The
+         default option is 'zscale'. The alternative option is 'sigma_clip',
+         which uses the n_sigma parameter to determine the color scale limits.
+        :type color_scale: str
         :return: matplotlib axis
         :rtype: matplotlib.axes._subplots.AxesSubplot
         """
@@ -523,13 +527,25 @@ class Image(object):
         if isinstance(upp_lim, float) and isinstance(low_lim, float):
             msgs.info('Using user defined color scale limits.')
         else:
-            msgs.info('Determining color scale limits by sigma clipping.')
 
-            # Sigma-clipping of the color scale
-            mean = np.nanmean(self.data[~np.isnan(self.data)])
-            std = np.nanstd(self.data[~np.isnan(self.data)])
-            upp_lim = mean + n_sigma * std
-            low_lim = mean - n_sigma * std
+            if color_scale == 'zscale':
+                msgs.info('Determining color scale limits by zscale.')
+                zscale = ZScaleInterval()
+                low_lim, upp_lim = zscale.get_limits(self.data)
+            elif color_scale == 'sigma_clip':
+                msgs.info('Determining color scale limits by sigma clipping.')
+
+                # Sigma-clipping of the color scale
+                mean, median, sigma = stats.sigma_clipped_stats(
+                    self.data, mask=np.logical_not(
+                        np.isfinite(self.data) & (self.data != 0.0)),
+                    sigma=3.0, cenfunc='median', stdfunc=utils.nan_mad_std,
+                    maxiters=10)
+
+                upp_lim = median + n_sigma * sigma
+                low_lim = median - n_sigma * sigma
+            else:
+                raise ValueError('Color scale option not recognized.')
 
         if logscale:
             # To avoid np.NaN for negative flux values in the logNorm
