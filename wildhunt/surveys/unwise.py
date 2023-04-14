@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
+import os
+import tarfile
 import pandas as pd
-
 
 from wildhunt import pypmsgs
 from wildhunt.surveys import imagingsurvey
@@ -9,14 +10,15 @@ from wildhunt.surveys import imagingsurvey
 msgs = pypmsgs.Messages()
 
 
-class LegacySurvey(imagingsurvey.ImagingSurvey):
-    """ Legacy Survey class deriving from the ImagingSurvey class to handle
-    image downloads and aperture photometry for the Legacy Survey.
+class UnWise(imagingsurvey.ImagingSurvey):
+    """ UnWise class deriving from the ImagingSurvey class to handle
+    image downloads and aperture photometry for the unWISE image
+    service.
 
     """
 
     def __init__(self, bands, fov, name, verbosity=1):
-        """ Initialize the LegacySurvey class.
+        """ Initialize the UnWise class.
 
         :param bands: List of survey filter bands.
         :type bands: list
@@ -24,12 +26,15 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
         :type fov: int
         :param name: Name of the survey.
         :type name: str
+        :param verbosity: Verbosity level.
+        :type verbosity: int
+        :return: None
         """
 
-        super(LegacySurvey, self).__init__(bands, fov, name, verbosity)
+        super(UnWise, self).__init__(bands, fov, name, verbosity)
 
     def download_images(self, ra, dec, image_folder_path, n_jobs=1):
-        """ Download images from the online image server for Legacy Survey.
+        """ Download images from the online services for unWISE.
 
         :param ra: Right ascension of the sources in decimal degrees.
         :type ra: numpy.ndarray
@@ -59,8 +64,9 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
                     url = self.download_table.loc[idx, 'url']
                     self.download_image_from_url(url, image_name)
 
-        else:
+            self.extract_images()
 
+        else:
             msgs.info('All images already exist.')
             msgs.info('Download canceled.')
 
@@ -80,27 +86,25 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
             for band in bands:
 
                 # Convert field of view in arcsecond to pixel size
-                # (1 pixel = 0.262 arcseconds for g,r,z and 2.75 arcseconds
-                # for W1, W2)
+                # (1 pixel =  2.75 arcseconds for (un)WISE)
 
-                if band in ['1', '2']:
-                    release = 'unwise-neo6'
-                    pixelscale = 2.75
+                if 'all' in self.name:
+                    release = 'allwise'
                 else:
-                    release = 'ls-dr' + self.name[6:]
-                    pixelscale = 0.262
+                    release = self.name.split("-",1)[1]
+
+                pixelscale = 2.75
                 size = self.fov * 1 / pixelscale
 
                 # Create image name
                 image_name = obj_name + "_" + self.name + "_" + \
                              band + "_fov" + '{:d}'.format(self.fov)
 
-                url = (
-                    'http://legacysurvey.org/viewer/fits-cutout/?ra={}&dec='
-                    '{}&layer={} &pixscale={}&bands={}&size={}').format(
-                    ra, dec, release, str(pixelscale), band, str(int(size)))
+                url = ("http://unwise.me/cutout_fits?version={}&ra={}&dec={}"
+                       "&size={}&bands={}&file_img_m=on").format(
+                    release, ra, dec, str(int(size)), band)
 
-                # Implementing concat instead of deprecated append
+                # Implementing concat instead of review append
                 new_entry = pd.DataFrame(data={'image_name': image_name,
                                                'url': url},
                                          index=[0])
@@ -108,9 +112,25 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
                                                 new_entry],
                                                 ignore_index=True)
 
+    def extract_images(self,):
+
+        for image_name in self.download_table['image_name']:
+            tar_file = tarfile.open(self.image_folder_path + '/' + image_name +
+                                    '.tar.gz')
+            file_name = tar_file.firstmember.name
+            untar = tar_file.extractfile(file_name)
+            untar = untar.read()
+
+            output = open(self.image_folder_path + '/' + image_name + '.fits',
+                          'wb')
+            output.write(untar)
+            output.close()
+
+            os.remove(self.image_folder_path + '/' + image_name + '.tar.gz')
+
     def force_photometry_params(self, header, band, filepath=None):
-        """Set parameters to calculate aperture photometry for the Legacy
-        Survey imaging.
+        """Set parameters to calculate aperture photometry for the unWISE
+        survey imaging.
 
         :param header: Image header
         :type header: astropy.io.fits.header.Header
@@ -119,19 +139,7 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
         :param filepath: File path to the image
         :type filepath: str
 
-        :return: None
+        :return None
         """
 
-        zpt = {"g": 22.5, "r": 22.5, "z": 22.5, "1": 22.5, "2": 22.5}
-
-        self.exp = 1.
-        self.back = False
-        self.zpt = zpt[band]
-        self.nanomag_corr = 1.
-
-        if band == '1':
-            self.ab_corr = 2.699
-        elif band == '2':
-            self.ab_corr = 3.339
-        else:
-            self.ab_corr = 0.
+        raise NotImplementedError

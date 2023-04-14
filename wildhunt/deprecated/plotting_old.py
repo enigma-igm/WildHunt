@@ -16,9 +16,8 @@ from astropy.wcs.utils import proj_plane_pixel_scales
 import matplotlib.pyplot as plt
 
 from wildhunt import utils, catalog
-import wildhunt.image as whim
+import wildhunt as whim
 
-from IPython import embed
 
 def plot_source_images(ra, dec, survey_dicts, fov, auto_download=True,
                        n_col=5, image_folder_path='cutouts'):

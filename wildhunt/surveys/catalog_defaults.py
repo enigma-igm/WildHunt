@@ -1,3 +1,12 @@
+#!/usr/bin/env python
+
+""" This module contains default dictionaries used in the wildhunt Catalog
+class.
+
+Specifically it defines presets for online cross-matching of catalogs, including
+the default columns to be returned from the cross-matching service.
+
+"""
 
 ls_dr9_default_columns = """
       match.objid,
@@ -32,6 +41,7 @@ ls_dr9_default_columns = """
       match.ebv, 
   """
 
+
 unwise_dr1_default_columns = """
     match.ra,
     match.dec,
@@ -65,3 +75,18 @@ catwise2020_default_columns = """
     match.cc_flags,
     match.ab_flags,
 """
+
+catalog_presets = {
+    'DELSDR9': {'service': 'datalab', 'table': 'ls_dr9.tractor',
+                'columns': ls_dr9_default_columns},
+    'UNWISE': {'service': 'datalab', 'table': 'unwise_dr1.object',
+               'columns': unwise_dr1_default_columns},
+    'CATWISE': {'service': 'datalab', 'table': 'catwise2020.main',
+                'columns': catwise2020_default_columns},
+    'UKIDSSDR11LAS': {'service': 'astroquery', 'table': 'ukidssdr11las'},
+    'VIKINGDR5': {'service': 'astroquery', 'table': 'vikingdr5'},
+}
+
+
+
+
