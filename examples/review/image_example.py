@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
 
-    filename = 'J080008.92+103115.65_UHS_J_fov150.fits'
+    filename = '../J080008.92+103115.65_UHS_J_fov150.fits'
 
     # Instantiate the image class
     img = whim.Image(filename, exten=1)

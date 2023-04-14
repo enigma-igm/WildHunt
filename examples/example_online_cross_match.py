@@ -8,8 +8,6 @@ online catalogs.
 import pandas as pd
 from wildhunt import catalog
 
-from IPython import embed
-
 if __name__ == "__main__":
 
     # Instantiate the catalog class, loading the pselqs_quasars.csv file

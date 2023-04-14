@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """
 
-Main module for generating the files required to perform observations at the telescope
+Main module for generating the files required to perform observations at the
+telescope.
 
 """
 import os
@@ -12,15 +13,13 @@ import astropy.units as u
 from astropy.coordinates import SkyCoord
 
 from wildhunt.utils import coord_to_name, degree_to_hms
-from wildhunt import image as whim
-from wildhunt import findingchart as whfc
 
-from IPython import embed
+
 
 def instrument_observations_setup(telescope, instrument, table, ra_column_name, dec_column_name, target_column_name,
                                   mag_column_name, offset_ra_column_name, offset_dec_column_name,
                                   offset_mag_column_name, output_starlist, pos_angle_column_name = None,
-                                  genertate_fcs = True, survey = 'DELSDR9', band = 'r', aperture = 2, fov = 120,
+                                  survey = 'DELSDR9', band = 'r', aperture = 2, fov = 120,
                                   image_folder_path = './cutouts', n_jobs = 1):
     """ Calls the different functions that generate the required files (finding charts, starlist, OBs...) to observe
     with a specific telescope
@@ -70,10 +69,10 @@ def instrument_observations_setup(telescope, instrument, table, ra_column_name, 
                      offset_ra_column_name, offset_dec_column_name, offset_mag_column_name,
                      pos_angle_column_name, band)
 
-        if genertate_fcs == True:
-            finding_charts_generator(df, ra_column_name, dec_column_name, target_column_name, offset_ra_column_name,
-                                    offset_dec_column_name, offset_mag_column_name, pos_angle_column_name,
-                                    survey, band, aperture, fov, image_folder_path, n_jobs)
+        # if genertate_fcs == True:
+        #     finding_charts_generator(df, ra_column_name, dec_column_name, target_column_name, offset_ra_column_name,
+        #                             offset_dec_column_name, offset_mag_column_name, pos_angle_column_name,
+        #                             survey, band, aperture, fov, image_folder_path, n_jobs)
 
     except:
         print('ERROR: instrument not yet implemented')
@@ -246,67 +245,3 @@ def vlt(instrument, table, ra_column_name, dec_column_name, mag_column_name,
             file.write(filedata)
 
     return df
-
-def finding_charts_generator(df, ra_column_name, dec_column_name, target_column_name, offset_ra_column_name,
-                              offset_dec_column_name, offset_mag_column_name, pos_angle_column_name,
-                              survey = 'DELSDR9', band = 'r', aperture = 2, fov = 120,
-                              image_folder_path = './cutouts', n_jobs = 1):
-    """ Function that generates finding charts
-            :param df: dataframe
-                Pandas dataframe from where to get all the important info
-            :param ra_column_name: string
-                Column name for the right ascension of the targets in decimal degrees
-            :param dec_column_name: string
-                Column name for the declination of the targets in decimal degrees
-            :param target_column_name: string
-                Column name for the unique ID of the targets
-            :param offset_ra_column_name: string
-                Offset star dataframe right ascension column name
-            :param offset_dec_column_name: string
-                Offset star dataframe declination column name
-            :param offset_mag_column_name: string
-                Offset star dataframe magnitude column name
-            :param pos_angle_column_name: string
-                Column name of the position angle between the target (at the center) and the star in degrees
-            :param survey: string
-                Survey name
-            :param band: string
-                Passband name
-            :param aperture: float
-                Size of the plotted aperture in arcseconds
-            :param fov: float
-                Field of view in arcseconds
-            :param image_folder_path: string
-                Path to where the image will be stored
-            :param n_jobs: int
-                Number of jobs to perform parallel download of the images for the FCs"""
-
-    ra_targ = df[ra_column_name].values
-    dec_targ = df[dec_column_name].values
-
-    # Download the cutouts
-    survey_dict = [
-        {'survey': survey, 'bands': [band],
-         'fov': fov}
-    ]
-
-    whim.get_images(ra_targ,
-                    dec_targ,
-                    'cutouts',
-                    survey_dict,
-                    n_jobs=n_jobs)
-
-    # Create the finding charts
-    whfc.make_finding_charts(df, ra_column_name, dec_column_name,
-                             target_column_name, survey, band,
-                             aperture, fov, image_folder_path,
-                             offset_table=df,
-                             offset_id=0,
-                             offset_focus=False,
-                             offset_ra_column_name=offset_ra_column_name,
-                             offset_dec_column_name=offset_dec_column_name,
-                             offset_id_column_name=target_column_name,
-                             pos_angle_column_name=pos_angle_column_name,
-                             offset_mag_column_name=offset_mag_column_name,
-                             format='png',
-                             auto_download=False)

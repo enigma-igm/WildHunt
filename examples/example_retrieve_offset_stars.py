@@ -76,11 +76,12 @@ def retrieve_ps1_offsets(target_cat):
 
     # Create offset star catalog with Pan-STARRS1
     quality_query = 'iMeanPSFMag > 15 and iMeanPSFMag < 20.5'
-    target_cat.get_offset_stars_ps1(100, quality_query=quality_query)
+    target_cat.get_offset_stars_ps1(100, quality_query=quality_query,
+                                    catalog='mean')
 
     # Read the offset star catalog.
     df = pd.read_csv('{}_{}_OFFSETS.csv'.format(
-        'example', 'ukidssdr11las'))
+        'example', 'ps1'))
     # Print it df to screen for example purposes.
     print(df)
 
@@ -95,8 +96,8 @@ if __name__ == "__main__":
     # retrieve_datalab_offsets(cat)
 
     # Retrieve offset stars from astroquery services
-    retrieve_astroquery_offsets(cat)
+    # retrieve_astroquery_offsets(cat)
 
     # Retrieve offset stars from Pan-STARRS1 services
-    # retrieve_ps1_offsets(cat)
+    retrieve_ps1_offsets(cat)
 

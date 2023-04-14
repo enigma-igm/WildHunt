@@ -10,8 +10,6 @@ from astropy.table import Table
 from wildhunt import utils, pypmsgs
 from wildhunt.surveys import imagingsurvey
 
-from IPython import embed
-
 msgs = pypmsgs.Messages()
 
 
@@ -83,7 +81,6 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
         else:
             msgs.info('All images already exist.')
             msgs.info('Download canceled.')
-
 
     def batch_setup(self,):
 

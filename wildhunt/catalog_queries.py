@@ -18,10 +18,6 @@ from dl import queryClient as qc
 
 from wildhunt import pypmsgs
 
-
-
-from IPython import embed
-
 msgs = pypmsgs.Messages()
 
 
@@ -219,7 +215,7 @@ def get_astroquery_offset(target_name, target_ra, target_dec, match_distance,
              mag, 'separation', 'pos_angle', 'dra_offset',
              'ddec_offset']]
     else:
-        print("Offset star for {} not found.".format(target_name))
+        msgs.warn("Offset star for {} not found.".format(target_name))
         return pd.DataFrame()
 
 
@@ -328,7 +324,7 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius,
              'ddec_offset']]
 
     else:
-        print("Offset star for {} not found.".format(target_name))
+        msgs.warn("Offset star for {} not found.".format(target_name))
 
         return pd.DataFrame()
 
@@ -429,7 +425,8 @@ def query_region_ps1(ra, dec, radius, survey='dr2', catalog='mean',
 
     if add_criteria is None:
         url = urlbase + \
-              '{}/{}?ra={}&dec={}&radius={}&format=csv'.format(survey, catalog,
+              '{}/{}.csv?ra={}&dec={}&radius={}&format=csv'.format(survey,
+                                                                catalog,
                                                                ra,
                                                                dec,
                                                                radius)
@@ -512,12 +509,18 @@ def get_ps1_offset_star(target_name, target_ra, target_dec, radius=300,
                           catalog=catalog, add_criteria=None,
                           verbosity=verbosity)
 
+    if df is None:
+        msgs.warn("Offset star for {} not found.".format(target_name))
+        return pd.DataFrame()
+
     # Drop duplicated targets
     df.drop_duplicates(subset='objName', inplace=True)
+
     # Apply quality criteria query
     if quality_query is not None:
         df.query(quality_query, inplace=True)
     if df.shape[0] > 0:
+
         # Sort DataFrame by match distance
         df.sort_values('distance', ascending=True, inplace=True)
         # Keep only the first three entries
@@ -575,5 +578,5 @@ def get_ps1_offset_star(target_name, target_ra, target_dec, radius=300,
                           'offset_dec', mag, 'separation', 'pos_angle',
                           'dra_offset', 'ddec_offset']]
     else:
-        print("Offset star for {} not found.".format(target_name))
+        msgs.warn("Offset star for {} not found.".format(target_name))
         return pd.DataFrame()

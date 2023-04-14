@@ -1,123 +1,34 @@
 #!/usr/bin/env python
 
+""" Python module to generate multi-band image plots for a given source.
+
+These functions are used in the inspector GUI.
+
+"""
 
 import math
-import glob
-import aplpy
 import numpy as np
-
-from astropy.io import fits
-from astropy import wcs
-from astropy.coordinates import SkyCoord
-from astropy import units as u
-from astropy.nddata.utils import Cutout2D
-from astropy.wcs.utils import proj_plane_pixel_scales
-
+import astropy.units as u
 import matplotlib.pyplot as plt
 
-from wildhunt import utils, catalog
-import wildhunt.image as whim
+from astropy.wcs import WCS
+from astropy.wcs.utils import proj_plane_pixel_scales
 
-from IPython import embed
-
-def plot_source_images(ra, dec, survey_dicts, fov, auto_download=True,
-                       n_col=5, image_folder_path='cutouts'):
-    """Plot image cutouts for all specified surveys/bands for a single
-    source defined by ra, dec, with auto_download."""
-
-    n_images = np.sum([len(dict['bands']) for dict in survey_dicts])
-
-    print(n_images)
-
-
-    n_row = int(math.ceil(n_images / n_col))
-
-    fig = plt.figure(figsize=(5*n_col, 5*n_row))
-
-    fig.subplots_adjust(left=0.17, bottom=0.15, right=0.95, top=0.95)
-
-    survey_list = []
-    band_list = []
-    for dict in survey_dicts:
-        for band in dict['bands']:
-            survey_list.append(dict['survey'])
-            band_list.append(band)
-
-    print(survey_list, band_list)
-    for idx, survey in enumerate(survey_list):
-
-        img = whim.Image(ra, dec, survey, band_list[idx], image_folder_path,
-                         fov=fov)
-
-        axs = img._plot_axis(fig, subplot=(n_row, n_col, idx+1), fov=20)
-
-        # axs = img._simple_plot(fig, subplot=(n_row, n_col, idx+1), fov=10)
-        # embed()
-        # axs.get_xaxis().set_visible(False)
-        # axs.get_yaxis().set_visible(False)
-
-    plt.show()
-
-
-
-# ------------------------------------------------------------------------------
-#  Plotting functions for image_cutouts (OLD ROUTINES, MAYB BE UPDATED)
-# ------------------------------------------------------------------------------
-
-def open_image(filename, ra, dec, fov, image_folder_path, verbosity=0):
-
-    """Opens an image defined by the filename with a fov of at least the
-    specified size (in arcseonds).
-
-    :param filename:
-    :param ra:
-    :param dec:
-    :param fov:
-    :param image_folder_path:
-    :param verbosity:
-    :return:
-    """
-
-    filenames_available = glob.glob(filename)
-    file_found = False
-    open_file_fov = None
-    file_path = None
-    if len(filenames_available) > 0:
-        for filename in filenames_available:
-
-            try:
-                file_fov = int(filename.split("_")[3].split(".")[0][3:])
-            except:
-                file_fov = 9999999
-
-            if fov <= file_fov:
-                data, hdr = fits.getdata(filename, header=True)
-                file_found = True
-                file_path =filename
-                open_file_fov = file_fov
-
-    if file_found:
-        if verbosity > 0:
-            print("Opened {} with a fov of {} "
-                  "arcseconds".format(file_path, open_file_fov))
-
-        return data, hdr, file_path
-
-    else:
-        if verbosity > 0:
-            print("File {} in folder {} not found. Target with RA {}"
-                  " and Decl {}".format(filename, image_folder_path,
-                                        ra, dec))
-        return None, None, None
+from wildhunt.utils import coord_to_name
+from wildhunt import image as whim
 
 
 def make_mult_png_fig(ra, dec, surveys, bands,
-                  fovs, apertures, square_sizes, image_folder_path, mag_list=None,
-                  magerr_list=None, sn_list=None,
-                  forced_mag_list=None, forced_magerr_list=None,
-                  forced_sn_list=None, n_col=3,
-                  n_sigma=3, color_map_name='viridis',
-                  add_info_label=None, add_info_value=None, verbosity=0):
+                      fovs, apertures, square_sizes, image_dir, mag_list=None,
+                      magerr_list=None, sn_list=None,
+                      forced_mag_list=None, forced_magerr_list=None,
+                      forced_sn_list=None, n_col=3,
+                      n_sigma=3, color_map_name='gray',
+                      scalebar=5 * u.arcsecond,
+                      ell_a=None, ell_b=None, ell_theta=None, ell_color='red',
+                      ell_display=None,
+                      add_info_label=None, add_info_value=None,
+                      add_cross=False, cross_color='red'):
     """Create a figure to plot cutouts for one source in all specified surveys
     and bands.
 
@@ -137,7 +48,7 @@ def make_mult_png_fig(ra, dec, surveys, bands,
         length has to be equal to surveys, bands and fovs
     :param square_sizes: list of floats
         List of
-    :param image_folder_path: string
+    :param image_dir: string
         Path to the directory where all the images are be stored
     :param mag_list: list of floats
         List of magnitudes for each survey/band
@@ -175,14 +86,20 @@ def make_mult_png_fig(ra, dec, surveys, bands,
     fig = plt.figure(figsize=(5*n_col, 5*n_row))
 
     fig = _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
-                  fovs, apertures, square_sizes, image_folder_path, mag_list,
-                  magerr_list, sn_list,
-                  forced_mag_list, forced_magerr_list,
-                  forced_sn_list, n_sigma, color_map_name, verbosity)
+                              fovs, apertures, square_sizes, image_dir, mag_list,
+                              magerr_list, sn_list,
+                              forced_mag_list, forced_magerr_list,
+                              forced_sn_list, scalebar,
+                              ell_a, ell_b, ell_theta, ell_color,
+                              ell_display,
+                              n_sigma,
+                              color_map_name,
+                              add_cross=add_cross, cross_color='red')
 
-    coord_name = utils.coord_to_name(np.array([ra]),
+    coord_name = coord_to_name(np.array([ra]),
                                   np.array([dec]),
                                   epoch="J")
+
     if add_info_label is None or add_info_value is None:
         fig.suptitle(coord_name[0])
     else:
@@ -192,11 +109,14 @@ def make_mult_png_fig(ra, dec, surveys, bands,
 
 
 def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
-                  fovs, apertures, square_sizes, image_folder_path, mag_list=None,
-                  magerr_list=None, sn_list=None,
-                  forced_mag_list=None, forced_magerr_list=None,
-                  forced_sn_list=None,
-                  n_sigma=3, color_map_name='viridis', verbosity=0):
+                        fovs, apertures, square_sizes, image_dir, ID=None, mag_list=None,
+                        magerr_list=None, sn_list=None,
+                        forced_mag_list=None, forced_magerr_list=None,
+                        forced_sn_list=None, scalebar=5 * u.arcsecond,
+                        ell_a=None, ell_b=None, ell_theta=None, ell_color='red',
+                        ell_display=None, ell_factor=np.array([1]),
+                        add_cross=False, cross_color='red',
+                        n_sigma=3, color_map_name='gray', show_axes=True):
     """ Create axes components to plot one source in all specified surveys
     and bands.
 
@@ -222,7 +142,7 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
         length has to be equal to surveys, bands and fovs
     :param square_sizes: list of floats
         List of
-    :param image_folder_path: string
+    :param image_dir: string
         Path to the directory where all the images are be stored
     :param mag_list: list of floats
         List of magnitudes for each survey/band
@@ -280,287 +200,143 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
         else:
             forced_sn = None
 
-        # Get the correct filename, accept larger fovs
-        coord_name = utils.coord_to_name(np.array([ra]), np.array([dec]),
-                                      epoch="J")
+        image = whim.SurveyImage(ra, dec, survey, band, image_dir, min_fov=fov,
+                            ID=ID, instantiate_empty=True)
 
-        filename = image_folder_path + '/' + coord_name[0] + "_" + survey + "_" + \
-                   band + "*fov*.fits"
+        if image.data is not None:
 
-        data, hdr, file_path = open_image(filename, ra, dec, fov,
-                                       image_folder_path,
-                               verbosity)
+            cutout = image.get_cutout_image(ra, dec, fov)
+            wcs = WCS(cutout.header)
 
-        if data is not None and hdr is not None:
-            file_found = True
-        else:
-            file_found = False
+            # axs = fig.add_subplot(int(f"{n_row}{n_col}{idx + 1}"), projection=wcs)
+            axs = fig.add_subplot(n_row, n_col, idx + 1, projection=wcs)
 
-        # Old plotting routine to modify, currently it only plots images for
-        # surveys and bands that it could open, no auto download implemented
-        if file_found:
-            wcs_img = wcs.WCS(hdr)
+            axs = cutout._simple_plot(n_sigma=n_sigma, fig=fig,
+                                     subplot=None,
+                                     color_map=color_map_name, axis=axs,
+                                     north=True,
+                                     scalebar=scalebar, sb_pad=0.5,
+                                     sb_borderpad=0.4,
+                                     corner='lower right', frameon=False,
+                                     low_lim=None,
+                                     upp_lim=None, logscale=False)
 
-            pixcrd = wcs_img.wcs_world2pix(ra, dec, 0)
-            positions = (np.float(pixcrd[0]), np.float(pixcrd[1]))
-            overlap = True
+            axs.get_xaxis().set_visible(False)
+            axs.get_yaxis().set_visible(False)
 
-            if verbosity >= 4:
-                print("[DIAGNOSTIC] Image file shape {}".format(data.shape))
+            if type(add_cross) in [list, np.ndarray]:
+                add_cross_idx = add_cross[idx]
+            elif type(add_cross) == bool:
+                add_cross_idx = add_cross
 
-            try:
-                img_stamp = Cutout2D(data, positions, size=fov * u.arcsec,
-                                     wcs=wcs_img)
+            if add_cross_idx:
+                xpix, ypix = wcs.all_world2pix(ra, dec, 0)
+                axs.plot(xpix, ypix, '+', color=cross_color, markersize=15)
 
-                if verbosity >= 4:
-                    print("[DIAGNOSTIC] Cutout2D file shape {}".format(
-                        img_stamp.shape))
-
-            except:
-                print("Source not in image")
-                overlap = False
-                img_stamp = None
-
-
-            if img_stamp is not None:
-
-                if overlap:
-                    img_stamp = img_stamp.data
-
-                hdu = fits.ImageHDU(data=img_stamp, header=hdr)
-
-                axs = aplpy.FITSFigure(hdu, figure=fig,
-                                       subplot=(n_row, n_col, idx + 1),
-                                       north=True)
-
-                # Check if input color map name is a color map, else use viridis
-                try:
-                    cm = plt.get_cmap(color_map_name)
-                except ValueError:
-                    print('Color map argument is not a color map. Setting '
-                          'default: viridis')
-                    cm = plt.get_cmap('viridis')
-                    color_map_name = 'viridis'
-
-                # Sigma-clipping of the color scale
-                mean = np.mean(img_stamp[~np.isnan(img_stamp)])
-                std = np.std(img_stamp[~np.isnan(img_stamp)])
-                upp_lim = mean + n_sigma * std
-                low_lim = mean - n_sigma * std
-                axs.show_colorscale(vmin=low_lim, vmax=upp_lim,
-                                    cmap=color_map_name)
-
+            if ell_a is None or ell_b is None or ell_theta is None:
                 # Plot circular aperture (forced photometry flux)
-                (yy, xx) = img_stamp.shape
+                (yy, xx) = cutout.data.shape
                 circx = (xx * 0.5)  # + 1
                 circy = (yy * 0.5)  # + 1
-                aper_pix = aperture_inpixels(aperture, hdr)
+                aper_pix = aperture_inpixels(aperture, cutout.header)
                 circle = plt.Circle((circx, circy), aper_pix, color='r', fill=False,
                                     lw=1.5)
                 fig.gca().add_artist(circle)
 
                 # Plot rectangular aperture (error region)
-                rect_inpixels = aperture_inpixels(size, hdr)
+                rect_inpixels = aperture_inpixels(size, cutout.header)
                 square = plt.Rectangle((circx - rect_inpixels * 0.5,
                                         circy - rect_inpixels * 0.5),
                                        rect_inpixels, rect_inpixels,
                                        color='r', fill=False, lw=1.5)
                 fig.gca().add_artist(square)
 
-                # Create forced photometry label
-                if (forced_mag is not None):
-                    if (forced_sn is not None) & (forced_magerr is not None):
-                        forcedlabel = r'${0:s} = {1:.2f} \pm {2:.2f} (SN=' \
-                                      r'{3:.1f})$'.format(band + "_{forced}",
-                                                          forced_mag,
-                                                          forced_magerr,
-                                                          forced_sn)
-                    elif forced_magerr is not None:
-                        forcedlabel = r'${0:s} = {1:.2f} \pm {2:.2f}$'.format(
-                            band + "_{forced}", forced_mag, forced_magerr)
-                    else:
-                        forcedlabel = r'${0:s} = {1:.2f}$'.format(
-                            band + "_{forced}", forced_mag)
+            elif ell_a is not None and ell_b is not None and ell_theta is not None:
 
-                    fig.gca().text(0.03, 0.16, forcedlabel, color='black',
-                             weight='bold', fontsize='large',
-                             bbox=dict(facecolor='white', alpha=0.6),
-                             transform=fig.gca().transAxes)
+                if ell_display[idx]:
 
-                # Create catalog magnitude label
-                if catmag is not None:
-                    if (catsn is not None) & (caterr is not None):
-                        maglabel = r'${0:s} = {1:.2f} \pm {2:.2f}  (SN=' \
-                                   r'{3:.2f})$'.format(
-                            band + "_{cat}", catmag, caterr, catsn)
-                    elif caterr is not None:
-                        maglabel = r'${0:s} = {1:.2f} \pm {2:.2f}$'.format(
-                            band + "_{cat}", catmag, caterr)
-                    else:
-                        maglabel = r'${0:s} = {1:.2f}$'.format(
-                            band + "_{cat}", catmag)
+                    for jdx, fac in enumerate(ell_factor):
 
-                    fig.gca().text(0.03, 0.04, maglabel, color='black',
-                             weight='bold',
-                             fontsize='large',
-                             bbox=dict(facecolor='white', alpha=0.6),
-                             transform=fig.gca().transAxes)
+                        if type(ell_color) == list:
+                            ell_color_jdx = ell_color[jdx]
 
-                fig.gca().set_title(survey + " " + band)
+                            cutout._add_aperture_ellipse(
+                                axs, ra, dec, ell_a*fac, ell_b*fac,
+                                ell_theta,
+                                edgecolor=ell_color_jdx)
+
+            # Create forced photometry label
+            if forced_mag is not None:
+                if (forced_sn is not None) & (forced_magerr is not None):
+                    forcedlabel = r'${0:s} = {1:.2f} \pm {2:.2f} (SN=' \
+                                  r'{3:.1f})$'.format(band + "_{forced}",
+                                                      forced_mag,
+                                                      forced_magerr,
+                                                      forced_sn)
+                elif forced_magerr is not None:
+                    forcedlabel = r'${0:s} = {1:.2f} \pm {2:.2f}$'.format(
+                        band + "_{forced}", forced_mag, forced_magerr)
+                else:
+                    forcedlabel = r'${0:s} = {1:.2f}$'.format(
+                        band + "_{forced}", forced_mag)
+
+                fig.gca().text(0.03, 0.16, forcedlabel, color='black',
+                         weight='bold', fontsize='large',
+                         bbox=dict(facecolor='white', alpha=0.6),
+                         transform=fig.gca().transAxes)
+
+            # Create catalog magnitude label
+            if catmag is not None:
+                if (catsn is not None) & (caterr is not None):
+                    maglabel = r'${0:s} = {1:.2f} \pm {2:.2f}  (SN=' \
+                               r'{3:.2f})$'.format(
+                        band + "_{cat}", catmag, caterr, catsn)
+                elif caterr is not None:
+                    maglabel = r'${0:s} = {1:.2f} \pm {2:.2f}$'.format(
+                        band + "_{cat}", catmag, caterr)
+                else:
+                    maglabel = r'${0:s} = {1:.2f}$'.format(
+                        band + "_{cat}", catmag)
+
+                fig.gca().text(0.03, 0.04, maglabel, color='black',
+                         weight='bold',
+                         fontsize='large',
+                         bbox=dict(facecolor='white', alpha=0.6),
+                         transform=fig.gca().transAxes)
+
+            fig.gca().set_title(survey + " " + band)
+
+        else:
+            # axs = fig.add_subplot(int(f"{n_row}{n_col}{idx + 1}"))
+            axs = fig.add_subplot(n_row, n_col, idx + 1)
+            axs.axis('off')
 
     return fig
 
-
 def aperture_inpixels(aperture, hdr):
-    '''
-    receives aperture in arcsec. Returns aperture in pixels
-    '''
+    """ Return the aperture size in pixels.
+
+    :param aperture: The aperture size in arcsec
+    :type aperture: float
+    :param hdr: The header of the image
+    :type hdr: astropy.io.fits.header.Header
+    :return: The aperture size in pixels
+    :rtype: float
+    """
     pixelscale = get_pixelscale(hdr)
-    aperture /= pixelscale #pixels
+    aperture /= pixelscale  # pixels
 
     return aperture
 
 def get_pixelscale(hdr):
-    '''
-    Get pixelscale from header and return in it in arcsec/pixel
-    '''
+    """ Return the pixel scale of the image in arcsec/pixel.
 
-    wcs_img = wcs.WCS(hdr)
+    :param hdr: The header of the image
+    :type hdr: astropy.io.fits.header.Header
+    :return: The pixel scale of the image in arcsec/pixel
+    :rtype: float
+    """
+    wcs_img = WCS(hdr)
     scale = np.mean(proj_plane_pixel_scales(wcs_img)) * 3600
 
     return scale
-
-def generate_cutout_images(ra_sources, dec_sources, survey_dicts, imgsize = 30, download_images = True, n_col = 6,
-                           image_folder_path = 'cutouts', n_jobs = 1, epoch = 'J', aperture = 1.5, n_sigma = 3,
-                           color_map_name = 'Greys'):
-    """ Create axes components to plot many sources in all specified surveys/bands
-        and bands.
-
-        :param ra_sources: float
-            Right Ascension of the target
-        :param dec_sources: float
-            Declination of the target
-        :param survey_dicts: dictionary
-            List of survey names, bands, and fovs
-        :param imgsize: float
-            Cutout size in arcsec
-        :param download_images: bool
-            Download automatically the images to produce the cutouts for all the sources
-        :param n_col: int
-            Number of columns
-        :param image_folder_path: string
-            Path where the images are downloaded and the cutouts saved
-        :param n_jobs: int
-            Number of multiprocesses used to download the images
-        :param epoch: string
-            The epoch that specify the initial letter of the source names
-        :param apertures: list of floats
-            Aperture in arcseconds for plotting the circular aperture centered on the image of each cutout
-        :param n_sigma: int
-            Number of sigmas for the sigma-clipping routine that creates the boundaries for the color map.
-        :param color_map_name: string
-            Name of the color map
-        """
-
-    if download_images == True:
-        for survey_dict in survey_dicts:
-            survey = catalog.retrieve_survey(survey_dict['survey'],
-                                     survey_dict['bands'],
-                                     survey_dict['fov'])
-            survey.download_images(ra_sources, dec_sources, image_folder_path, n_jobs)
-
-    obj_names = utils.coord_to_name(ra_sources, dec_sources, epoch=epoch)
-
-    for obj_name, ra, dec in zip(obj_names, ra_sources, dec_sources):
-
-        cutout_names = []
-        band_names = []
-        idx = 0
-        n_images = 0
-        for i in range(len(survey_dicts)):
-            n_images+=len(survey_dicts[i]['bands'])
-
-        n_row = int(math.ceil(n_images / n_col))
-
-        fig = plt.figure(figsize=(5 * n_col, 5 * n_row))
-        plt.text(0.40, 1.05, obj_name, fontsize=25)
-        plt.axis('off')
-
-        for survey_dict in survey_dicts:
-            for band in survey_dict['bands']:
-
-                image = image_folder_path + '/' + obj_name + "_" + survey_dict['survey'] + "_" + band + "_fov" + \
-                         '{:d}.fits'.format(survey_dict['fov'])
-
-                pos = SkyCoord(ra * u.deg, dec * u.deg, frame='fk5')
-
-                if band in ['Y','J','H','K','Ks']:
-                    hdr = fits.getheader(image, 1)
-                    data = fits.getdata(image, 1)
-                else:
-                    hdr = fits.getheader(image, 0)
-                    data = fits.getdata(image, 0)
-
-                if data is not None:
-                    file_found = True
-                else:
-                    file_found = False
-
-                if file_found:
-
-                    wcs_img = wcs.WCS(hdr)
-                    overlap = True
-                    size = (imgsize * u.arcsec, imgsize * u.arcsec)
-
-                    try:
-                        cutout = Cutout2D(data, pos, size, wcs=wcs_img)
-
-                    except:
-                        print("Source not in image")
-                        overlap = False
-                        cutout = None
-
-                    if cutout is not None:
-
-                        if overlap:
-                            cutout = cutout.data
-
-                        hdu = fits.ImageHDU(data=cutout, header=hdr)
-
-                        axs = aplpy.FITSFigure(hdu, figure=fig,
-                                               subplot=(n_row, n_col, idx + 1),
-                                               north=True)
-
-                        # Check if input color map name is a color map, else use viridis
-                        try:
-                            cm = plt.get_cmap(color_map_name)
-                        except ValueError:
-                            print('Color map argument is not a color map. Setting '
-                                  'default: Greys')
-                            cm = plt.get_cmap('Greys')
-                            color_map_name = 'Greys'
-
-                        # Sigma-clipping of the color scale
-                        mean = np.mean(cutout[~np.isnan(cutout)])
-                        std = np.std(cutout[~np.isnan(cutout)])
-                        upp_lim = mean + n_sigma * std
-                        low_lim = mean - n_sigma * std
-                        axs.show_colorscale(vmin=low_lim, vmax=upp_lim,
-                                            cmap=color_map_name)
-
-                        # Plot circular aperture (forced photometry flux)
-                        (yy, xx) = cutout.shape
-                        circx = (xx * 0.5)  # + 1
-                        circy = (yy * 0.5)  # + 1
-                        aper_pix = aperture_inpixels(aperture, hdr)
-                        circle = plt.Circle((circx, circy), aper_pix, color='r', fill=False,
-                                            lw=1.5)
-                        fig.gca().add_artist(circle)
-                        idx += 1
-
-                        # Create survey/band label and add a title
-                        fig.gca().set_title(survey_dict['survey'] + " " + band)
-
-        plt.savefig(image_folder_path + '/' + obj_name + '.png', dpi=300)
-
-        plt.close()

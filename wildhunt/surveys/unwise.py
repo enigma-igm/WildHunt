@@ -7,8 +7,6 @@ import pandas as pd
 from wildhunt import pypmsgs
 from wildhunt.surveys import imagingsurvey
 
-from IPython import embed
-
 msgs = pypmsgs.Messages()
 
 

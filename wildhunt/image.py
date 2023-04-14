@@ -5,12 +5,10 @@ Main module for downloading and manipulating image data.
 
 """
 
-import os
 import glob
 import math
 
 import numpy as np
-import pandas as pd
 
 import string
 from astropy import wcs, stats
@@ -23,7 +21,6 @@ from astropy.wcs.utils import proj_plane_pixel_scales
 from astropy.visualization import ZScaleInterval
 
 from matplotlib.patches import Circle, Ellipse, Rectangle
-from matplotlib.collections import PatchCollection
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 
@@ -38,8 +35,6 @@ import matplotlib.pyplot as plt
 from wildhunt import utils
 from wildhunt import pypmsgs
 from wildhunt import catalog
-
-from IPython import embed
 
 msgs = pypmsgs.Messages()
 
@@ -568,7 +563,6 @@ class Image(object):
 
         return axs
 
-    # TODO: Document and clean up!
     def finding_chart(self, fov, target_aperture=5, color_scale='zscale',
                       n_sigma=3, color_map='Greys', scalebar=0.2*u.arcmin,
                       sb_pad=0.5, sb_borderpad=0.4, corner='lower right',
@@ -579,6 +573,64 @@ class Image(object):
                       offset_mag_column_name='mag_z',
                       offset_id_column_name='offset_shortname',
                       label_position='bottom'):
+        """ Finding chart plot function return a matplotlib figure.
+
+        :param fov: The field of view of the finding chart in arcseconds.
+        :type fov: float
+        :param target_aperture: The size of the target aperture in arcseconds.
+        :type target_aperture: float
+        :param color_scale: The color scale option to use for the image. The
+         default option is 'zscale'. At the moment all other input string will
+         default to sigma clipping if the color scale limits are not provided.
+        :type color_scale: str
+        :param n_sigma: The number of sigma for the color scale sigma clipping.
+        :type n_sigma: int
+        :param color_map: The name of the matplotlib color map to use.
+        :type color_map: str
+        :param scalebar: The scalebar length in arcseconds.
+        :type scalebar: astropy.units.quantity.Quantity
+        :param sb_pad: The padding of the scalebar in fraction of the font
+         size.
+        :type sb_pad: float
+        :param sb_borderpad: The border padding of the scalebar in fraction of
+         the font size.
+        :type sb_borderpad: float
+        :param corner: The corner position of the scalebar.
+        :type corner: str
+        :param frameon: Boolean to indicate whether to add a frame around the
+         scalebar.
+        :type frameon: bool
+        :param low_lim: The lower limit of the color scale. This overrides
+        the n_sigma parameter if both low_lim and upp_lim are provided.
+        :type low_lim: float
+        :param upp_lim: The upper limit of the color scale. This overrides
+        the n_sigma parameter if both low_lim and upp_lim are provided.
+        :type upp_lim: float
+        :param offset_df: The offset star dataframe.
+        :type offset_df: pandas.DataFrame
+        :param offset_focus: Boolean to indicate whether to focus the
+        finding chart center on the offset star.
+        :type offset_focus: bool
+        :param offset_id: The id of the main offset star. This is used to
+        focus the finding chart on the offset star.
+        :type offset_id: int
+        :param offset_ra_column_name: Name of the column containing the
+         right ascension of the offset stars.
+        :type offset_ra_column_name: str
+        :param offset_dec_column_name: Name of the column containing the
+         declination of the offset stars.
+        :type offset_dec_column_name: str
+        :param offset_mag_column_name: Name of the column containing the
+         magnitude of the offset stars.
+        :type offset_mag_column_name: str
+        :param offset_id_column_name: Name of the column containing the
+         ID of the offset stars.
+        :type offset_id_column_name: str
+        :param label_position: Position of the offset star labels.
+        :type label_position: str
+        :return: Matplotlib figure
+        :rtype: matplotlib.figure.Figure
+        """
 
         if offset_focus:
             im_ra = offset_df.loc[offset_id, offset_ra_column_name]
@@ -673,18 +725,41 @@ class Image(object):
 
         return fig
 
-    # TODO: Document and clean up!
     def mark_offset_stars(self, axs, offset_df, offset_id=0,
                           offset_ra_column_name='offset_ra',
                           offset_dec_column_name='offset_dec',
                           aperture_radius=4,
                           label_position='bottom'):
+        """ Mark offset stars provided by the offset star data frame on the
+        given matplotlib axes object.
+
+        :param axs: Matplotlib axes object
+        :type axs: matplotlib.axes._subplots.AxesSubplot
+        :param offset_df: Pandas data frame with offset stars.
+        :type offset_df: pandas.core.frame.DataFrame
+        :param offset_id: Index of the offset star to be marked.
+        :type offset_id: int
+        :param offset_ra_column_name: Name of the column containing the
+         right ascension of the offset stars.
+        :type offset_ra_column_name: str
+        :param offset_dec_column_name: Name of the column containing the
+         declination of the offset stars.
+        :type offset_dec_column_name: str
+        :param aperture_radius: Radius of the aperture to be marked around
+         the offset stars in arcseconds.
+        :type aperture_radius: float
+        :param label_position: Position of the label relative to the offset
+         star. Can be 'left', 'right', 'top', 'bottom', 'topleft'.
+        :type label_position: str
+        :return: None
+        """
 
         position_dict = {"left": [8, 0], "right": [-8, 0], "top": [0, 5],
                          "bottom": [0, -5], "topleft": [8, 5]}
 
         ra_pos, dec_pos = position_dict[label_position]
 
+        # Iterate over the offset stars indices in the data frame
         for num, idx in enumerate(offset_df.index):
 
             ra_off = offset_df.loc[idx, offset_ra_column_name]
@@ -698,6 +773,8 @@ class Image(object):
             img_wcs = WCS(self.header)
             x, y = img_wcs.wcs_world2pix(ra_off, dec_off, 0)
             label_fac = 5
+            # Mark the offset star with the specified index with a different
+            # size label.
             if num == offset_id:
                 axs.text(x+ra_pos*label_fac, y+dec_pos*label_fac, label,
                          color='blue',
@@ -710,17 +787,39 @@ class Image(object):
                          size='large',
                          verticalalignment='center', family='serif')
 
-    # TODO: Document and clean up!
     def plot_offset_info_box(self, axs, offset_df, ra_column_name,
-                             dec_column_name, mag_column_name):
+                             dec_column_name, mag_column_name,
+                             plot_offset_info=True):
+        """ Plot a box with information about the offset stars onto the
+        provided matplotlib axis object.
+
+        :param axs: Matplotlib axes object
+        :type axs: matplotlib.axes._subplots.AxesSubplot
+        :param offset_df: Pandas data frame with offset stars.
+        :type offset_df: pandas.core.frame.DataFrame:
+        :param ra_column_name: Name of the column containing the
+         right ascension of the offset stars.
+        :type ra_column_name: str
+        :param dec_column_name: Name of the column containing the
+         declination of the offset stars.
+        :type dec_column_name: str
+        :param mag_column_name: Name of the column containing the
+         magnitude of the offset stars.
+        :type mag_column_name: str
+        :param plot_offset_info: Boolean flag to indicate whether to plot
+         the offset star info box.
+        :type plot_offset_info: bool
+        :return: None
+        """
 
         target_info = 'Target: RA={:.4f}, DEC={:.4f}'.format(self.ra, self.dec)
 
         info_list = [target_info]
 
+        # Iterate over the offset stars indices in the data frame.
         for num, idx in enumerate(offset_df.index):
 
-            if True:
+            if plot_offset_info:
                 ra_off = offset_df.loc[idx, ra_column_name]
                 dec_off = offset_df.loc[idx, dec_column_name]
 

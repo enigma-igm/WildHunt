@@ -2,8 +2,9 @@
 
 import pandas as pd
 
-from wildhunt.surveys import imagingsurvey
+
 from wildhunt import pypmsgs
+from wildhunt.surveys import imagingsurvey
 
 msgs = pypmsgs.Messages()
 

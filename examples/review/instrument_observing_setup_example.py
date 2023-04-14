@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 
-import pandas as pd
-
 from wildhunt.instruments import instrument_observations_setup
-
-from IPython import embed
 
 instrument_observations_setup('vlt', 'fors2', table = 'observation_starlist_catalog.csv',
                               ra_column_name = 'RA_deg', dec_column_name = 'DEC_deg', genertate_fcs = False,

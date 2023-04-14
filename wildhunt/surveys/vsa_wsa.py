@@ -9,9 +9,6 @@ from astropy.io import fits
 from wildhunt import pypmsgs
 from wildhunt.surveys import imagingsurvey
 
-
-from IPython import embed
-
 msgs = pypmsgs.Messages()
 
 # List of programmeID:

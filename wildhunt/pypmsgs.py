@@ -1,5 +1,6 @@
 '''
-This code was adopted from PypeIt and the copyright belongs to the PypeIt developer.
+This code was adopted from PypeIt and the copyright belongs to the PypeIt
+developer.
 https://github.com/pypeit/PypeIt
 '''
 import sys

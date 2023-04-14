@@ -3,13 +3,7 @@
 import aplpy
 import numpy as np
 
-from IPython import embed
-
-from astropy.wcs.utils import proj_plane_pixel_scales
-from astropy import wcs
 import astropy.units as u
-from astropy.stats import sigma_clipped_stats
-from astropy.nddata.utils import Cutout2D
 from astropy.io import fits
 from astropy.visualization import ZScaleInterval
 from astropy.coordinates import SkyCoord
@@ -20,8 +14,6 @@ from matplotlib.collections import PatchCollection
 
 
 from wildhunt import utils as utils
-from wildhunt import plotting
-
 
 # Define some colors
 red = (238/255., 102/255., 119/255.)
