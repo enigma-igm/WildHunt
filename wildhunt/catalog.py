@@ -23,6 +23,8 @@ from wildhunt import catalog_queries as whcq
 from wildhunt.surveys import catalog_defaults as whcd, panstarrs
 from wildhunt.surveys import vsa_wsa, legacysurvey, unwise
 
+from IPython import embed
+
 msgs = pypmsgs.Messages()
 
 
@@ -557,11 +559,21 @@ class Catalog(object):
                 else:
                     raise ValueError('Service not recognized.')
 
-                # Save cross-matched chunk to temporary folder
-                cross_match_df = cross_match.df.compute()
-                cross_match_df.to_parquet(filename)
-                msgs.info('Downloaded cross match {} to temporary '
-                          'folder'.format(idx))
+                if cross_match is not None:
+                    # Save cross-matched chunk to temporary folder
+
+                    cross_match_df = cross_match.df.compute()
+
+                    # Inferring data types automatically
+                    cross_match_df_typed = cross_match_df.infer_objects()
+
+                    cross_match_df_typed.to_parquet(filename, engine='fastparquet')
+                    msgs.info('Downloaded cross match {} to temporary '
+                              'folder'.format(idx))
+                else:
+
+                    msgs.error('No cross match found between the catalog and the survey. Exiting!')
+                    return None
 
         # Log out of datalab
         if service == 'datalab' and datalab_logout:

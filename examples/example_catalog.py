@@ -12,6 +12,11 @@ def example_online_cross_match():
     dec_colname = 'ps_dec'
     id_colname = 'wise_designation'
 
+    # filename = 'data/UKIDSS_sources_subset.csv'
+    # ra_colname = 'RA'
+    # dec_colname = 'DEC'
+    # id_colname = 'Name'
+
 
     # Instantiate a catalog from a csv file
     cat = catalog.Catalog('example', ra_column_name=ra_colname,
@@ -24,25 +29,25 @@ def example_online_cross_match():
     # Online cross-match presets:
 
     # UKIDSS DR11 LAS
-    # cat.online_cross_match(survey='UKIDSSDR11LAS',
-    #                        output_dir='./catalogs')
+    cat.online_cross_match(survey='UKIDSSDR11LAS',
+                           output_dir='./catalogs')
 
-    # # Legacy Survey DecaLS
-    # cat.online_cross_match(survey='DELS',
-    #                        output_dir='./catalogs')
-    #
-    # # UNWISE DR1
-    # cat.online_cross_match(survey='UNWISE',
-    #                        output_dir='./catalogs')
-    #
-    # # CATWISE 2020
-    # cat.online_cross_match(survey='CATWISE',
-    #                        output_dir='./catalogs')
-    #
-    # # Online cross-match to datalab table:
-    # cat.online_cross_match(survey=None,
-    #                        output_dir='./catalogs',
-    #                        astro_datalab_table='allwise.source')
+    # Legacy Survey DecaLS
+    cat.online_cross_match(survey='DELSDR9',
+                           output_dir='./catalogs')
+
+    # UNWISE DR1
+    cat.online_cross_match(survey='UNWISE',
+                           output_dir='./catalogs')
+
+    # CATWISE 2020
+    cat.online_cross_match(survey='CATWISE',
+                           output_dir='./catalogs')
+
+    # Online cross-match to datalab table:
+    cat.online_cross_match(survey=None,
+                           output_dir='./catalogs',
+                           astro_datalab_table='allwise.source')
 
 
     # Online cross-match to astroquery resource:
@@ -54,8 +59,9 @@ def example_online_cross_match():
 
 def example_offline_cross_match():
 
-    dtype = dtype={'comment': 'object',
+    dtype = {'comment': 'object',
        'obs_date': 'object'}
+
     candidates = catalog.Catalog('candidates',
                                      datapath='data/reclassified_all_observations_upto1901_clean.csv',
                                      ra_column_name='obs_sdss_ra',
