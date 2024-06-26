@@ -24,7 +24,7 @@ def example_online_cross_match():
                               id_column_name=id_colname,
                               datapath=filename)
 
-    cat.verbose = 2
+    cat.verbose = 0
 
     # Online cross-match presets:
 
@@ -33,7 +33,7 @@ def example_online_cross_match():
                            output_dir='./catalogs')
 
     # Legacy Survey DecaLS
-    cat.online_cross_match(survey='DELSDR9',
+    cat.online_cross_match(survey='DELSDR10',
                            output_dir='./catalogs')
 
     # UNWISE DR1
@@ -100,7 +100,7 @@ def example_download_images():
         {'survey': 'PS1', 'bands': ['g', 'r', 'i', 'z', 'y'], 'fov':50},
          {'survey': 'UKIDSSDR11PLUSLAS', 'bands': ['J'],
           'fov':120},
-        {'survey': 'DELSDR9', 'bands': ['z'],
+        {'survey': 'DELSDR10', 'bands': ['z'],
          'fov': 120},
         {'survey': 'allWISE', 'bands': ['3', '4'], 'fov': 120}
     ]

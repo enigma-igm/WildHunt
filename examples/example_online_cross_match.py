@@ -41,3 +41,7 @@ if __name__ == "__main__":
     matched_cat_c.name = 'example_cross_match_pselqs'
 
     matched_cat_c.save_catalog(output_dir='./catalogs')
+
+    from Ipython import embed
+
+    embed()

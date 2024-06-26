@@ -76,7 +76,7 @@ def generate_finding_charts():
 
     # Instantiate the catalog class, loading the pselqs_quasars.csv file
     # from the data folder and using only the first 5 rows.
-    df = pd.read_csv('./data/pselqs_quasars.csv')
+    df = pd.read_csv('./data/pselqs_quasars_subset.csv')
     cat = whcat.Catalog('example', 'ps_ra', 'ps_dec', 'wise_designation',
                         table_data=df[:100])
 
@@ -87,17 +87,17 @@ def generate_finding_charts():
                               survey='PS1', band='i',
                               image_folder_path='./cutouts',
                               offset_focus=True, offset_focus_id=0,
-                              offset_mag_colname='ps1_dr2_stack_psfmag_y')
+                              offset_mag_colname='ps1_dr2_mean_psfmag_y')
 
-    offset_star_file = 'example_ls_dr9_OFFSETS.csv'
-
+    # offset_star_file = 'example_ls_dr10_OFFSETS.csv'
+    #
     # cat.create_finding_charts(finding_chart_fov,
     #                           offset_star_file=offset_star_file,
-    #                           survey='DELSDR9', band='z',
+    #                           survey='DELSDR10', band='z',
     #                           image_folder_path='./cutouts',
     #                           offset_focus=True, offset_focus_id=0,
     #                           offset_mag_colname='mag_z')
-
+    #
     # offset_star_file = 'example_ukidssdr11las_OFFSETS.csv'
     #
     # cat.create_finding_charts(finding_chart_fov,
@@ -111,4 +111,4 @@ if __name__ == '__main__':
 
     show_single_finding_chart()
 
-    # generate_finding_charts()
+    generate_finding_charts()

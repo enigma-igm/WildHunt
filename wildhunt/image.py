@@ -1474,11 +1474,19 @@ class SurveyImage(Image):
 
                 if self.fov <= file_fov:
 
-                    data, header = fits.getdata(filename, header=True,
-                                                ignore_missing_simple=True)
-                    file_found = True
-                    file_path = filename
-                    open_file_fov = file_fov
+                    try:
+                        data, header = fits.getdata(filename, header=True,
+                                                    ignore_missing_simple=True)
+
+                        file_found = True
+                        file_path = filename
+                        open_file_fov = file_fov
+
+                    except OSError as e:
+                        msgs.warn("File {} could not be opened.".format(filename))
+                        print(e)
+
+
 
         if file_found:
             msgs.info("Opened {} with a fov of {} "

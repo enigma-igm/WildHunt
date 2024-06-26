@@ -283,6 +283,9 @@ def get_datalab_offset(target_name, target_ra, target_dec, radius,
         offset_df.loc[:, 'offset_ra'] = df[ra]
         offset_df.loc[:, 'offset_dec'] = df[dec]
 
+        offset_df['offset_name'] = pd.Series(dtype=pd.StringDtype())
+        offset_df['offset_shortname'] = pd.Series(dtype=pd.StringDtype())
+
         for jdx, idx in enumerate(offset_df.index):
             letter = letters[jdx]
 

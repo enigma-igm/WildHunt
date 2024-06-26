@@ -97,7 +97,7 @@ class LegacySurvey(imagingsurvey.ImagingSurvey):
 
                 url = (
                     'http://legacysurvey.org/viewer/fits-cutout/?ra={}&dec='
-                    '{}&layer={} &pixscale={}&bands={}&size={}').format(
+                    '{}&layer={}&pixscale={}&bands={}&size={}').format(
                     ra, dec, release, str(pixelscale), band, str(int(size)))
 
                 # Implementing concat instead of deprecated append

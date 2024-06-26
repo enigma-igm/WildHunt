@@ -18,11 +18,11 @@ def retrieve_datalab_offsets(target_cat):
     """
 
     # Create offset star catalog with datalab
-    datalab_dict = {'table': 'ls_dr9.tractor',
+    datalab_dict = {'table': 'ls_dr10.tractor',
                     'ra': 'ra',
                     'dec': 'dec',
                     'mag': 'mag_z',
-                    'mag_name': 'lsdr9_z'}
+                    'mag_name': 'lsdr10_z'}
 
     # The columns available for the query depend on the datalab table you are
     # querying.
@@ -35,7 +35,7 @@ def retrieve_datalab_offsets(target_cat):
 
     # Read the offset star catalog.
     df = pd.read_csv('{}_{}_OFFSETS.csv'.format(
-        'example', 'ls_dr9'))
+        'example', 'ls_dr10'))
     # Print it df to screen for example purposes.
     print(df)
 
@@ -90,13 +90,13 @@ if __name__ == "__main__":
     # Instantiate the catalog class, loading the pselqs_quasars.csv file
     # from the data folder.
     cat = catalog.Catalog('example', 'ps_ra', 'ps_dec', 'wise_designation',
-                          datapath='./data/pselqs_quasars.csv')
+                          datapath='./data/pselqs_quasars_subset.csv')
 
     # Retrieve offset stars from datalab services
-    # retrieve_datalab_offsets(cat)
+    retrieve_datalab_offsets(cat)
 
     # Retrieve offset stars from astroquery services
-    # retrieve_astroquery_offsets(cat)
+    retrieve_astroquery_offsets(cat)
 
     # Retrieve offset stars from Pan-STARRS1 services
     retrieve_ps1_offsets(cat)
