@@ -6,7 +6,7 @@ tap_service = pyvo.dal.TAPService('https://vo.astron.nl/__system__/tap/run/tap')
 
 # This works also for
 from pyvo.registry.regtap import ivoid2service
-vo_tap_service = ivoid2service('ivo://astron.nl/tap')[0]
+vo_tap_service = ivoid2service('ivo://astron.nl/tap')
 
 # The TAPService object provides some introspection that allow you to check the various tables and their
 # description for example to print the available tables you can execute
@@ -19,6 +19,9 @@ print('-' * 10 + '\n' * 3)
 print('Available columns in lotss_dr2.mosaics')
 print(tap_service.tables['lotss_dr2.mosaics'].columns)
 print('-' * 10 + '\n' * 3)
+
+from IPython import embed
+embed()
 
 ## You can obviously perform tap queries accross the whole tap service as an example a cone search
 print('Performing TAP query')

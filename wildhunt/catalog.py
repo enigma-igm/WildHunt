@@ -21,7 +21,7 @@ from wildhunt import pypmsgs
 from wildhunt import image as whim
 from wildhunt import catalog_queries as whcq
 from wildhunt.surveys import catalog_defaults as whcd, panstarrs
-from wildhunt.surveys import vsa_wsa, legacysurvey, unwise
+from wildhunt.surveys import vsa_wsa, legacysurvey, unwise, lotss
 
 from IPython import embed
 
@@ -65,6 +65,9 @@ def retrieve_survey(survey_name, bands, fov, verbosity=1):
 
     if 'WISE' in survey_name:
         survey = unwise.UnWise(bands, fov, survey_name, verbosity=verbosity)
+
+    if survey_name == 'LoTSSDR2':
+        survey = lotss.LoTSSDR2(bands, fov, survey_name, verbosity=verbosity)
 
     if survey is None:
         print('ERROR')

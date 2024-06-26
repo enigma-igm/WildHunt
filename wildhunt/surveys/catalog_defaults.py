@@ -41,6 +41,8 @@ ls_dr9_default_columns = """
       match.ebv, 
   """
 
+# TODO: 
+# ls_dr10_default_columns = ls_dr9_default_columns
 
 unwise_dr1_default_columns = """
     match.ra,
