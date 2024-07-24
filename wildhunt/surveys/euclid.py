@@ -35,12 +35,14 @@ class Euclid(imagingsurvey.ImagingSurvey):
         :type name: str
         :return: None
         """
-        assert set(bands) <= set([
-            "VIS",
-            "Y",
-            "J",
-            "H",
-        ]), "Valid bands for Euclid are VIS, Y, J, H"
+        assert set(bands) <= set(
+            [
+                "VIS",
+                "Y",
+                "J",
+                "H",
+            ]
+        ), "Valid bands for Euclid are VIS, Y, J, H"
         assert isinstance(bands, list), "`bands` argument should be a list"
 
         self.batch_size = 10000
@@ -69,6 +71,12 @@ class Euclid(imagingsurvey.ImagingSurvey):
         :type n_jobs: int
         :return: None
         """
+        if self.n_jobs > 1:
+            msgs.warn(
+                "Multiprocessing download is currently not working for Euclid."
+                "Setting `self.n_jobs` to 1."
+            )
+            self.n_jobs = 1
 
         self.survey_setup(ra, dec, image_folder_path, epoch="J", n_jobs=n_jobs)
 
@@ -125,12 +133,15 @@ class Euclid(imagingsurvey.ImagingSurvey):
 
         # Catalogue for stacked and calib frames can (at this stage) be downloaded through sync queries
         #  Async quesries are an issue which we will worry about later on.
-        # Ivoa_obscore already takes too long as far as I can tell, so for the time being I am downloading
-        #  it and calling it a day.
+        # ivoa_obscore already takes too long as far as I can tell, so for the time being I am downloading
+        #  it separately, caching it and calling it a day.
 
         # Euclid wants the image side directly. Arcseconds!
         img_size = self.fov
         bands = self.bands
+
+        # There is also a DpdVisCalibratedQuadFrame that is unknown to me at the moment
+        # TODO: Figure this out
         product_type_dict = {
             "calib": ["DpdVisCalibratedFrame", "DpdNirCalibratedFrame"],
             "stacked": ["DpdVisStackedFrame", "DpdNirStackedFrame"],
@@ -165,6 +176,10 @@ class Euclid(imagingsurvey.ImagingSurvey):
             f"product_type == '{product_type_dict[product_type][1]}'"
         ).reset_index()
 
+        # Need to split this in two as otherwise there way to know
+        #  whether the N closest images are all in VIS or NIR
+        # In this way instead I am sure I am getting at least one
+        #  of each, if present.
         df_vis, df_nir = None, None
         if "VIS" in bands:
             df_vis = eu.get_download_df(
@@ -187,7 +202,8 @@ class Euclid(imagingsurvey.ImagingSurvey):
         df_list = [df for df in [df_vis, df_nir] if df is not None]
         df = pd.concat(df_list, ignore_index=True)
 
-        # sort by RA
+        # sort by RA - needed because I am querying separately
+        #  VIS and NIR
         df.sort_values("ra", axis=0, inplace=True)
 
         # Group table by filter
@@ -236,13 +252,13 @@ class Euclid(imagingsurvey.ImagingSurvey):
         """
         # need to overwrite this due to how manual this process is
         # in essence, try to download all images and just keep those
-        # that are not empty.
-        # Try except clause for downloading the image
+        # that are not empty. Closest images to source get priority.
+        # For the rest, same function as parent class
         try:
             r = requests.get(url, cookies=self.user.cookies)
             if len(r.content) == 0:
                 return
-            
+
             open(self.image_folder_path + "/" + image_name + ".fits", "wb").write(
                 r.content
             )
@@ -264,7 +280,8 @@ class Euclid(imagingsurvey.ImagingSurvey):
 
         :return: None
         """
-
+        raise NotImplementedError
+        # FIXME: Complaints about something that cannot be pickled
         mp_args = list(
             zip(
                 self.download_table.loc[:, "url"].values,

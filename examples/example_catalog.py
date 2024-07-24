@@ -101,7 +101,7 @@ def example_download_images():
     ]
 
     cat.get_survey_images('./cutouts',  survey_dict, n_jobs=1)
-    # print("{:.1f} s: ".format(time.time() - t0))
+    print("{:.1f} s: ".format(time.time() - t0))
 
 
 
