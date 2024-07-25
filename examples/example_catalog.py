@@ -2,7 +2,10 @@
 
 import time
 
-from wildhunt import catalog
+from wildhunt import catalog, pypmsgs
+
+msgs = pypmsgs.Messages()
+
 
 
 def example_online_cross_match():
@@ -101,8 +104,7 @@ def example_download_images():
     ]
 
     cat.get_survey_images('./cutouts',  survey_dict, n_jobs=1)
-    print("{:.1f} s: ".format(time.time() - t0))
-
+    msgs.info(f"Took {time.time() - t0:.1f}s to download the requested cutouts.")
 
 
 if __name__ == '__main__':

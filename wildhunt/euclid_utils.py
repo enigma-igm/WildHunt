@@ -124,7 +124,7 @@ class User:
     def store_user_data(self, path=LOCAL_PATH, overwrite=False):
         outfile = path / "sas_otf_user_data.cfg"
         if outfile.exists() and not overwrite:
-            user_overwrite = input("[Info] Catalogue exists, overwrite? [y]/n ").lower()
+            user_overwrite = input("[Info] Table exists, overwrite? [y]/n ").lower()
             if user_overwrite in ["y", "\n"]:
                 overwrite = True
 
@@ -158,7 +158,7 @@ class User:
 
         self.logged_in = True
         self.cookies = cookies
-        msgs.info("Log in successful!")
+        msgs.info("Log in to the Euclid OTF archive successful!")
 
     # ======================================================================= #
 
@@ -288,7 +288,21 @@ def prepare_catalogue(tbl_in, inplace=False, force=False):
     if "s_ra" in tbl.columns:
         msgs.info("Renaming coordinate columns.")
         tbl.rename(
-            {"s_ra": "ra", "s_dec": "dec", "dataproduct_subtype": "product_type"},
+            {
+                "s_ra": "ra",
+                "s_dec": "dec",
+                "dataproduct_subtype": "product_type",
+                "filter": "filter_",
+            },
+            axis=1,
+            inplace=True,
+        )
+
+    # needed for stack and calib
+    if "filter_name" in tbl.columns:
+        msgs.info("Renaming coordinate columns.")
+        tbl.rename(
+            {"cat.filter_name": "filter_"},
             axis=1,
             inplace=True,
         )
@@ -309,7 +323,7 @@ def load_catalogue(
     # or directly pass a table
     if fname != "":
         if Path(fname).exists() and not overwrite:
-            msgs.info("Catalogue exists, loading it.")
+            msgs.info("Table exists, loading it.")
             tbl = pd.read_csv(fname)
         else:
             msgs.info(f"Querying archive and saving results to {fname}.")
@@ -354,6 +368,7 @@ def get_closest_image_url(
     ra: units.deg,
     dec: units.deg,
     cat,
+    band,
     ra_cat="ra",
     dec_cat="dec",
 ):
@@ -366,20 +381,25 @@ def get_closest_image_url(
         frame="icrs",
     )
     dist = target_coord.separation(cat_coord).to(units.arcsec)
+    if len(dist) == 0:
+        return [], -1.0
+    
     # probably too much
     # TODO: Is there a better way to determine the distance?
-    if dist.min() > 1.0 * units.deg:
-        msgs.warn("Image centres are all farther than 1 deg.")
+    elif dist.min() > 1.0 * units.deg:
+        msgs.warn(
+            f"Images in band {band} are all farther than 1 deg "
+            f"for the object at ra, dec: {ra.value:.4f}, {dec.value:.4f}."
+        )
         return [], dist.min()
 
     # now this is not ideal but at the moment I really don't
-    # see other simple options
-    # stack images are slightly offset one from the other
-    # so now we simply take the first three, sort them by
-    # decresing distance, and generate cutout for all of them
-    # closes images will always overwrite the farthers ones
-    # which should guarantee that we are not missing anything
-    inds = np.where(dist < np.unique(np.sort(dist))[3])[0]
+    #  see other simple options
+    # images are selected based on the closest match.
+    #  if needed, the code can download an arbitrary number of images, but
+    #  names need to be adjusted accordingly, and this is NOT handled at
+    #  the moment.
+    inds = np.where(dist < np.unique(np.sort(dist))[1])[0]
 
     return cat["cutout_access_url"][inds], dist[inds]
 
@@ -389,10 +409,10 @@ def get_closest_image_url(
 
 @units.quantity_input()
 def get_download_urls(
-    ra: units.deg, dec: units.deg, side: units.arcsec, cat, search_type="CIRCLE"
+    ra: units.deg, dec: units.deg, side: units.arcsec, cat, band, search_type="CIRCLE"
 ):
     side = side.to(units.deg).value
-    image_urls, _ = get_closest_image_url(ra, dec, cat)
+    image_urls, _ = get_closest_image_url(ra, dec, cat, band)
     return [
         build_url(url, ra.value, dec.value, side, search_type) for url in image_urls
     ]
@@ -403,30 +423,21 @@ def get_download_urls(
 
 @units.quantity_input()
 def get_download_df(
-    ra_arr: units.deg, dec_arr: units.deg, side: units.arcsec, cat, requested_bands
+    ra_arr: units.deg, dec_arr: units.deg, side: units.arcsec, cat, requested_band
 ):
     # transition layer to wildhunt
+    filtered_cat = cat.query(f"filter_ == '{requested_band}'").reset_index()
+
     urls_, filter_, ras, decs = [], [], [], []
     for _ra, _dec in zip(ra_arr, dec_arr):
-        # this gives either zero, one or three bands, so we need to figure the band out
-        # based on the url itself
-        urls = get_download_urls(_ra, _dec, side, cat)
-        bands = []
-        for img_url in urls:
-            if "NIR" in img_url:
-                bands.append(img_url.split("IMAGE_")[1][0])
-            else:
-                bands.append("VIS")
+        urls = get_download_urls(_ra, _dec, side, filtered_cat, requested_band)
+        bands = [requested_band] * len(urls)
 
         # build columns for the dataframe
         urls_.append(urls)
         filter_.append(bands)
         ras.append([_ra.value] * len(urls))
         decs.append([_dec.value] * len(urls))
-
-    query = ""
-    for b in requested_bands:
-        query += f'filter == "{b}" or '
 
     return pd.DataFrame(
         data={
@@ -435,7 +446,7 @@ def get_download_df(
             "url": np.hstack(urls_),
             "filter": np.hstack(filter_),
         }
-    ).query(query[:-4])  # filters out only the bands that one needs
+    )
 
 
 # =========================================================================== #

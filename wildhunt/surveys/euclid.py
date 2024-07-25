@@ -71,12 +71,12 @@ class Euclid(imagingsurvey.ImagingSurvey):
         :type n_jobs: int
         :return: None
         """
-        if self.n_jobs > 1:
+        if n_jobs > 1:
             msgs.warn(
-                "Multiprocessing download is currently not working for Euclid."
+                "Multiprocessing download is currently not working for Euclid. "
                 "Setting `self.n_jobs` to 1."
             )
-            self.n_jobs = 1
+            n_jobs = 1
 
         self.survey_setup(ra, dec, image_folder_path, epoch="J", n_jobs=n_jobs)
 
@@ -168,39 +168,37 @@ class Euclid(imagingsurvey.ImagingSurvey):
         )[0]
 
         # select only the products that you want
+        # prepare_catalogue just does some renaming to make sure that
+        # different tables can be handles with the same code
         eu.prepare_catalogue(cat, inplace=True)
-        cat_vis_stack = cat.query(
-            f"product_type == '{product_type_dict[product_type][0]}'"
-        ).reset_index()
-        cat_nir_stack = cat.query(
-            f"product_type == '{product_type_dict[product_type][1]}'"
+        cat_data_prod = cat.query(
+            f"product_type == '{product_type_dict[product_type][0]}' "
+            + f"or product_type == '{product_type_dict[product_type][1]}'"
         ).reset_index()
 
-        # Need to split this in two as otherwise there way to know
-        #  whether the N closest images are all in VIS or NIR
-        # In this way instead I am sure I am getting at least one
+        if cat_data_prod.empty:
+            msgs.error(
+                f"No data product of type {product_type} found. Are you using the correct table?"
+            )
+            raise ValueError
+
+        # Need to split this in band as otherwise there is no way to know
+        #  whether the N closest images are all in VIS or a NIR band.
+        # In this way instead I am sure (surer at least) I am getting at least one
         #  of each, if present.
-        df_vis, df_nir = None, None
-        if "VIS" in bands:
-            df_vis = eu.get_download_df(
+        df = None
+
+        for b in bands:
+            _b = b if b == "VIS" else "NIR_" + b
+            partial = eu.get_download_df(
                 ra_batch * units.deg,
                 dec_batch * units.deg,
                 img_size * units.arcsec,
-                cat_vis_stack,
-                bands,
+                cat_data_prod,
+                _b,
             )
 
-        if any([b in ["Y", "J", "H"] for b in bands]):
-            df_nir = eu.get_download_df(
-                ra_batch * units.deg,
-                dec_batch * units.deg,
-                img_size * units.arcsec,
-                cat_nir_stack,
-                bands,
-            )
-
-        df_list = [df for df in [df_vis, df_nir] if df is not None]
-        df = pd.concat(df_list, ignore_index=True)
+            df = pd.concat([df, partial], ignore_index=True) if df is not None else partial
 
         # sort by RA - needed because I am querying separately
         #  VIS and NIR
