@@ -32,10 +32,8 @@ if __name__ == "__main__":
 
     eu.prepare_catalogue(cat, inplace=True)
 
-    cat_nir_stack = cat.query("product_type == 'DpdNirStackedFrame'").reset_index()
-    cat_vis_stack = cat.query("product_type == 'DpdVisStackedFrame'").reset_index()
-    urls_nir_stack = eu.get_download_urls(obj_ra, obj_dec, side, cat_nir_stack)
-    urls_vis_stack = eu.get_download_urls(obj_ra, obj_dec, side, cat_vis_stack)
+    cat_stack = cat.query("product_type == 'DpdNirStackedFrame' or product_type == 'DpdVisStackedFrame'").reset_index()
+    urls_stack = eu.get_download_urls(obj_ra, obj_dec, side, cat_stack, ['VIS', 'J', 'H'])
 
     # We want the stack but calibrated images seem to be more abundant
     # TODO: Figure out the difference between the two!
@@ -45,8 +43,5 @@ if __name__ == "__main__":
     # urls_vis_calib = get_download_urls(obj_ra, obj_dec, side, cat_vis_calib)
 
     eu.download_cutouts(
-        obj_ra, obj_dec, urls_nir_stack, LOCAL_PATH / "test_images", user=user
-    )
-    eu.download_cutouts(
-        obj_ra, obj_dec, urls_vis_stack, LOCAL_PATH / "test_images", user=user
+        obj_ra, obj_dec, urls_stack, LOCAL_PATH / "test_images", user=user
     )
