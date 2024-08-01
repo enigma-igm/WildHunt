@@ -35,7 +35,7 @@ msgs = pypmsgs.Messages()
 
 # https://stackoverflow.com/questions/30405867/how-to-get-python-requests-to-trust-a-self-signed-ssl-certificate
 # as far as I understand strongly recommended but not strictly needed
-if os.environ.get("WILDHUNT_LOCALPATH") is not None:
+if os.environ.get("WILDHUNT_LOCALPATH") is None:
     LOCAL_PATH = Path.home()
 else:
     LOCAL_PATH = Path(os.environ.get("WILDHUNT_LOCALPATH"))
