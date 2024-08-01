@@ -35,7 +35,11 @@ msgs = pypmsgs.Messages()
 
 # https://stackoverflow.com/questions/30405867/how-to-get-python-requests-to-trust-a-self-signed-ssl-certificate
 # as far as I understand strongly recommended but not strictly needed
-LOCAL_PATH = Path(os.environ.get("WILDHUNT_LOCALPATH"))
+if os.environ.get("WILDHUNT_LOCALPATH") is not None:
+    LOCAL_PATH = Path.home()
+else:
+    LOCAL_PATH = Path(os.environ.get("WILDHUNT_LOCALPATH"))
+
 CERT_KEY = LOCAL_PATH / "eas-esac-esa-int-chain.pem"
 if not CERT_KEY.exists():
     CERT_KEY = False
@@ -383,7 +387,7 @@ def get_closest_image_url(
     dist = target_coord.separation(cat_coord).to(units.arcsec)
     if len(dist) == 0:
         return [], -1.0
-    
+
     # probably too much
     # TODO: Is there a better way to determine the distance?
     elif dist.min() > 1.0 * units.deg:
