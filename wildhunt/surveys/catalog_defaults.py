@@ -42,7 +42,7 @@ ls_dr9_default_columns = """
   """
 
 # TODO: 
-# ls_dr10_default_columns = ls_dr9_default_columns
+ls_dr10_default_columns = ls_dr9_default_columns
 
 unwise_dr1_default_columns = """
     match.ra,
@@ -79,6 +79,8 @@ catwise2020_default_columns = """
 """
 
 catalog_presets = {
+    'DELSDR10': {'service': 'datalab', 'table': 'ls_dr10.tractor',
+                'columns': ls_dr10_default_columns},
     'DELSDR9': {'service': 'datalab', 'table': 'ls_dr9.tractor',
                 'columns': ls_dr9_default_columns},
     'UNWISE': {'service': 'datalab', 'table': 'unwise_dr1.object',

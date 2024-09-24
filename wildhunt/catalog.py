@@ -34,7 +34,7 @@ def retrieve_survey(survey_name, bands, fov, verbosity=1):
     survey name and filter bands. The survey class is then returned.
 
     The currently available surveys are:
-    PS1, VHS, VVV, VMC, VIK, VID, UKI, UHS, DELS, WISE
+    PS1, VHS, VVV, VMC, VIK, VID, UKI, UHS, DELS, WISE, LOTSSDR2, Euclid
 
     :param survey_name: Name of the imaging survey to download images from.
     :type survey_name: str

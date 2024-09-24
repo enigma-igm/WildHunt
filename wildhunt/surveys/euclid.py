@@ -24,7 +24,7 @@ class Euclid(imagingsurvey.ImagingSurvey):
 
     """
 
-    def __init__(self, bands, fov, name="PS1", verbosity=1):
+    def __init__(self, bands, fov, name="Euclid", verbosity=1):
         """Initialize the Euclid class.
 
         :param bands: List of survey filter bands (VIS/Y/J/H).
