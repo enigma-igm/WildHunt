@@ -4,43 +4,23 @@ A collection of python routines to aid in the hunt for quasars
 
 ## Installation 
 
-You need to manually install the following packages:
+- Step 1: Manually install the following packages (details below):
+	- astro-datalab
+	- pyqt
+- Step 2: Install the package with `pip install -e .` in the main package directory 
 
-### astro-datalab 
+
+### Install commands for the additional packages
+#### astro-datalab 
 "pip install --ignore-installed --no-cache-dir astro-datalab"
 
-### pyqt 
+#### pyqt 
 "pip install PyQt5"
 
-
-Then you can install wildhunt with:
-"pip install -e ." in the main package directory
-
-
+### tables
 Installation of tables under M1 Macs is a bit tricky.  One solution is to install hdf5 with brew and set the HDF5_DUR manually:
 
+```
 brew install hdf5
-
-export HDF5_DIR=/opt/homebrew/opt/hdf5 
-
-
-## Installation 
-
-You need to manually install the following packages:
-
-### astro-datalab 
-"pip install --ignore-installed --no-cache-dir astro-datalab"
-
-### pyqt 
-"pip install PyQt5"
-
-
-Then you can install wildhunt with:
-"pip install -e ." in the main package directory
-
-
-Installation of tables under M1 Macs is a bit tricky.  One solution is to install hdf5 with brew and set the HDF5_DUR manually:
-
-brew install hdf5
-
-export HDF5_DIR=/opt/homebrew/opt/hdf5 
+export HDF5_DIR=/opt/homebrew/opt/hdf5
+```
