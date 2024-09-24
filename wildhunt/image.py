@@ -1460,6 +1460,7 @@ class SurveyImage(Image):
                    self.survey + "_" + self.band + "*fov*.fits"
 
         filenames_available = glob.glob(filepath)
+        print(filenames_available)
         file_found = False
         open_file_fov = None
         file_path = None

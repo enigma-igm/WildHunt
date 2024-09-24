@@ -42,6 +42,6 @@ if __name__ == "__main__":
 
     matched_cat_c.save_catalog(output_dir='./catalogs')
 
-    from Ipython import embed
+    from IPython import embed
 
     embed()
