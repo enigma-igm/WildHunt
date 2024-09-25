@@ -8,10 +8,19 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import requests
+
 from astropy import units
+from astropy.wcs import WCS
+from astropy.io import fits
 from astropy.coordinates import SkyCoord
 
+import matplotlib.pyplot as plt
+
 from wildhunt import pypmsgs
+from wildhunt import image as whimg
+from wildhunt import utils as whut
+
+from IPython import embed
 
 msgs = pypmsgs.Messages()
 
@@ -35,7 +44,11 @@ msgs = pypmsgs.Messages()
 
 # https://stackoverflow.com/questions/30405867/how-to-get-python-requests-to-trust-a-self-signed-ssl-certificate
 # as far as I understand strongly recommended but not strictly needed
-LOCAL_PATH = Path(os.environ.get("WILDHUNT_LOCALPATH"))
+if os.environ.get("WILDHUNT_LOCALPATH") is None:
+    LOCAL_PATH = Path.home()
+else:
+    LOCAL_PATH = Path(os.environ.get("WILDHUNT_LOCALPATH"))
+
 CERT_KEY = LOCAL_PATH / "eas-esac-esa-int-chain.pem"
 if not CERT_KEY.exists():
     CERT_KEY = False
@@ -481,3 +494,261 @@ def download_cutouts(obj_ra, obj_dec, img_urls, folder, user=None, verbose=VERBO
                 "wb",
             ) as f:
                 f.write(response.content)
+
+
+# =========================================================================== #
+# Functions for persistence check
+# =========================================================================== #
+
+def create_persistence_qa_plot(ra, dec, result_df, cutout_dir, output_dir,
+                               mer_df=None, stack_df=None):
+    """ Create a QA plot for the persistence check.
+
+    :param ra: Right ascension in degrees
+    :type ra: float
+    :param dec: Declination in degrees
+    :type dec: float
+    :param result_df: DataFrame with the result data
+    :type result_df: pandas.DataFrame
+    :param cutout_dir: Path to the directory where the cutouts will be saved
+    :type cutout_dir: str
+    :param output_dir: Path to the directory where the output will be saved
+    :type output_dir: str
+    :param mer_df: DataFrame with the MER cutout data
+    :type mer_df: pandas.DataFrame
+    :param stack_df: DataFrame with the STACKED cutout data
+    :type stack_df: pandas.DataFrame
+    :return: None
+    """
+
+    # Reduce result_df to ra and dec in question with a delta of 1 arcsec
+    delta_ra = 0.000278
+    delta_dec = 0.000278
+    df = result_df.query('{} < ra < {} and {} < dec < {}'.format(
+        ra-delta_ra, ra+delta_ra, dec-delta_dec, dec+delta_dec))
+    df.query('processed == True and img_extension == img_extension',
+             inplace=True)
+
+    # Group result dataframe by observation id
+    obs_id_gb = df.groupby('observation_id')
+
+    for obs_id, df in obs_id_gb:
+
+        plot_persistence_cutouts(ra, dec, obs_id, df, cutout_dir, output_dir,
+                               mer_df=mer_df, stack_df=stack_df)
+
+
+
+def plot_persistence_cutouts(ra, dec, obs_id, calib_df, cutout_dir, output_dir,
+                               mer_df=None, stack_df=None):
+    """ Plot the cutouts of the persistence check.
+
+    :param ra: Right ascension in degrees
+    :type ra: float
+    :param dec: Declination in degrees
+    :type dec: float
+    :param obs_id: Observation ID
+    :type obs_id: int
+    :param calib_df: DataFrame with the calibrated frame data
+    :type calib_df: pandas.DataFrame
+    :param cutout_dir: Path to the directory where the cutouts will be saved
+    :type cutout_dir: str
+    :param output_dir: Path to the directory where the output will be saved
+    :type output_dir: str
+    :param mer_df: DataFrame with the MER cutout data
+    :type mer_df: pandas.DataFrame
+    :param stack_df: DataFrame with the STACKED cutout data
+    :type stack_df: pandas.DataFrame
+    :return: None
+
+    """
+
+    # Plot setup
+    cols = 4
+    if mer_df is not None:
+        cols += 1
+    if stack_df is not None:
+        cols += 1
+
+    fig = plt.figure(figsize=(10, 2 * cols))
+    fig.subplots_adjust(hspace=0.2)
+
+    row_counter = 0
+
+    # Add the MER mosaic cutouts
+    # ToDo
+    if mer_df is not None:
+        row_counter += 1
+
+    # Add the STACKED cutouts
+    # ToDo
+    if stack_df is not None:
+        row_counter += 1
+
+    # Add the NIR calibrated cutouts
+    filter_dict = {'NIR_Y':0,
+                   'NIR_J':1,
+                   'NIR_H':2}
+
+    for _, row in calib_df.iterrows():
+        filter_idx = filter_dict[row['filter_name']]
+        seq_idx = row['frame_seq']
+        filename = row['file_name'].replace('.fits', '_cutout.fits')
+
+        file_path = os.path.join(cutout_dir, filename)
+
+        cutout = whimg.Image(filename=file_path)
+
+        ax_idx = seq_idx + filter_idx * 4 + 1
+        ax = fig.add_subplot(3, cols, ax_idx)
+
+        cutout._simple_plot(n_sigma=3, axis=ax,
+                            frameon=True,
+                            scalebar=None)
+
+        cutout._add_aperture_circle(ax, ra,
+                                    dec, 1)
+
+        ax.set_title('{} \n Flux {:.3f}+-{:.3f}'.format(
+            row['filter_name'],
+            row['flux_aper_1.0'], row['flux_err_aper_1.0']))
+
+        # Remove axis labels
+        ax.tick_params(axis='both', which='both', bottom=False, left=False,
+                       labelbottom=False, labelleft=False)
+
+    # Save the plot
+    plt.tight_layout()
+    source_name = whut.coord_to_name(ra, dec, epoch=2000)[0]
+    plt.savefig(
+        os.path.join(output_dir,
+                     '{}_{}_persistence_cutouts.pdf'.format(source_name,
+                                                            obs_id)))
+
+
+
+def check_persistence(ra, dec, calib_df, img_dir, cutout_dir, output_dir,
+                      cutout_fov=20, aperture_radii=np.array([1., 2.])):
+    """ Check the persistence of a source in the Euclid images.
+
+    :param ra: Right ascension in degrees
+    :type ra: float
+    :param dec: Declination in degrees
+    :type dec: float
+    :param calib_df: DataFrame with the calibrated frames
+    :type calib_df: pandas.DataFrame
+    :param img_dir: Path to the directory with the images
+    :type img_dir: str
+    :param cutout_dir: Path to the directory where the cutouts will be saved
+    :type cutout_dir: str
+    :param output_dir: Path to the directory where the output will be saved
+    :type output_dir: str
+    :param cutout_fov: Field of view of the cutout in arcsec. Defaults to 20 arcsec.
+    :type cutout_fov: float
+    :param aperture_radii: Radii of the apertures in arcsec. Defaults to [1., 2.]
+    :type aperture_radii: numpy.ndarray
+    :return: None
+
+    """
+
+
+    # Instantiate the SkyCoord object
+    coord = SkyCoord(ra, dec, unit='deg', frame='icrs')
+
+    # Downselect the calibrated frames to the NISP frames
+    calib_columns = ['instrument_name', 'observation_id', 'pointing_id',
+                     'frame_seq', 'filter_name', 'file_name']
+
+    result_df = calib_df.query('instrument_name == "NISP"')[calib_columns]
+    result_df.loc[:, 'ra'] = ra
+    result_df.loc[:, 'dec'] = dec
+    result_df.loc[:, 'processed'] = False
+    result_df.loc[:, 'img_extension'] = None
+
+    for idx in result_df.index:
+        file_path = os.path.join(img_dir, result_df.loc[idx, 'file_name'])
+        band = result_df.loc[idx, 'filter_name']
+        survey = 'Euclid-WIDE'
+
+        # Test if the image exists
+        if not os.path.exists(file_path):
+            msgs.warn(f"File {file_path} does not exist.")
+            continue
+        else:
+            msgs.info(f"Processing file {file_path}")
+            result_df.loc[idx, 'processed'] = True
+
+        #  Cycle through extension to find the correct extension with the source
+        hdul = fits.open(file_path)
+        for hdu in [h for h in hdul if 'SCI' in h.name]:
+
+            header = hdu.header
+            wcs = WCS(header)
+
+            # Test if the coordinate is within the image
+            x, y = wcs.world_to_pixel(coord)
+
+            # If source in extension, then
+            if 0 < x < header['NAXIS1'] and 0 < y < header['NAXIS2']:
+                print('Coordinate is within the image')
+                print('Extension: ', hdu.name)
+
+                result_df.loc[idx, 'img_extension'] = hdu.name
+
+                # Load the image
+                img = whimg.Image(file_path, exten=hdu.name,
+                                  survey=survey, band=band)
+                # Create a cutout image
+                cutout = img.get_cutout_image(coord.ra.value,
+                                              coord.dec.value,
+                                              cutout_fov)
+                # Save the cutout image
+                cutout_name =  result_df.loc[idx, 'file_name'].replace('.fits', '_cutout.fits')
+                cutout_path = os.path.join(cutout_dir, cutout_name)
+                cutout.to_fits(cutout_path)
+
+                # Calculate forced aperture photometry
+
+                # nanomag_correction = 1 # ToDo: Implement the conversion to physical units
+                zp_ab = img.header['ZPAB']
+                gain = img.header['GAIN']
+                nanomag_correction = np.power(10, 0.4 * (22.5 - zp_ab))
+
+                phot_result = img.calculate_aperture_photometry(
+                    coord.ra.value, coord.dec.value,
+                    nanomag_correction,
+                    aperture_radii=aperture_radii,
+                    exptime_norm=87.2248,
+                    background_aperture=np.array([7, 10.]))
+
+                # Create a metric that flags persistence
+                # ToDo!!!
+
+                # Save the results to the result DataFrame
+                prefix = '{}_{}'.format(survey, band)
+                for radius in aperture_radii:
+                    flux = phot_result['{}_flux_aper_{:.1f}arcsec'.format(prefix, radius)]
+                    flux_err = phot_result['{}_flux_err_aper_{:.1f}arcsec'.format(prefix, radius)]
+                    snr = phot_result['{}_snr_aper_{:.1f}arcsec'.format(prefix, radius)]
+                    abmag = phot_result['{}_mag_aper_{:.1f}arcsec'.format(prefix, radius)]
+                    abmag_err = phot_result['{}_mag_err_aper_{:.1f}arcsec'.format(prefix, radius)]
+
+                    result_df.loc[idx, 'flux_aper_{:.1f}'.format(radius)] = flux
+                    result_df.loc[idx, 'flux_err_aper_{:.1f}'.format(radius)] = flux_err
+                    result_df.loc[idx, 'snr_aper_{:.1f}'.format(radius)] = snr
+                    result_df.loc[idx, 'abmag_aper_{:.1f}'.format(radius)] = abmag
+                    result_df.loc[idx, 'abmag_err_aper_{:.1f}'.format(radius)] = abmag_err
+
+
+    # Create the persistence plot
+    create_persistence_qa_plot(ra, dec, result_df, cutout_dir, output_dir)
+
+    coord_name = whut.coord_to_name(ra, dec, epoch=2000)[0]
+    table_name = '{}_persistence_check.csv'.format(coord_name)
+    result_df.to_csv(os.path.join(output_dir, table_name),
+                     index=False)
+
+
+
+
+# Have a dictionary of filepath that links to the correct cutout files for the persistence check

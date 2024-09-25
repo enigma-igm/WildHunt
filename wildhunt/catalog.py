@@ -13,8 +13,12 @@ import dask.dataframe as dd
 import astropy.units as u
 from astropy.table import Table
 from astropy.coordinates import SkyCoord, match_coordinates_sky
-from dl.helpers.utils import convert
-from dl import authClient as ac, queryClient as qc
+# ToDo: Implement a better solution
+try:
+    from dl.helpers.utils import convert
+    from dl import authClient as ac, queryClient as qc
+except:
+    print('No Internet!')
 
 from wildhunt import utils
 from wildhunt import pypmsgs

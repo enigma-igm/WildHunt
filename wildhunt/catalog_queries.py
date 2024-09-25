@@ -14,7 +14,11 @@ from astroquery.irsa import Irsa
 from astroquery.vsa import Vsa
 from astroquery.ukidss import Ukidss
 
-from dl import queryClient as qc
+# ToDo: Implement a better solution
+try:
+    from dl import queryClient as qc
+except:
+    print('No Internet!')
 
 from wildhunt import pypmsgs
 
