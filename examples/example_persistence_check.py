@@ -11,6 +11,7 @@ if __name__ == '__main__':
     calib_df = pd.read_csv('../examples/data/20240925_persistence_testing.csv')
     img_dir = '/Users/jtschindler/Downloads/'
     cutout_dir = '../examples/cutouts/'
+    output_dir = '.'
 
-    wheuclid.check_persistence(ra, dec, calib_df, img_dir, cutout_dir)
+    wheuclid.check_persistence(ra, dec, calib_df, img_dir, cutout_dir, '.')
 

@@ -619,7 +619,8 @@ def plot_persistence_cutouts(ra, dec, obs_id, calib_df, cutout_dir, output_dir,
 
     # Save the plot
     plt.tight_layout()
-    source_name = whut.coord_to_name(ra, dec, epoch=2000)[0]
+    print(ra, dec)
+    source_name = whut.coord_to_name([ra], [dec], epoch='J')[0]
     plt.savefig(
         os.path.join(output_dir,
                      '{}_{}_persistence_cutouts.pdf'.format(source_name,
@@ -743,7 +744,7 @@ def check_persistence(ra, dec, calib_df, img_dir, cutout_dir, output_dir,
     # Create the persistence plot
     create_persistence_qa_plot(ra, dec, result_df, cutout_dir, output_dir)
 
-    coord_name = whut.coord_to_name(ra, dec, epoch=2000)[0]
+    coord_name = whut.coord_to_name([ra], [dec], epoch='J')[0]
     table_name = '{}_persistence_check.csv'.format(coord_name)
     result_df.to_csv(os.path.join(output_dir, table_name),
                      index=False)
