@@ -159,7 +159,6 @@ class Euclid(imagingsurvey.ImagingSurvey):
             + self.batch_size
         ]
 
-        # use eu.get_download_df to get the equivalent of PanSTARRS.py here
         cat = eu.load_catalogue(
             fname=local_path + "/ivoa_frames.csv",
             query_table=catalogue,

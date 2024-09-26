@@ -3,6 +3,7 @@ import base64
 import getpass
 import os
 from http.cookiejar import MozillaCookieJar
+from io import StringIO
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +30,8 @@ msgs = pypmsgs.Messages()
 #   This seem to be what we actually want to use!
 
 # ivoa_score table is up to date as of 20240723
+# following discussion with Arv and the general Euclid Hack Days, this now queries directly from the correct table
+#  and directly picks the right image by first sorting by distance
 
 # NOTE! It seems that one can only be logged in through the terminal OR the web page
 # !! If both, everything breaks !!
@@ -243,28 +246,46 @@ def download_table(query_table, user, savepath, sync=True, verbose=VERBOSE):
             f.write(response.content.decode("utf-8"))
 
     # Async (already required for ivoa_obscore)
-    # FIXME! How do I get the correct job if I do N queries?
-    # For now just use a local table that we update every now and then
-    # Current version is above
-    if False:
+    else:
+        # TODO: check that the formatting for the query works properly
+        # TODO: check how to wait for the result of the async query
         with requests.Session() as session:
-            cookies = MozillaCookieJar()
-            session.cookies = cookies
+            session.cookies = user.cookies
 
-            session.post(
+            post_sess = session.post(
                 "https://easotf.esac.esa.int/tap-server/tap/async",
                 data={
-                    "data": "PHASE=run&LANG=ADQL&REQUEST=doQuery&QUERY="
-                    + query.replace(" ", "+")
+                    "data": "PHASE=run&REQUEST=doQuery", "QUERY": query.replace(" ", " "), "LANG" : "ADQL", "FORMAT":"csv"
                 },
                 verify=CERT_KEY,
             )
 
-            print(
-                requests.get(
-                    "https://easotf.esac.esa.int/tap-server/tap/async"
-                ).content.decode("utf-8")
-            )
+            post_sess_content = post_sess.content.decode()
+            jobID = post_sess_content.split('CDATA[')[1].split(']]')[0] # string not int
+
+            # this is most likely not executing yet, so send the run to get the results
+            # get the status and decode it
+            post_sess_status = requests.get(f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/phase", cookies = session.cookies).content.decode()
+            if verbose:
+                msgs.info("Post status run: {post_sess_status}")
+
+            if post_sess_status == "PENDING":
+                # send start request
+                if verbose:
+                    msgs.info("Sending RUN phase.")
+                
+                session.post(f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/phase", data = {'phase' : "RUN"}, cookies = session.cookies)
+
+            # there is a while loop to do here but I need to test with a better connection
+            post_sess_status = requests.get(f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}", cookies = session.cookies).content.decode()
+            
+            # get the actual output
+            post_sess_res = requests.get(f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/results/result", cookies = session.cookies).content.decode()
+
+            # write to output
+            df = pd.read_csv(StringIO(post_sess_res))
+            df.to_csv(savepath, index = False)
+            
 
     return pd.read_csv(savepath)
 
@@ -377,7 +398,7 @@ def get_closest_image_url(
     dec_cat="dec",
 ):
     # this takes the closes images to the target
-    # TODO: Are these unique?
+    # TODO: Are these unique? Dithering bothers in this case
     target_coord = SkyCoord(ra, dec, frame="icrs")
     cat_coord = SkyCoord(
         cat[ra_cat].to_numpy() * ra.unit,
