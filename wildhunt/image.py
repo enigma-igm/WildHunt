@@ -1300,7 +1300,18 @@ class Image(object):
 
             # Calculate the flux in nanomaggies
             flux = float(source_flux['aperture_sum_' + str(idx)])
+
+            flux_name = '{}_raw_aper_sum_{}arcsec'.format(
+                survey_band, aperture_radii[idx])
+            result_dict.update({flux_name: flux - background[idx]})
+
+            raw_flux_err = std * np.sqrt(pix_aperture[idx].area)
+            flux_err_name = '{}_raw_aper_sum_err_{}arcsec'.format(
+                survey_band, aperture_radii[idx])
+            result_dict.update({flux_err_name: raw_flux_err})
+
             flux = (flux - background[idx]) / exptime_norm * nanomag_correction
+
             # Calculate the flux error in nanomaggies
             flux_err = std * np.sqrt(pix_aperture[idx].area) / exptime_norm * \
                        nanomag_correction

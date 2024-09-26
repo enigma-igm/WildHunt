@@ -609,8 +609,8 @@ def plot_persistence_cutouts(ra, dec, obs_id, calib_df, cutout_dir, output_dir,
         cutout._add_aperture_circle(ax, ra,
                                     dec, 1)
 
-        ax.set_title('{} \n Flux {:.3f}+-{:.3f}'.format(
-            row['filter_name'],
+        ax.set_title('{} \n'.format(row['filter_name'])
+                     + r' Flux {:.3f}+-{:.3f} $\mu$Jy'.format(
             row['flux_aper_1.0'], row['flux_err_aper_1.0']))
 
         # Remove axis labels
@@ -681,6 +681,10 @@ def check_persistence(ra, dec, calib_df, img_dir, cutout_dir, output_dir,
 
         #  Cycle through extension to find the correct extension with the source
         hdul = fits.open(file_path)
+
+        photfnu = hdul[0].header['PHOTFNU']
+        photrelex = hdul[0].header['PHRELEX']
+
         for hdu in [h for h in hdul if 'SCI' in h.name]:
 
             header = hdu.header
@@ -712,14 +716,19 @@ def check_persistence(ra, dec, calib_df, img_dir, cutout_dir, output_dir,
 
                 # nanomag_correction = 1 # ToDo: Implement the conversion to physical units
                 zp_ab = img.header['ZPAB']
+                zp_ab_err = img.header['ZPABE']
                 gain = img.header['GAIN']
-                nanomag_correction = np.power(10, 0.4 * (22.5 - zp_ab))
+                photreldt = img.header['PHRELDT']
+
+                print('ZPAB: ', zp_ab, band)
+
+                nanomag_correction = np.power(10, 0.4 * (22.5 - zp_ab)) * gain
 
                 phot_result = img.calculate_aperture_photometry(
                     coord.ra.value, coord.dec.value,
                     nanomag_correction,
                     aperture_radii=aperture_radii,
-                    exptime_norm=87.2248,
+                    exptime_norm=1,
                     background_aperture=np.array([7, 10.]))
 
                 # Create a metric that flags persistence
@@ -728,17 +737,30 @@ def check_persistence(ra, dec, calib_df, img_dir, cutout_dir, output_dir,
                 # Save the results to the result DataFrame
                 prefix = '{}_{}'.format(survey, band)
                 for radius in aperture_radii:
-                    flux = phot_result['{}_flux_aper_{:.1f}arcsec'.format(prefix, radius)]
-                    flux_err = phot_result['{}_flux_err_aper_{:.1f}arcsec'.format(prefix, radius)]
-                    snr = phot_result['{}_snr_aper_{:.1f}arcsec'.format(prefix, radius)]
-                    abmag = phot_result['{}_mag_aper_{:.1f}arcsec'.format(prefix, radius)]
-                    abmag_err = phot_result['{}_mag_err_aper_{:.1f}arcsec'.format(prefix, radius)]
+                    raw_flux = phot_result['{}_raw_aper_sum_{:.1f}arcsec'.format(prefix, radius)]
+                    raw_flux_err = phot_result['{}_raw_aper_sum_err_{:.1f}arcsec'.format(prefix, radius)]
+                    # flux = phot_result['{}_flux_aper_{:.1f}arcsec'.format(prefix, radius)]
+                    # flux_err = phot_result['{}_flux_err_aper_{:.1f}arcsec'.format(prefix, radius)]
+                    # snr = phot_result['{}_snr_aper_{:.1f}arcsec'.format(prefix, radius)]
+                    # abmag = phot_result['{}_mag_aper_{:.1f}arcsec'.format(prefix, radius)]
+                    # abmag_err = phot_result['{}_mag_err_aper_{:.1f}arcsec'.format(prefix, radius)]
 
+                    # Calculation according to
+                    # https://apceuclidccweb-pp.in2p3.fr/Documentation/NIR/NIR_AbsolutePhotometry/develop/0.5.0/md_README.html
+
+                    flux = raw_flux / 87.2248 * photfnu * photrelex * photreldt  # flux in micro Jy
+                    flux_err = raw_flux_err / 87.2248 * photfnu * photrelex * photreldt
+                    snr = flux / flux_err
+
+                    abmag = -2.5 * np.log10(raw_flux) + zp_ab
+
+
+                    result_df.loc[idx, 'raw_aper_sum_{:.1f}'.format(radius)] = raw_flux
                     result_df.loc[idx, 'flux_aper_{:.1f}'.format(radius)] = flux
                     result_df.loc[idx, 'flux_err_aper_{:.1f}'.format(radius)] = flux_err
                     result_df.loc[idx, 'snr_aper_{:.1f}'.format(radius)] = snr
                     result_df.loc[idx, 'abmag_aper_{:.1f}'.format(radius)] = abmag
-                    result_df.loc[idx, 'abmag_err_aper_{:.1f}'.format(radius)] = abmag_err
+                    result_df.loc[idx, 'abmag_err_aper_{:.1f}'.format(radius)] = zp_ab_err
 
 
     # Create the persistence plot
