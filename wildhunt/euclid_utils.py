@@ -2,19 +2,27 @@
 import base64
 import getpass
 import os
+import re
+import time
+from http.client import IncompleteRead
 from http.cookiejar import MozillaCookieJar
 from io import StringIO
 from pathlib import Path
+from urllib.error import HTTPError
 
 import numpy as np
 import pandas as pd
 import requests
 from astropy import units
 from astropy.coordinates import SkyCoord
+from tqdm import tqdm
 
 from wildhunt import pypmsgs
 
 msgs = pypmsgs.Messages()
+
+ChunkedEncodingError = requests.exceptions.ChunkedEncodingError
+ProtocolError = requests.urllib3.exceptions.ProtocolError
 
 # random notes from the archive (Updated 20240723)
 # sedm.aux_stacked -> auxiliary data (PSF and other data model)
@@ -47,6 +55,16 @@ CERT_KEY = LOCAL_PATH / "eas-esac-esa-int-chain.pem"
 if not CERT_KEY.exists():
     CERT_KEY = False
 VERBOSE = 0
+
+
+# =========================================================================== #
+
+
+product_type_dict = {
+    "calib": ["DpdVisCalibratedFrame", "DpdNirCalibratedFrame"],
+    "stacked": ["DpdVisStackedFrame", "DpdNirStackedFrame"],
+    "mosaic": ["DpdMerBksMosaic", "DpdMerBksMosaic"],  # same for VIS and NIR
+}
 
 # =========================================================================== #
 
@@ -160,6 +178,13 @@ class User:
                 data=self.get_user_data(),
                 verify=cert_key,
             )
+
+            session.post(
+                "https://easotf.esac.esa.int/sas-dd/login",
+                data=self.get_user_data(),
+                verify=cert_key,
+            )
+
             # do I really need to save the cookies?
             # cookies.save("cookies.txt", ignore_discard=True, ignore_expires=True)
 
@@ -199,31 +224,157 @@ class User:
 
 # For the time being, ONLY for cutout purposes, the best approach seems to be using ivoa_obscore with the calibrated images
 # stacked images are available, but it appears only a subset of those are available from the archive (Deep fields? Unsure...)
+# also stacked images are dithered, and that is a bit of a mess to deal with anyway
 def select_query(name="stack"):
-    assert name in [
-        "ivoa_obscore",
-        "stack",
-        "calib",
-    ], "[Error] Valid options are `'ivoa_obscore', 'stack' and 'calib'`"
+    name = name.lower()
+
+    if name not in ["ivoa_obscore", "stack", "calib", "mosaic"]:
+        raise ValueError(
+            "[Error] Valid options are `'ivoa_obscore', 'stack', 'calib', 'mosaic'`"
+        )
 
     if name == "ivoa_obscore":
-        return """SELECT s_ra, s_dec, t_exptime, obs_id, obs_collection, cutout_access_url,
+        out = """SELECT s_ra, s_dec, t_exptime, obs_id, obs_collection, cutout_access_url,
                dataproduct_subtype, dataproduct_type, filter, instrument_name
                FROM ivoa.obscore WHERE t_exptime > 0"""
     elif name == "stack":
-        return """SELECT ra, dec, duration AS t_exp, file_name, file_path, filter_name,
+        out = """SELECT ra, dec, duration AS t_exp, file_name, file_path, filter_name,
                instrument_name, observation_id, observation_stack_oid, product_type,
                release_name FROM sedm.observation_stack"""
     elif name == "calib":
-        return """SELECT ra, dec, duration AS t_exp, file_name, file_path, filter_name,
+        out = """SELECT ra, dec, duration AS t_exp, file_name, file_path, filter_name,
                instrument_name, observation_id, calibrated_frame_oid, product_type,
                release_name FROM sedm.calibrated_frame"""
+    elif name == "mosaic":
+        out = """SELECT ra, dec, file_name, file_path, filter_name,
+               instrument_name, tile_index, mosaic_product_oid, product_type,
+               release_name FROM sedm.mosaic_product"""
+
+    return re.sub(r"\n +", " ", out)
+
+
+# =========================================================================== #
+
+
+def get_phase(jobID, session):
+    return requests.get(
+        f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/phase",
+        cookies=session.cookies,
+    ).content.decode()
+
+
+# =========================================================================== #
+
+
+def sync_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
+    response = requests.get(
+        "https://easotf.esac.esa.int/tap-server/tap/sync?REQUEST=doQuery&LANG=ADQL&FORMAT=csv&QUERY="
+        + query.replace(" ", "+"),
+        verify=cert_key,
+        cookies=user.cookies,
+    )
+
+    if verbose > 0:
+        msgs.info(f"Response code: {response.status_code}")
+
+    if response.status_code == 200:
+        if verbose:
+            msgs.info(f"Successfully retrieved table, writing to {savepath}.")
+
+        with open(savepath, "w") as f:
+            if verbose:
+                msgs.info(f"Saving table to {savepath}")
+            f.write(response.content.decode("utf-8"))
+    else:
+        msgs.error(
+            f"Something went wrong. Query returned status code {response.status_code}"
+        )
+        raise ValueError("Failed query, please retry.")
+
+
+# =========================================================================== #
+
+
+def async_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
+    with requests.Session() as session:
+        session.cookies = user.cookies
+
+        post_sess = session.post(
+            "https://easotf.esac.esa.int/tap-server/tap/async",
+            data={
+                "data": "PHASE=run&REQUEST=doQuery",
+                "QUERY": query,
+                "LANG": "ADQL",
+                "FORMAT": "csv",
+            },
+            verify=cert_key,
+        )
+
+        post_sess_content = post_sess.content.decode()
+        jobID = post_sess_content.split("CDATA[")[1].split("]]")[0]  # string not int
+
+        # this is most likely not executing yet, so send the run to get the results
+        # get the status and decode it
+        post_sess_status = get_phase(jobID, session)
+        if verbose:
+            msgs.info(f"Post status run: {post_sess_status}")
+
+        if post_sess_status == "PENDING":
+            # send start request
+            if verbose:
+                msgs.info("Sending RUN phase.")
+
+            session.post(
+                f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/phase",
+                data={"phase": "RUN"},
+                cookies=session.cookies,
+            )
+
+        executing = True
+        stime = time.time()
+        if verbose:
+            msgs.info(f"Waiting for job completion. JobID: {jobID}")
+
+        while executing:
+            if get_phase(jobID, session) == "EXECUTING":
+                time.sleep(5.0)
+                if verbose and (int((time.time() - stime) % 20.0) == 0):
+                    msgs.info(
+                        "Waiting for query completion. "
+                        f"Elapsed time {int((time.time() - stime)):d}s"
+                    )
+
+            elif get_phase(jobID, session) == "COMPLETED":
+                executing = False
+                if verbose:
+                    msgs.info(f"Query completed in ~{int(time.time() - stime)}s.")
+            else:
+                raise ValueError(f"Unknown phase: {get_phase(jobID, session)}")
+
+        # get the actual output
+        post_sess_res = requests.get(
+            f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/results/result",
+            cookies=session.cookies,
+        ).content.decode()
+
+        # write to output
+        if verbose:
+            msgs.info(f"Saving table to {savepath}")
+
+        df = pd.read_csv(StringIO(post_sess_res))
+        df.to_csv(savepath, index=False)
 
 
 # =========================================================================== #
 
 
 def download_table(query_table, user, savepath, sync=True, verbose=VERBOSE):
+    savepath = Path(savepath)
+    if not savepath.is_dir():
+        raise ValueError(
+            "Please provide the parent folder, table name is automatically generated!"
+        )
+
     if not user.logged_in:
         msgs.info("User not logged in, trying log in.")
         user.sasotf_login()
@@ -231,69 +382,37 @@ def download_table(query_table, user, savepath, sync=True, verbose=VERBOSE):
     # minimal useful information (I think)
     query = select_query(query_table)
 
+    # attach query type to the savepath to generate name
+    savepath = savepath / f"{query_table}.csv"
+
     if sync:
-        response = requests.get(
-            "https://easotf.esac.esa.int/tap-server/tap/sync?REQUEST=doQuery&LANG=ADQL&FORMAT=csv&QUERY="
-            + query.replace(" ", "+"),
-            verify=CERT_KEY,
-            cookies=user.cookies,
-        )
-
-        if verbose > 0:
-            msgs.info(f"Response code: {response.status_code}")
-
-        with open(savepath, "w") as f:
-            f.write(response.content.decode("utf-8"))
+        msgs.info(f"Downloading table `{query_table}` with a syncronous query.")
+        # Try running in sync mode, otherwise default to async
+        try:
+            sync_query(query, user, savepath, cert_key=CERT_KEY, verbose=verbose)
+        except (ChunkedEncodingError, ProtocolError):
+            msgs.warn("Could not complete in sync mode, trying async query.")
+            async_query(query, user, savepath, cert_key=CERT_KEY, verbose=verbose)
 
     # Async (already required for ivoa_obscore)
     else:
-        # TODO: check that the formatting for the query works properly
-        # TODO: check how to wait for the result of the async query
-        with requests.Session() as session:
-            session.cookies = user.cookies
+        msgs.info(f"Downloading table `{query_table}` with an asyncronous query.")
 
-            post_sess = session.post(
-                "https://easotf.esac.esa.int/tap-server/tap/async",
-                data={
-                    "data": "PHASE=run&REQUEST=doQuery", "QUERY": query.replace(" ", " "), "LANG" : "ADQL", "FORMAT":"csv"
-                },
-                verify=CERT_KEY,
-            )
-
-            post_sess_content = post_sess.content.decode()
-            jobID = post_sess_content.split('CDATA[')[1].split(']]')[0] # string not int
-
-            # this is most likely not executing yet, so send the run to get the results
-            # get the status and decode it
-            post_sess_status = requests.get(f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/phase", cookies = session.cookies).content.decode()
-            if verbose:
-                msgs.info("Post status run: {post_sess_status}")
-
-            if post_sess_status == "PENDING":
-                # send start request
-                if verbose:
-                    msgs.info("Sending RUN phase.")
-                
-                session.post(f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/phase", data = {'phase' : "RUN"}, cookies = session.cookies)
-
-            # there is a while loop to do here but I need to test with a better connection
-            post_sess_status = requests.get(f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}", cookies = session.cookies).content.decode()
-            
-            # get the actual output
-            post_sess_res = requests.get(f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/results/result", cookies = session.cookies).content.decode()
-
-            # write to output
-            df = pd.read_csv(StringIO(post_sess_res))
-            df.to_csv(savepath, index = False)
-            
-
-    return pd.read_csv(savepath)
+    # only for mosaic, only select Euclid product
+    if query_table == "mosaic":
+        return (
+            pd.read_csv(savepath)
+            .query("instrument_name == 'VIS' or instrument_name == 'NISP'")
+            .reset_index(drop=True)
+        )
+    else:
+        return pd.read_csv(savepath)
 
 
 # =========================================================================== #
 
 
-def prepare_catalogue(tbl_in, inplace=False, force=False):
+def parse_catalogue(tbl_in, inplace=False, force=False):
     if inplace:
         tbl = tbl_in
     else:
@@ -302,11 +421,27 @@ def prepare_catalogue(tbl_in, inplace=False, force=False):
     if "cutout_access_url" not in tbl.columns or force:
         msgs.info("Added `cutout_access_url` column.")
         # names are the same for both stack and calib, which is what we'll want to use most of the time
-        tbl["cutout_access_url"] = [
-            build_access_url(_p.strip(), _f.strip(), _o)
-            for (_p, _f, _o) in zip(
+        access_urls = []
+        # mosaic and calib/stack use a different identifier to download the images
+        if "observation_id" in tbl.columns:
+            for _p, _f, _o in zip(
                 tbl["file_path"], tbl["file_name"], tbl["observation_id"]
-            )
+            ):
+                access_urls.append(build_access_url(_p.strip(), _f.strip(), obsid=_o))
+        else:
+            for _p, _f, _o in zip(
+                tbl["file_path"], tbl["file_name"], tbl["tile_index"]
+            ):
+                access_urls.append(build_access_url(_p.strip(), _f.strip(), obsid=_o))
+
+        tbl["cutout_access_url"] = access_urls
+
+    # TODO: (Future us!) if this gets very slow (unlikely), merge the two loops
+    if "image_access_url" not in tbl.columns or force:
+        msgs.info("Added `image_access_url` column.")
+        tbl["image_access_url"] = [
+            f"https://easotf.esac.esa.int/sas-dd/data?file_name={_fn}&release=sedm&RETRIEVAL_TYPE=FILE"
+            for _fn in tbl["file_name"]
         ]
 
     # needed for ivoa_score
@@ -339,15 +474,21 @@ def prepare_catalogue(tbl_in, inplace=False, force=False):
 
 
 def load_catalogue(
-    fname="", tbl_in=None, query_table="stack", user=None, overwrite=False
+    fname="", tbl_in=None, query_table="mosaic", user=None, use_local_tbl=False
 ):
     if user is None:
         user = User()
 
-    # either read from file (and optionally query and download)
+    if fname != "" and tbl_in is not None:
+        msgs.warn(
+            "Received both a table object and a path."
+            "Ignoring table and redownloading."
+        )
+
+    # either read from file (and by default query and download it)
     # or directly pass a table
     if fname != "":
-        if Path(fname).exists() and not overwrite:
+        if Path(fname).exists() and use_local_tbl:
             msgs.info("Table exists, loading it.")
             tbl = pd.read_csv(fname)
         else:
@@ -366,12 +507,18 @@ def load_catalogue(
 # =========================================================================== #
 
 
-def build_access_url(path, filename, obsid):
+def build_access_url(path, filename, obsid=None, tileidx=None):
+    assert not (
+        obsid is not None and tileidx is not None
+    ), "Either `obsid` or `tileindex` must be None"
     # this builds the first part of the url
     # get collection from path itself
     collection = path.split("/")[-2]
     base = "https://easotf.esac.esa.int/sas-cutout/cutout"
-    params = f"filepath={path}/{filename}&collection={collection}&obsid={obsid}"
+    if obsid is None:
+        params = f"filepath={path}/{filename}&collection={collection}&obsid={tileidx}"
+    else:
+        params = f"filepath={path}/{filename}&collection=MER&tileindex={obsid}"
     return f"{base}?{params}"
 
 
@@ -388,8 +535,7 @@ def build_url(access_url, ra, dec, side, search_type="CIRCLE"):
 
 
 @units.quantity_input()
-def get_closest_image_url(
-    # ra: units.deg, dec: units.deg, side : units.arcsec, cat, ra_cat="ra", dec_cat="dec"
+def get_closest_image_url_local_tbl(
     ra: units.deg,
     dec: units.deg,
     cat,
@@ -397,6 +543,7 @@ def get_closest_image_url(
     ra_cat="ra",
     dec_cat="dec",
 ):
+    # TODO: add possibility to use the query here
     # this takes the closes images to the target
     # TODO: Are these unique? Dithering bothers in this case
     target_coord = SkyCoord(ra, dec, frame="icrs")
@@ -426,7 +573,48 @@ def get_closest_image_url(
     #  the moment.
     inds = np.where(dist < np.unique(np.sort(dist))[1])[0]
 
-    return cat["cutout_access_url"][inds], dist[inds]
+    return cat.iloc[inds], dist[inds]
+    # return the full dataframe, pick out later
+    #  whatever is needed
+
+
+# =========================================================================== #
+
+
+@units.quantity_input()
+def get_closest_image_url_sas_otf(
+    ra: units.deg,
+    dec: units.deg,
+    cat,
+    band,
+    ra_cat="ra",
+    dec_cat="dec",
+):
+    # FIXME!
+    raise NotImplementedError
+
+
+# =========================================================================== #
+
+
+@units.quantity_input()
+def get_closest_image_url(
+    ra: units.deg,
+    dec: units.deg,
+    cat,
+    band,
+    ra_cat="ra",
+    dec_cat="dec",
+    query_sas_otf=False,
+):
+    if query_sas_otf:
+        return get_closest_image_url_sas_otf(
+            ra, dec, cat, band, ra_cat=ra_cat, dec_cat=dec_cat
+        )
+    else:
+        return get_closest_image_url_local_tbl(
+            ra, dec, cat, band, ra_cat=ra_cat, dec_cat=dec_cat
+        )
 
 
 # =========================================================================== #
@@ -437,7 +625,7 @@ def get_download_urls(
     ra: units.deg, dec: units.deg, side: units.arcsec, cat, band, search_type="CIRCLE"
 ):
     side = side.to(units.deg).value
-    image_urls, _ = get_closest_image_url(ra, dec, cat, band)
+    image_urls = get_closest_image_url(ra, dec, cat, band)[0]["cutout_access_url"]
     return [
         build_url(url, ra.value, dec.value, side, search_type) for url in image_urls
     ]
@@ -506,3 +694,140 @@ def download_cutouts(obj_ra, obj_dec, img_urls, folder, user=None, verbose=VERBO
                 "wb",
             ) as f:
                 f.write(response.content)
+
+
+# =========================================================================== #
+
+
+def prepare_sas_catalogue(
+    cat_path,
+    sas_catalogue,
+    user,
+    product_type,
+    product_type_dict,
+    use_local_tbl=False,  # default in any case, better make it explicit
+):
+    cat = load_catalogue(
+        fname=cat_path,
+        query_table=sas_catalogue,
+        user=user,
+        use_local_tbl=use_local_tbl,
+    )[0]
+
+    # select only the products that you want
+    # parse_catalogue just does some renaming to make sure that
+    # different tables can be handles with the same code
+    parse_catalogue(cat, inplace=True)
+
+    cat_data_prod = cat.query(
+        f"product_type == '{product_type_dict[product_type][0]}' "
+        + f"or product_type == '{product_type_dict[product_type][1]}'"
+    ).reset_index()
+
+    if cat_data_prod.empty:
+        msgs.error(
+            f"No data product of type {product_type} found. Are you using the correct table?"
+        )
+        raise ValueError
+    else:
+        return cat_data_prod
+
+
+# =========================================================================== #
+
+
+# sourced from: https://github.com/tqdm/tqdm/#hooks-and-callbacks, requests version
+def download_with_progress_bar(url, user, out_fname):
+    response = requests.get(url, cookies=user.cookies, stream=True)
+    with tqdm.wrapattr(
+        open(out_fname, "wb"),
+        "write",
+        miniters=1,
+        desc=msgs.info(f"Downloading {url.split("=")[1].split("&")[0]}"),
+        total=int(response.headers.get("content-length", 0)),
+    ) as fout:
+        for chunk in response.iter_content(chunk_size=4096):
+            fout.write(chunk)
+
+
+# =========================================================================== #
+
+
+@units.quantity_input()
+def download_full_image(
+    ra: units.deg,
+    dec: units.deg,
+    user,
+    cat_outpath,
+    img_outpath,
+    img_outname,
+    img_type="calib",
+    verbose=False,
+):
+    """Download a the full EUCLID image given an url. Note that the in this care the
+    `img_type` indicates both the table to query and the data product used.
+
+    :param url: URL of the image to download.
+    :type url: str
+    :param image_name: Name of the image to download.
+    :type image_name: str
+    :return:
+    """
+    cat_outpath = Path(cat_outpath)
+    img_outpath = Path(img_outpath)
+
+    # Restric image type
+    if img_type not in ["mosaic", "calib"]:
+        raise ValueError("`img_type` should be either 'mosaic' or 'calib'")
+
+    # download new tile catalogue and process it
+    tile_cat = prepare_sas_catalogue(
+        cat_outpath,
+        img_type,
+        user,
+        img_type,
+        product_type_dict,
+        use_local_tbl=False,
+    )
+
+    # download all images - the logic behind this is to group by identifier
+    #  to minimize the number of images to download
+    df = None
+
+    for ra_, dec_ in zip(ra, dec):
+        partial = get_closest_image_url(
+            ra_,
+            dec_,
+            tile_cat,
+            "[VIS, Y, J, H]",
+            query_sas_otf=False,
+        )[0]
+
+        df = partial if df is None else pd.concat([df, partial], ignore_index=True)
+
+    # this gets all 4 bands at the same time
+    unique_identifier = (
+        "mosaic_product_oid" if img_type == "mosaic" else "calibrated_frame_oid"
+    )
+    df_urls = df.drop_duplicates(unique_identifier, ignore_index=True)
+
+    # actually download the images
+    for _, row in df_urls.iterrows():
+        if img_outname is None:
+            img_outname = row["file_name"]
+
+        try:
+            download_with_progress_bar(
+                row["image_access_url"], user, img_outpath / img_outname
+            )
+
+            if verbose > 0:
+                msgs.info(f"Download of {img_outname} to {img_outpath} completed")
+
+        except (IncompleteRead, HTTPError, AttributeError, ValueError) as err:
+            msgs.warn(f"Download error encountered: {err}")
+            if verbose > 0:
+                msgs.warn(f"Download of {img_outname} unsuccessful")
+
+    # and save the catalogue just in case it is needed for anything
+    df_urls.to_csv(img_outpath / "Euclid_urls_vetted.csv")

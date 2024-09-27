@@ -1,28 +1,28 @@
 #!/usr/bin/env python
 
-import os
-import glob
 import getpass
-import shutil
-import pathlib
-import numpy as np
-import pandas as pd
+import glob
 import multiprocessing as mp
+import os
+import pathlib
+import shutil
+
+import astropy.units as u
 import dask
 import dask.dataframe as dd
-import astropy.units as u
-from astropy.table import Table
+import numpy as np
+import pandas as pd
 from astropy.coordinates import SkyCoord, match_coordinates_sky
+from astropy.table import Table
+from dl import authClient as ac
+from dl import queryClient as qc
 from dl.helpers.utils import convert
-from dl import authClient as ac, queryClient as qc
 
-from wildhunt import utils
-from wildhunt import pypmsgs
-from wildhunt import image as whim
 from wildhunt import catalog_queries as whcq
-from wildhunt.surveys import catalog_defaults as whcd, panstarrs
-from wildhunt.surveys import vsa_wsa, legacysurvey, unwise, lotss, euclid
-
+from wildhunt import image as whim
+from wildhunt import pypmsgs, utils
+from wildhunt.surveys import catalog_defaults as whcd
+from wildhunt.surveys import euclid, legacysurvey, lotss, panstarrs, unwise, vsa_wsa
 
 msgs = pypmsgs.Messages()
 
@@ -1071,7 +1071,7 @@ class Catalog(object):
                 ra = partition.compute()[self.ra_colname].values
                 dec = partition.compute()[self.dec_colname].values
 
-                survey.download_images(ra, dec, image_folder_path, n_jobs)
+                survey.download_images(ra, dec, image_folder_path, n_jobs = n_jobs)
 
     def get_forced_photometry(self, survey_dicts,  image_folder_path=None,
                               aperture_radii=np.array([1.]),
