@@ -1078,13 +1078,13 @@ def download_full_image(
     user,
     cat_outpath,
     img_outpath,
-    img_outname,
+    img_outname=None,
     img_type="calib",
     verbose=False,
 ):
-    """Download a full EUCLID image given an url. Note that the in this care the
-    `img_type` indicates both the table to query and the data product used, as the distinction
-    is only used for ivoa_obscore.
+    """Download a full EUCLID image given an url. Note that in this case the
+    `img_type` indicates both the table to query and the data product used,
+    as the distinction is only used for ivoa_obscore.
 
     :param url: URL of the image to download.
     :type url: str
