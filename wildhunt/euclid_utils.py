@@ -597,6 +597,25 @@ def download_table(query_table, user, savepath, sync=True, verbose=VERBOSE):
 
 
 def _build_cutout_access_url(path, filename, obsid=None, tileidx=None):
+    """Helper function for `build_cutout_access_url`.
+    Construct a cutout access URL based on the provided path and filename.
+
+    This function builds a URL that allows access to cutout images. It constructs
+    the first part of the URL by extracting the collection name from the given path.
+    The function requires either an observation ID (`obsid`) or a tile index (`tileidx`),
+    but not both, and will generate the appropriate URL parameters accordingly.
+
+    :param path: The directory path where the files are located.
+    :type path: str
+    :param filename: The name of the file for which the URL is being constructed.
+    :type filename: str
+    :param obsid: The observation ID; must be None if `tileidx` is provided.
+    :type obsid: str or None
+    :param tileidx: The tile index; must be None if `obsid` is provided.
+    :type tileidx: str or None
+    :return: The constructed cutout access URL.
+    :rtype: str
+    """
     assert not (
         obsid is not None and tileidx is not None
     ), "Either `obsid` or `tileindex` must be None"
@@ -615,6 +634,23 @@ def _build_cutout_access_url(path, filename, obsid=None, tileidx=None):
 
 
 def build_cutout_access_url(tbl):
+    """Generate cutout access URLs for files in the given DataFrame.
+
+    This function iterates through the provided DataFrame, constructing cutout access
+    URLs for the files identified by their paths and names. The function handles two
+    scenarios: if the observation IDs are present, it uses them; otherwise, it falls
+    back on tile indexes to generate the URLs. The resulting URLs are added to a new
+    column in the DataFrame. Note: this modifies the dataframe in place!
+
+    There is a distinction in how urls are generated: for cutouts service requires
+    a different set of parameters mosaic and calibrated/stacked images.
+
+    :param tbl: The input DataFrame containing the file paths, file names, and
+                either observation IDs or tile indexes.
+    :type tbl: pandas.DataFrame
+    :return: None; modifies the input DataFrame in place by adding a column for
+             cutout access URLs.
+    """
     # unifies the access url for both the mer tiles and everything else
     access_urls = []
     if "observation_id" in tbl.columns:
@@ -637,6 +673,19 @@ def build_cutout_access_url(tbl):
 
 
 def build_image_access_url(tbl):
+    """Create image access URLs for files listed in the DataFrame.
+
+    This function generates image access URLs for each file name in the provided
+    DataFrame. It constructs the URLs using a predefined base address and includes
+    the file names as parameters. The resulting URLs are added to a new column in
+    the DataFrame. Note: this modifies the dataframe in place!
+
+    :param tbl: The input DataFrame containing the file names for which image access
+                URLs are to be generated.
+    :type tbl: pandas.DataFrame
+    :return: None; modifies the input DataFrame in place by adding a column for
+             image access URLs.
+    """
     tbl["image_access_url"] = [
         f"https://easotf.esac.esa.int/sas-dd/data?file_name={_fn}&release=sedm&RETRIEVAL_TYPE=FILE"
         for _fn in tbl["file_name"]
@@ -801,6 +850,33 @@ def get_closest_image_url_local_tbl(
     ra_cat="ra",
     dec_cat="dec",
 ):
+    """Retrieve the closest image URLs based on given coordinates from a catalogue.
+
+    This function identifies the closest images to the specified right ascension (RA)
+    and declination (DEC) coordinates from a provided catalogue. It calculates the
+    angular separation between the target coordinates and the catalogue entries to
+    determine proximity. If no images are found within a specified threshold, a warning
+    is issued and an empty list is returned. The function can also handle different
+    column names for RA and DEC if specified.
+
+    :param ra: The right ascension of the target location.
+    :type ra: astropy.units.Quantity (degrees)
+    :param dec: The declination of the target location.
+    :type dec: astropy.units.Quantity (degrees)
+    :param cat: The catalogue DataFrame containing images and their coordinates.
+    :type cat: pandas.DataFrame
+    :param band: The band of observation to filter images.
+    :type band: str
+    :param ra_cat: The name of the column in `cat` containing RA coordinates.
+                   Defaults to 'ra'.
+    :type ra_cat: str
+    :param dec_cat: The name of the column in `cat` containing DEC coordinates.
+                    Defaults to 'dec'.
+    :type dec_cat: str
+    :return: A tuple containing the DataFrame of closest images and the minimum distance
+             to the target coordinates in arcseconds.
+    :rtype: tuple (pandas.DataFrame, astropy.units.Quantity)
+    """
     # TODO: add possibility to use the query here
     # this takes the closes images to the target
     # TODO: Are these unique? Dithering bothers in this case
@@ -848,6 +924,29 @@ def get_closest_image_url_sas_otf(
     ra_cat="ra",
     dec_cat="dec",
 ):
+    """Fetch the closest image URLs from the SAS OTF service based on given coordinates.
+
+    This function is intended to retrieve the closest image URLs from the
+    SAS (Science Archive Service) On-The-Fly (OTF) service for a specified
+    right ascension (RA) and declination (DEC) coordinate. However, the
+    implementation is not currently provided, resulting in a NotImplementedError.
+
+    :param ra: The right ascension of the target location.
+    :type ra: astropy.units.Quantity (degrees)
+    :param dec: The declination of the target location.
+    :type dec: astropy.units.Quantity (degrees)
+    :param cat: The catalogue DataFrame containing images and their coordinates.
+    :type cat: pandas.DataFrame
+    :param band: The band of observation to filter images.
+    :type band: str
+    :param ra_cat: The name of the column in `cat` containing RA coordinates.
+                   Defaults to 'ra'.
+    :type ra_cat: str
+    :param dec_cat: The name of the column in `cat` containing DEC coordinates.
+                    Defaults to 'dec'.
+    :type dec_cat: str
+    :raises NotImplementedError: This function has not been implemented yet.
+    """
     # FIXME!
     raise NotImplementedError
 
@@ -865,6 +964,36 @@ def get_closest_image_url(
     dec_cat="dec",
     query_sas_otf=False,
 ):
+    """Retrieve the closest image URLs based on given coordinates from either a local catalogue
+    or by querying the SAS OTF service.
+
+    This function serves as a dispatcher that selects the method to be used for
+    fetching the closest image URLs. Based on the value of `query_sas_otf`,
+    it either queries the SAS OTF service or uses a local catalogue to find
+    the nearest images to the given right ascension (RA) and declination (DEC)
+    coordinates.
+
+    :param ra: The right ascension of the target location.
+    :type ra: astropy.units.Quantity (degrees)
+    :param dec: The declination of the target location.
+    :type dec: astropy.units.Quantity (degrees)
+    :param cat: The catalogue DataFrame containing images and their coordinates.
+    :type cat: pandas.DataFrame
+    :param band: The band of observation to filter images.
+    :type band: str
+    :param ra_cat: The name of the column in `cat` containing RA coordinates.
+                   Defaults to 'ra'.
+    :type ra_cat: str
+    :param dec_cat: The name of the column in `cat` containing DEC coordinates.
+                    Defaults to 'dec'.
+    :type dec_cat: str
+    :param query_sas_otf: If True, use the SAS OTF method to retrieve images;
+                          otherwise, use the local catalogue method.
+    :type query_sas_otf: bool
+    :return: A DataFrame of closest images and the corresponding distances if applicable,
+             returned from the appropriate image retrieval method.
+    :rtype: tuple (pandas.DataFrame, astropy.units.Quantity)
+    """
     if query_sas_otf:
         return get_closest_image_url_sas_otf(
             ra, dec, cat, band, ra_cat=ra_cat, dec_cat=dec_cat
@@ -882,6 +1011,29 @@ def get_closest_image_url(
 def get_download_urls(
     ra: units.deg, dec: units.deg, side: units.arcsec, cat, band, search_type="CIRCLE"
 ):
+    """Generate download URLs for cutout images based on given coordinates and search parameters.
+
+    This function retrieves the closest cutout image URLs based on the specified
+    right ascension (RA) and declination (DEC) coordinates. It also constructs
+    download URLs using the provided `side` and `search_type` parameters. The
+    function converts the `side` from arcseconds to degrees and gathers the
+    necessary URLs for downloading.
+
+    :param ra: The right ascension of the target location.
+    :type ra: astropy.units.Quantity (degrees)
+    :param dec: The declination of the target location.
+    :type dec: astropy.units.Quantity (degrees)
+    :param side: The size of the cutout image in arcseconds.
+    :type side: astropy.units.Quantity (arcseconds)
+    :param cat: The catalogue DataFrame containing image data.
+    :type cat: pandas.DataFrame
+    :param band: The band of observation for filtering images.
+    :type band: str
+    :param search_type: The type of search to perform, defaults to "CIRCLE".
+    :type search_type: str
+    :return: A list of download URLs for the cutout images.
+    :rtype: list of str
+    """
     side = side.to(units.deg).value
     image_urls = get_closest_image_url(ra, dec, cat, band)[0]["cutout_access_url"]
     return [
@@ -896,6 +1048,26 @@ def get_download_urls(
 def get_download_df(
     ra_arr: units.deg, dec_arr: units.deg, side: units.arcsec, cat, requested_band
 ):
+    """Create a DataFrame of download URLs for cutout images based on input coordinate arrays.
+
+    This function constructs a DataFrame containing download URLs for cutout images
+    corresponding to arrays of right ascension (RA) and declination (DEC) coordinates.
+    It filters the input catalogue based on the requested band and constructs the
+    necessary URLs for each coordinate pair, organizing the results into a structured DataFrame.
+
+    :param ra_arr: An array of right ascension values for the target locations.
+    :type ra_arr: astropy.units.Quantity (degrees)
+    :param dec_arr: An array of declination values for the target locations.
+    :type dec_arr: astropy.units.Quantity (degrees)
+    :param side: The size of the cutout images in arcseconds.
+    :type side: astropy.units.Quantity (arcseconds)
+    :param cat: The catalogue DataFrame containing relevant image information.
+    :type cat: pandas.DataFrame
+    :param requested_band: The band of observation to filter images.
+    :type requested_band: str
+    :return: A DataFrame containing columns for RA, DEC, download URLs, and filter information.
+    :rtype: pandas.DataFrame
+    """
     # transition layer to wildhunt
     filtered_cat = cat.query(f"filter_ == '{requested_band}'").reset_index()
 
@@ -924,6 +1096,27 @@ def get_download_df(
 
 
 def download_cutouts(obj_ra, obj_dec, img_urls, folder, user=None, verbose=VERBOSE):
+    """Download cutout images from given URLs and save them to the specified folder.
+
+    This function downloads cutout images from a list of URLs and saves them to a
+    designated folder. It handles the file naming based on the provided right ascension
+    (RA) and declination (DEC) values and checks for successful HTTP responses.
+    The user can provide login credentials; if not, a user object will be instantiated.
+
+    :param obj_ra: The right ascension of the target object for naming downloaded files.
+    :type obj_ra: float
+    :param obj_dec: The declination of the target object for naming downloaded files.
+    :type obj_dec: float
+    :param img_urls: A list of URLs for downloading the cutout images.
+    :type img_urls: list of str
+    :param folder: The folder path where the images will be saved.
+    :type folder: pathlib.Path
+    :param user: (Optional) A user object for authentication; if None, a new user will be created.
+    :type user: User or None
+    :param verbose: Level of verbosity for log messages; higher numbers yield more output.
+    :type verbose: int
+    :return: None; downloads images and saves them to the specified folder.
+    """
     if user is None:
         user = User()
         user.sasotf_login()
@@ -960,6 +1153,24 @@ def download_cutouts(obj_ra, obj_dec, img_urls, folder, user=None, verbose=VERBO
 
 
 def download_parsistence_input_tbl_single_obj(ra, dec, user):
+    """Fetch and return the persistence input table for a single astronomical object.
+
+    This function constructs a SQL query to retrieve data from the
+    `sedm.calibrated_frame` table for a specified astronomical object,
+    based on its right ascension (RA) and declination (DEC) coordinates.
+    It filters the results to include only entries from the 'NISP' instrument
+    within the field of view (FOV) of the given coordinates. The results are
+    returned as a pandas DataFrame containing relevant observational details.
+
+    :param ra: The right ascension of the target object in degrees.
+    :type ra: float
+    :param dec: The declination of the target object in degrees.
+    :type dec: float
+    :param user: The user object for authentication to access the database.
+    :type user: User
+    :return: A DataFrame containing the persistence input details for the target object.
+    :rtype: pandas.DataFrame
+    """
     query = (
         "SELECT observation_stack.instrument_name, observation_stack.observation_id, "
         "observation_stack.pointing_id, observation_stack.frame_seq, observation_stack.filter_name, "
@@ -979,7 +1190,26 @@ def download_parsistence_input_tbl_single_obj(ra, dec, user):
 
 
 def download_parsistence_input(ras, decs, user):
-    # less efficient but this will never be the bottleneck
+    """Download and merge persistence input tables for multiple astronomical objects.
+
+    This function iterates over arrays of right ascension (RA) and declination (DEC)
+    coordinates, retrieving persistence input data for each object by calling the
+    `download_parsistence_input_tbl_single_obj` function. The resulting DataFrames are
+    merged into a single DataFrame, ensuring that duplicates are removed based on the
+    'calibrated_frame_oid'. The function also generates image access URLs for the merged
+    table and returns the combined DataFrame along with a dictionary of individual tables.
+
+    :param ras: An array of right ascension values for the target objects in degrees.
+    :type ras: iterable of float
+    :param decs: An array of declination values for the target objects in degrees.
+    :type decs: iterable of float
+    :param user: The user object for authentication to access the database.
+    :type user: User
+    :return: A tuple containing:
+             - A DataFrame with the merged persistence input data, excluding the 'file_path' column.
+             - A dictionary mapping each object (identified by RA and DEC) to its corresponding DataFrame.
+    :rtype: tuple (pandas.DataFrame, dict)
+    """
     tbls = {}
 
     for ra, dec in zip(ras, decs):
@@ -1007,6 +1237,33 @@ def persistance_pipeline(
     verbose=False,
     **kwargs,
 ):
+    """Execute the persistence pipeline for multiple astronomical objects.
+
+    This function orchestrates the workflow for handling persistence data for
+    multiple astronomical objects identified by their right ascension (RA)
+    and declination (DEC) coordinates. It first retrieves the necessary input
+    data by downloading persistence tables. The pipeline then downloads
+    images from the SAS (Science Archive Service) and subsequently performs
+    persistence checks for each specified object. The function accepts various
+    parameters for configuration and outputs.
+
+    :param ras: An array of right ascension values for the target objects in degrees.
+    :type ras: iterable of float
+    :param decs: An array of declination values for the target objects in degrees.
+    :type decs: iterable of float
+    :param user: The user object for authentication to access the database.
+    :type user: User
+    :param output_full_img_dir: The directory path where full images will be saved.
+    :type output_full_img_dir: str or pathlib.Path
+    :param output_cutout_dir: The directory path where cutout images will be saved.
+    :type output_cutout_dir: str or pathlib.Path
+    :param output_persistence_check_dir: The directory path for persistence check results.
+    :type output_persistence_check_dir: str or pathlib.Path
+    :param verbose: If True, enable verbose logging for the pipeline process.
+    :type verbose: bool
+    :param kwargs: Additional keyword arguments for flexibility in processing.
+    :return: None; performs image downloading and persistence checking without returning values.
+    """
     download_table, dict_input_tbl = download_parsistence_input(ras, decs, user)
 
     download_images_from_sas(
@@ -1074,6 +1331,9 @@ def create_persistence_qa_plot(
             mer_df=mer_df,
             stack_df=stack_df,
         )
+
+
+# =========================================================================== #
 
 
 def plot_persistence_cutouts(
@@ -1168,6 +1428,9 @@ def plot_persistence_cutouts(
             output_dir, "{}_{}_persistence_cutouts.pdf".format(source_name, obs_id)
         )
     )
+
+
+# =========================================================================== #
 
 
 def check_persistence(
@@ -1334,7 +1597,11 @@ def check_persistence(
     result_df.to_csv(os.path.join(output_dir, table_name), index=False)
 
 
+# =========================================================================== #
+
 # Have a dictionary of filepath that links to the correct cutout files for the persistence check
+
+# =========================================================================== #
 
 
 def prepare_sas_catalogue(
@@ -1345,6 +1612,30 @@ def prepare_sas_catalogue(
     product_type_dict,
     use_local_tbl=False,  # default in any case, better make it explicit
 ):
+    """Load and filter a SAS catalogue based on specified product types.
+
+    This function retrieves a catalogue from the specified SAS source, optionally
+    using a local table for efficiency. It then filters the catalogue to include
+    only those data products matching the specified product type(s). The function
+    also renames columns as needed for consistent handling across different tables.
+
+    :param cat_path: The path to the catalogue file to be loaded.
+    :type cat_path: str or pathlib.Path
+    :param sas_catalogue: The name of the SAS catalogue to query.
+    :type sas_catalogue: str
+    :param user: The user object for authentication to access the catalogue.
+    :type user: User
+    :param product_type: The type of product to filter in the catalogue.
+    :type product_type: str
+    :param product_type_dict: A dictionary mapping product types to their corresponding values.
+    :type product_type_dict: dict
+    :param use_local_tbl: If True, utilize a local table for loading the catalogue instead
+                          of querying the SAS; defaults to False.
+    :type use_local_tbl: bool
+    :return: A DataFrame containing the filtered catalogue data products of the specified type.
+    :rtype: pandas.DataFrame
+    :raises ValueError: If no data product of the specified type is found in the catalogue.
+    """
     cat = load_catalogue(
         fname=cat_path,
         query_table=sas_catalogue,
@@ -1376,6 +1667,21 @@ def prepare_sas_catalogue(
 
 # sourced from: https://github.com/tqdm/tqdm/#hooks-and-callbacks, requests version
 def download_with_progress_bar(url, user, out_fname):
+    """Download a file from the given URL and display a progress bar during the download.
+
+    This function retrieves a file from a specified URL using the given user credentials
+    and saves it to the specified output file path. If the file already exists, it skips
+    the download and uses the cached version instead. The download process is displayed
+    with a progress bar for better visualization of the download status.
+
+    :param url: The URL from which to download the file.
+    :type url: str
+    :param user: The user object for authentication; this is used to manage cookies for the request.
+    :type user: User
+    :param out_fname: The path where the downloaded file will be saved.
+    :type out_fname: pathlib.Path
+    :return: None; downloads the file and saves it to the specified location.
+    """
     if out_fname.exists():
         # TODO: How does this work with corrupted files?
         msgs.info(f"File {out_fname} already exists, using cached version.")
@@ -1397,6 +1703,20 @@ def download_with_progress_bar(url, user, out_fname):
 
 
 def download_without_progress_bar(url, user, out_fname):
+    """Download a file from the given URL without displaying a progress bar.
+
+    This function retrieves a file from the specified URL using the provided user credentials
+    and saves it to the intended output file path. If the file already exists, it uses the cached
+    version and skips the download. If the download attempt is unsuccessful, it issues a warning.
+
+    :param url: The URL from which to download the file.
+    :type url: str
+    :param user: The user object for authentication; this is used to manage cookies for the request.
+    :type user: User
+    :param out_fname: The path where the downloaded file will be saved.
+    :type out_fname: pathlib.Path
+    :return: None; attempts to download the file and save it to the specified location.
+    """
     if out_fname.exists():
         # TODO: How does this work with corrupted files?
         msgs.info(f"File {out_fname} already exists, using cached version.")
@@ -1421,6 +1741,31 @@ def download_images_from_sas(
     verbose=True,
     donwload_function=download_with_progress_bar,
 ):
+    """Download images from the SAS using information from the provided DataFrame.
+
+    This function iterates through a DataFrame containing image information and
+    downloads images from the specified SAS (Science Archive Service) URLs.
+    The function allows the user to specify an output path and file name for the
+    downloaded images, with options for verbosity and progress tracking during
+    the download process.
+
+    :param df: The DataFrame containing image details, including the access URLs and
+               filenames for the images to be downloaded.
+    :type df: pandas.DataFrame
+    :param user: The user object for authentication to access the SAS.
+    :type user: User
+    :param img_outpath: The directory path where the downloaded images will be saved.
+    :type img_outpath: str or pathlib.Path
+    :param img_outname: The base name for the downloaded images; if None, the filenames
+                        from the DataFrame will be used.
+    :type img_outname: str or None
+    :param verbose: If True, enable verbose logging for download progress. Defaults to True.
+    :type verbose: bool
+    :param donwload_function: The function to use for downloading images (default is
+                             `download_with_progress_bar`).
+    :type donwload_function: callable
+    :return: None; downloads images by saving them to the specified output path.
+    """
     for _, row in tqdm(df.iterrows()):
         if img_outname is None:
             current_img_outname = row["file_name"]
@@ -1458,16 +1803,39 @@ def download_all_images(
     verbose=False,
     tile_cat=None,
 ):
-    """Download a full EUCLID image given an url. Note that in this case the
-    `img_type` indicates both the table to query and the data product used,
-    as the distinction is only used for ivoa_obscore.
+    """Download all images related to a specified set of coordinates from the SAS.
 
-    :param url: URL of the image to download.
-    :type url: str
-    :param image_name: Name of the image to download.
-    :type image_name: str
-    :return:
+    This function retrieves and downloads images associated with the provided
+    right ascension (RA) and declination (DEC) coordinates. The `img_type` parameter
+    specifies both the table to query and the data product used in the download
+    process. If a tile catalogue is not provided, it is created based on the
+    specified `img_type`. The images are grouped by identifier to optimize
+    the download process.
+
+    :param ra: An array of right ascension values for the target locations.
+    :type ra: astropy.units.Quantity (degrees)
+    :param dec: An array of declination values for the target locations.
+    :type dec: astropy.units.Quantity (degrees)
+    :param user: The user object for authentication to access the SAS.
+    :type user: User
+    :param cat_outpath: The directory path where the catalogue will be saved.
+    :type cat_outpath: str or pathlib.Path
+    :param img_outpath: The directory path where the downloaded images will be saved.
+    :type img_outpath: str or pathlib.Path
+    :param img_outname: (Optional) The base name for the downloaded images; if None,
+                        the filenames from the DataFrame will be used.
+    :type img_outname: str or None
+    :param img_type: The type of image to download; should be either 'mosaic' or 'calib'.
+    :type img_type: str
+    :param verbose: If True, enable verbose logging for download progress. Defaults to False.
+    :type verbose: bool
+    :param tile_cat: (Optional) A previously prepared tile catalogue; if None, a new
+                     catalogue will be created.
+    :type tile_cat: pandas.DataFrame or None
+    :return: None; performs the download and saves the relevant catalogue.
+    :raises ValueError: If `img_type` is neither 'mosaic' nor 'calib'.
     """
+
     cat_outpath = Path(cat_outpath)
     img_outpath = Path(img_outpath)
 
