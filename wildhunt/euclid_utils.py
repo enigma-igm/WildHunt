@@ -172,6 +172,8 @@ class User:
         with requests.Session() as session:
             session.cookies = cookies
 
+            # possibly this is not needed?
+            # TODO: Investigate
             session.post(
                 "https://easotf.esac.esa.int/tap-server/login",
                 data=self.get_user_data(),
@@ -705,9 +707,11 @@ def download_cutouts(obj_ra, obj_dec, img_urls, folder, user=None, verbose=VERBO
 # Functions for persistence check
 # =========================================================================== #
 
-def create_persistence_qa_plot(ra, dec, result_df, cutout_dir, output_dir,
-                               mer_df=None, stack_df=None):
-    """ Create a QA plot for the persistence check.
+
+def create_persistence_qa_plot(
+    ra, dec, result_df, cutout_dir, output_dir, mer_df=None, stack_df=None
+):
+    """Create a QA plot for the persistence check.
 
     :param ra: Right ascension in degrees
     :type ra: float
@@ -729,24 +733,33 @@ def create_persistence_qa_plot(ra, dec, result_df, cutout_dir, output_dir,
     # Reduce result_df to ra and dec in question with a delta of 1 arcsec
     delta_ra = 0.000278
     delta_dec = 0.000278
-    df = result_df.query('{} < ra < {} and {} < dec < {}'.format(
-        ra-delta_ra, ra+delta_ra, dec-delta_dec, dec+delta_dec))
-    df.query('processed == True and img_extension == img_extension',
-             inplace=True)
+    df = result_df.query(
+        "{} < ra < {} and {} < dec < {}".format(
+            ra - delta_ra, ra + delta_ra, dec - delta_dec, dec + delta_dec
+        )
+    )
+    df.query("processed == True and img_extension == img_extension", inplace=True)
 
     # Group result dataframe by observation id
-    obs_id_gb = df.groupby('observation_id')
+    obs_id_gb = df.groupby("observation_id")
 
     for obs_id, df in obs_id_gb:
+        plot_persistence_cutouts(
+            ra,
+            dec,
+            obs_id,
+            df,
+            cutout_dir,
+            output_dir,
+            mer_df=mer_df,
+            stack_df=stack_df,
+        )
 
-        plot_persistence_cutouts(ra, dec, obs_id, df, cutout_dir, output_dir,
-                               mer_df=mer_df, stack_df=stack_df)
 
-
-
-def plot_persistence_cutouts(ra, dec, obs_id, calib_df, cutout_dir, output_dir,
-                               mer_df=None, stack_df=None):
-    """ Plot the cutouts of the persistence check.
+def plot_persistence_cutouts(
+    ra, dec, obs_id, calib_df, cutout_dir, output_dir, mer_df=None, stack_df=None
+):
+    """Plot the cutouts of the persistence check.
 
     :param ra: Right ascension in degrees
     :type ra: float
@@ -791,14 +804,12 @@ def plot_persistence_cutouts(ra, dec, obs_id, calib_df, cutout_dir, output_dir,
         row_counter += 1
 
     # Add the NIR calibrated cutouts
-    filter_dict = {'NIR_Y':0,
-                   'NIR_J':1,
-                   'NIR_H':2}
+    filter_dict = {"NIR_Y": 0, "NIR_J": 1, "NIR_H": 2}
 
     for _, row in calib_df.iterrows():
-        filter_idx = filter_dict[row['filter_name']]
-        seq_idx = row['frame_seq']
-        filename = row['file_name'].replace('.fits', '_cutout.fits')
+        filter_idx = filter_dict[row["filter_name"]]
+        seq_idx = row["frame_seq"]
+        filename = row["file_name"].replace(".fits", "_cutout.fits")
 
         file_path = os.path.join(cutout_dir, filename)
 
@@ -807,35 +818,49 @@ def plot_persistence_cutouts(ra, dec, obs_id, calib_df, cutout_dir, output_dir,
         ax_idx = seq_idx + filter_idx * 4 + 1
         ax = fig.add_subplot(3, cols, ax_idx)
 
-        cutout._simple_plot(n_sigma=3, axis=ax,
-                            frameon=True,
-                            scalebar=None)
+        cutout._simple_plot(n_sigma=3, axis=ax, frameon=True, scalebar=None)
 
-        cutout._add_aperture_circle(ax, ra,
-                                    dec, 1)
+        cutout._add_aperture_circle(ax, ra, dec, 1)
 
-        ax.set_title('{} \n'.format(row['filter_name'])
-                     + r' Flux {:.3f}+-{:.3f} $\mu$Jy'.format(
-            row['flux_aper_1.0'], row['flux_err_aper_1.0']))
+        ax.set_title(
+            "{} \n".format(row["filter_name"])
+            + r" Flux {:.3f}+-{:.3f} $\mu$Jy".format(
+                row["flux_aper_1.0"], row["flux_err_aper_1.0"]
+            )
+        )
 
         # Remove axis labels
-        ax.tick_params(axis='both', which='both', bottom=False, left=False,
-                       labelbottom=False, labelleft=False)
+        ax.tick_params(
+            axis="both",
+            which="both",
+            bottom=False,
+            left=False,
+            labelbottom=False,
+            labelleft=False,
+        )
 
     # Save the plot
     plt.tight_layout()
     print(ra, dec)
-    source_name = whut.coord_to_name([ra], [dec], epoch='J')[0]
+    source_name = whut.coord_to_name([ra], [dec], epoch="J")[0]
     plt.savefig(
-        os.path.join(output_dir,
-                     '{}_{}_persistence_cutouts.pdf'.format(source_name,
-                                                            obs_id)))
+        os.path.join(
+            output_dir, "{}_{}_persistence_cutouts.pdf".format(source_name, obs_id)
+        )
+    )
 
 
-
-def check_persistence(ra, dec, calib_df, img_dir, cutout_dir, output_dir,
-                      cutout_fov=20, aperture_radii=np.array([1., 2.])):
-    """ Check the persistence of a source in the Euclid images.
+def check_persistence(
+    ra,
+    dec,
+    calib_df,
+    img_dir,
+    cutout_dir,
+    output_dir,
+    cutout_fov=20,
+    aperture_radii=np.array([1.0, 2.0]),
+):
+    """Check the persistence of a source in the Euclid images.
 
     :param ra: Right ascension in degrees
     :type ra: float
@@ -857,24 +882,29 @@ def check_persistence(ra, dec, calib_df, img_dir, cutout_dir, output_dir,
 
     """
 
-
     # Instantiate the SkyCoord object
-    coord = SkyCoord(ra, dec, unit='deg', frame='icrs')
+    coord = SkyCoord(ra, dec, unit="deg", frame="icrs")
 
     # Downselect the calibrated frames to the NISP frames
-    calib_columns = ['instrument_name', 'observation_id', 'pointing_id',
-                     'frame_seq', 'filter_name', 'file_name']
+    calib_columns = [
+        "instrument_name",
+        "observation_id",
+        "pointing_id",
+        "frame_seq",
+        "filter_name",
+        "file_name",
+    ]
 
     result_df = calib_df.query('instrument_name == "NISP"')[calib_columns]
-    result_df.loc[:, 'ra'] = ra
-    result_df.loc[:, 'dec'] = dec
-    result_df.loc[:, 'processed'] = False
-    result_df.loc[:, 'img_extension'] = None
+    result_df.loc[:, "ra"] = ra
+    result_df.loc[:, "dec"] = dec
+    result_df.loc[:, "processed"] = False
+    result_df.loc[:, "img_extension"] = None
 
     for idx in result_df.index:
-        file_path = os.path.join(img_dir, result_df.loc[idx, 'file_name'])
-        band = result_df.loc[idx, 'filter_name']
-        survey = 'Euclid-WIDE'
+        file_path = os.path.join(img_dir, result_df.loc[idx, "file_name"])
+        band = result_df.loc[idx, "filter_name"]
+        survey = "Euclid-WIDE"
 
         # Test if the image exists
         if not os.path.exists(file_path):
@@ -882,16 +912,15 @@ def check_persistence(ra, dec, calib_df, img_dir, cutout_dir, output_dir,
             continue
         else:
             msgs.info(f"Processing file {file_path}")
-            result_df.loc[idx, 'processed'] = True
+            result_df.loc[idx, "processed"] = True
 
         #  Cycle through extension to find the correct extension with the source
         hdul = fits.open(file_path)
 
-        photfnu = hdul[0].header['PHOTFNU']
-        photrelex = hdul[0].header['PHRELEX']
+        photfnu = hdul[0].header["PHOTFNU"]
+        photrelex = hdul[0].header["PHRELEX"]
 
-        for hdu in [h for h in hdul if 'SCI' in h.name]:
-
+        for hdu in [h for h in hdul if "SCI" in h.name]:
             header = hdu.header
             wcs = WCS(header)
 
@@ -899,51 +928,58 @@ def check_persistence(ra, dec, calib_df, img_dir, cutout_dir, output_dir,
             x, y = wcs.world_to_pixel(coord)
 
             # If source in extension, then
-            if 0 < x < header['NAXIS1'] and 0 < y < header['NAXIS2']:
-                print('Coordinate is within the image')
-                print('Extension: ', hdu.name)
+            if 0 < x < header["NAXIS1"] and 0 < y < header["NAXIS2"]:
+                print("Coordinate is within the image")
+                print("Extension: ", hdu.name)
 
-                result_df.loc[idx, 'img_extension'] = hdu.name
+                result_df.loc[idx, "img_extension"] = hdu.name
 
                 # Load the image
-                img = whimg.Image(file_path, exten=hdu.name,
-                                  survey=survey, band=band)
+                img = whimg.Image(file_path, exten=hdu.name, survey=survey, band=band)
                 # Create a cutout image
-                cutout = img.get_cutout_image(coord.ra.value,
-                                              coord.dec.value,
-                                              cutout_fov)
+                cutout = img.get_cutout_image(
+                    coord.ra.value, coord.dec.value, cutout_fov
+                )
                 # Save the cutout image
-                cutout_name =  result_df.loc[idx, 'file_name'].replace('.fits', '_cutout.fits')
+                cutout_name = result_df.loc[idx, "file_name"].replace(
+                    ".fits", "_cutout.fits"
+                )
                 cutout_path = os.path.join(cutout_dir, cutout_name)
                 cutout.to_fits(cutout_path)
 
                 # Calculate forced aperture photometry
 
                 # nanomag_correction = 1 # ToDo: Implement the conversion to physical units
-                zp_ab = img.header['ZPAB']
-                zp_ab_err = img.header['ZPABE']
-                gain = img.header['GAIN']
-                photreldt = img.header['PHRELDT']
+                zp_ab = img.header["ZPAB"]
+                zp_ab_err = img.header["ZPABE"]
+                gain = img.header["GAIN"]
+                photreldt = img.header["PHRELDT"]
 
-                print('ZPAB: ', zp_ab, band)
+                print("ZPAB: ", zp_ab, band)
 
                 nanomag_correction = np.power(10, 0.4 * (22.5 - zp_ab)) * gain
 
                 phot_result = img.calculate_aperture_photometry(
-                    coord.ra.value, coord.dec.value,
+                    coord.ra.value,
+                    coord.dec.value,
                     nanomag_correction,
                     aperture_radii=aperture_radii,
                     exptime_norm=1,
-                    background_aperture=np.array([7, 10.]))
+                    background_aperture=np.array([7, 10.0]),
+                )
 
                 # Create a metric that flags persistence
                 # ToDo!!!
 
                 # Save the results to the result DataFrame
-                prefix = '{}_{}'.format(survey, band)
+                prefix = "{}_{}".format(survey, band)
                 for radius in aperture_radii:
-                    raw_flux = phot_result['{}_raw_aper_sum_{:.1f}arcsec'.format(prefix, radius)]
-                    raw_flux_err = phot_result['{}_raw_aper_sum_err_{:.1f}arcsec'.format(prefix, radius)]
+                    raw_flux = phot_result[
+                        "{}_raw_aper_sum_{:.1f}arcsec".format(prefix, radius)
+                    ]
+                    raw_flux_err = phot_result[
+                        "{}_raw_aper_sum_err_{:.1f}arcsec".format(prefix, radius)
+                    ]
                     # flux = phot_result['{}_flux_aper_{:.1f}arcsec'.format(prefix, radius)]
                     # flux_err = phot_result['{}_flux_err_aper_{:.1f}arcsec'.format(prefix, radius)]
                     # snr = phot_result['{}_snr_aper_{:.1f}arcsec'.format(prefix, radius)]
@@ -953,34 +989,32 @@ def check_persistence(ra, dec, calib_df, img_dir, cutout_dir, output_dir,
                     # Calculation according to
                     # https://apceuclidccweb-pp.in2p3.fr/Documentation/NIR/NIR_AbsolutePhotometry/develop/0.5.0/md_README.html
 
-                    flux = raw_flux / 87.2248 * photfnu * photrelex * photreldt  # flux in micro Jy
+                    flux = (
+                        raw_flux / 87.2248 * photfnu * photrelex * photreldt
+                    )  # flux in micro Jy
                     flux_err = raw_flux_err / 87.2248 * photfnu * photrelex * photreldt
                     snr = flux / flux_err
 
                     abmag = -2.5 * np.log10(raw_flux) + zp_ab
 
-
-                    result_df.loc[idx, 'raw_aper_sum_{:.1f}'.format(radius)] = raw_flux
-                    result_df.loc[idx, 'flux_aper_{:.1f}'.format(radius)] = flux
-                    result_df.loc[idx, 'flux_err_aper_{:.1f}'.format(radius)] = flux_err
-                    result_df.loc[idx, 'snr_aper_{:.1f}'.format(radius)] = snr
-                    result_df.loc[idx, 'abmag_aper_{:.1f}'.format(radius)] = abmag
-                    result_df.loc[idx, 'abmag_err_aper_{:.1f}'.format(radius)] = zp_ab_err
-
+                    result_df.loc[idx, "raw_aper_sum_{:.1f}".format(radius)] = raw_flux
+                    result_df.loc[idx, "flux_aper_{:.1f}".format(radius)] = flux
+                    result_df.loc[idx, "flux_err_aper_{:.1f}".format(radius)] = flux_err
+                    result_df.loc[idx, "snr_aper_{:.1f}".format(radius)] = snr
+                    result_df.loc[idx, "abmag_aper_{:.1f}".format(radius)] = abmag
+                    result_df.loc[idx, "abmag_err_aper_{:.1f}".format(radius)] = (
+                        zp_ab_err
+                    )
 
     # Create the persistence plot
     create_persistence_qa_plot(ra, dec, result_df, cutout_dir, output_dir)
 
-    coord_name = whut.coord_to_name([ra], [dec], epoch='J')[0]
-    table_name = '{}_persistence_check.csv'.format(coord_name)
-    result_df.to_csv(os.path.join(output_dir, table_name),
-                     index=False)
-
-
+    coord_name = whut.coord_to_name([ra], [dec], epoch="J")[0]
+    table_name = "{}_persistence_check.csv".format(coord_name)
+    result_df.to_csv(os.path.join(output_dir, table_name), index=False)
 
 
 # Have a dictionary of filepath that links to the correct cutout files for the persistence check
-
 
 
 def prepare_sas_catalogue(
@@ -1027,7 +1061,7 @@ def download_with_progress_bar(url, user, out_fname):
         open(out_fname, "wb"),
         "write",
         miniters=1,
-        desc=msgs.info(f"Downloading {url.split("=")[1].split("&")[0]}"),
+        desc=msgs.info(f"Downloading {url.split('=')[1].split('&')[0]}"),
         total=int(response.headers.get("content-length", 0)),
     ) as fout:
         for chunk in response.iter_content(chunk_size=4096):
@@ -1048,8 +1082,9 @@ def download_full_image(
     img_type="calib",
     verbose=False,
 ):
-    """Download a the full EUCLID image given an url. Note that the in this care the
-    `img_type` indicates both the table to query and the data product used.
+    """Download a full EUCLID image given an url. Note that the in this care the
+    `img_type` indicates both the table to query and the data product used, as the distinction
+    is only used for ivoa_obscore.
 
     :param url: URL of the image to download.
     :type url: str
