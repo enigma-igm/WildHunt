@@ -1001,7 +1001,7 @@ def persistance_pipeline(
     ras,
     decs,
     user,
-    input_full_img_dir,
+    output_full_img_dir,
     output_cutout_dir,
     output_persistence_check_dir,
     verbose=False,
@@ -1010,7 +1010,7 @@ def persistance_pipeline(
     download_table, dict_input_tbl = download_parsistence_input(ras, decs, user)
 
     download_images_from_sas(
-        download_table, user, input_full_img_dir, None, verbose=verbose
+        download_table, user, output_full_img_dir, None, verbose=verbose
     )
 
     for ra, dec in zip(ras, decs):
@@ -1018,7 +1018,7 @@ def persistance_pipeline(
             ra,
             dec,
             dict_input_tbl[f"{ra}_{dec}"],
-            input_full_img_dir,
+            output_full_img_dir,
             output_cutout_dir,
             output_persistence_check_dir,
             **kwargs,
