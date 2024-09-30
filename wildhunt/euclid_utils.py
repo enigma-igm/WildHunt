@@ -75,10 +75,30 @@ product_type_dict = {
 
 
 def b64e(s):
+    """Encode a string to Base64 format.
+
+    This function takes a string, encodes it into bytes, and then
+    encodes those bytes into a Base64 string.
+
+    :param s: The string to encode in Base64.
+    :type s: str
+    :return: The Base64 encoded string.
+    :rtype: str
+    """
     return base64.b64encode(s.encode()).decode()
 
 
 def b64d(s):
+    """Decode a Base64 encoded string.
+
+    This function takes a Base64 encoded string, decodes it into bytes,
+    and then converts those bytes back into a regular string.
+
+    :param s: The Base64 encoded string to decode.
+    :type s: str
+    :return: The decoded string.
+    :rtype: str
+    """
     return base64.b64decode(s).decode()
 
 
@@ -86,8 +106,21 @@ def b64d(s):
 
 
 class User:
-    # basic user to handle the login, nothing especially fancy
-    # password is encoded in base64 just to prevent accidental prints
+    """Basic user class to handle login for accessing the EUCLID OTF archive.
+
+    The password is encoded in Base64 to prevent accidental printing to screen.
+    User data can be loaded from a configuration file.
+
+    :param username: The username for login. If None, will prompt the user for input.
+    :type username: str or None
+    :param password: The password for login. If None, will prompt the user for input.
+    :type password: str or None
+    :param filepath: The path to the configuration file containing user data.
+    :type filepath: Path
+    :param encoded: Whether the password is already encoded in Base64. Default is True.
+    :type encoded: bool
+    """
+
     def __init__(
         self,
         username=None,
@@ -95,8 +128,15 @@ class User:
         filepath=LOCAL_PATH / "sas_otf_user_data.cfg",
         encoded=True,
     ):
+        """Initialize the User object, loading user data from the configuration file if it exists.
+
+        :param username: Username for login.
+        :param password: Password for login.
+        :param filepath: Path to user data configuration file.
+        :param encoded: If True, the provided password should be considered already encoded.
+        """
         # check whether we have a configuration file. If so, try to load the data from there
-        if filepath.exists():
+        if filepath.exists() or (username is not None and password is not None):
             with open(filepath, "r") as f:
                 data = f.read().split()
                 self.username = data[0]
@@ -118,6 +158,11 @@ class User:
     # ======================================================================= #
 
     def load_user_data(self, filepath=LOCAL_PATH / "sas_otf_user_data.cfg"):
+        """Load user data from the specified configuration file.
+
+        :param filepath: Path to the configuration file.
+        :type filepath: Path
+        """
         try:
             with open(filepath, "r") as f:
                 data = f.read().split()
@@ -129,6 +174,13 @@ class User:
     # ======================================================================= #
 
     def set_user_data(self, force=False):
+        """Prompt to set or reset the user data (username and password).
+
+        If `force` is True, the user will be prompted regardless of existing data.
+
+        :param force: If True, force the prompt for new username and password.
+        :type force: bool
+        """
         if self.username is None or force:
             self.username = input("Enter user name: ")
         else:
@@ -139,11 +191,17 @@ class User:
         else:
             msgs.info("Password already set, pass `force` to reset it.")
 
+        # TODO: Check the encoding logic here
         self.login_data = {"username": self.username, "password": self.password}
 
     # ======================================================================= #
 
     def get_user_data(self):
+        """Retrieve the user's login data as a dictionary.
+
+        :return: A dictionary containing the username and decoded password.
+        :rtype: dict
+        """
         return {
             "username": self.login_data["username"],
             "password": b64d(self.login_data["password"]),
@@ -151,8 +209,23 @@ class User:
 
     # ======================================================================= #
 
-    def store_user_data(self, path=LOCAL_PATH, overwrite=False):
-        outfile = path / "sas_otf_user_data.cfg"
+    def store_user_data(
+        self, path=LOCAL_PATH, fname="sas_otf_user_data.cfg", overwrite=False
+    ):
+        """Store the user data to a configuration file.
+
+        If the file already exists, the user is prompted to confirm whether to
+        overwrite it. If the `overwrite` parameter is set to True, the file will
+        be overwritten without prompting the user.
+
+        :param path: Path to the directory where the configuration file will be saved.
+        :type path: Path
+        :param fname: Name of the configuration file to save the user data.
+        :type fname: str
+        :param overwrite: If True, overwrite the existing file without confirmation.
+        :type overwrite: bool
+        """
+        outfile = path / fname
         if outfile.exists() and not overwrite:
             user_overwrite = input("[Info] Table exists, overwrite? [y]/n ").lower()
             if user_overwrite in ["y", "\n"]:
@@ -165,6 +238,13 @@ class User:
     # ======================================================================= #
 
     def sasotf_login(self, cert_key=CERT_KEY):
+        """Log in to the EUCLID OTF archive using the stored user credentials.
+
+        This function sends login requests to multiple services of the EUCLID OTF server.
+
+        :param cert_key: Certificate key for verifying the server connection.
+        :type cert_key: str
+        """
         if self.login_data is None:
             self.set_user_data()
 
@@ -213,7 +293,7 @@ class User:
     # ======================================================================= #
 
     def __repr__(self):
-        # in this case don't really care about the ectra info - I just need to know the current user and if I am (possibly)
+        # in this case don't really care about the extra info - I just need to know the current user and if I am (possibly)
         #   logged in
         out = f"euclid_download.User()\nCurrent user: {self.username}\n"
         if self.logged_in:
@@ -229,10 +309,24 @@ class User:
 # =========================================================================== #
 
 
-# For the time being, ONLY for cutout purposes, the best approach seems to be using ivoa_obscore with the calibrated images
-# stacked images are available, but it appears only a subset of those are available from the archive (Deep fields? Unsure...)
-# also stacked images are dithered, and that is a bit of a mess to deal with anyway
+# ivoa_obscore seems to contain file paths for every single object in the archive,
+# but it is very, very slow to download as there is a WHERE involved.
+# stacked images are available, but it appears only a subset of those are available
+#  from the archive (Deep fields? Unsure...); also, stacked images are dithered,
+#  and that is a bit of a mess to deal with anyway
 def select_query(name="stack"):
+    """Generate an SQL query based on the specified type of data to retrieve.
+
+    This function returns a pre-defined SQL SELECT statement according to the
+    given `name`. The valid options are 'ivoa_obscore', 'stack', 'calib', and
+    'mosaic'. If an invalid option is provided, a ValueError is raised.
+
+    :param name: The type of data to query. Should be one of 'ivoa_obscore', 'stack', 'calib', or 'mosaic'.
+    :type name: str
+    :return: An SQL SELECT statement as a string.
+    :rtype: str
+    :raises ValueError: If the provided name is not a valid option.
+    """
     name = name.lower()
 
     if name not in ["ivoa_obscore", "stack", "calib", "mosaic"]:
@@ -264,6 +358,19 @@ def select_query(name="stack"):
 
 
 def get_phase(jobID, session):
+    """Retrieve the processing phase of a running job using its job ID.
+
+    This function sends a GET request to the EUCLID OTF TAP server to obtain
+    the current phase of the specified asynchronous job. The request uses the
+    provided session's cookies for authentication.
+
+    :param jobID: The ID of the job whose phase is to be retrieved.
+    :type jobID: str
+    :param session: The requests session containing cookies for authentication.
+    :type session: requests.Session
+    :return: The current phase of the job as a string.
+    :rtype: str
+    """
     return requests.get(
         f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/phase",
         cookies=session.cookies,
@@ -274,6 +381,25 @@ def get_phase(jobID, session):
 
 
 def sync_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
+    """Execute a synchronous SQL query against the EUCLID TAP server and save the results to a file.
+
+    This function sends a GET request to the EUCLID OTF TAP server to execute
+    the provided SQL query and retrieves the results in CSV format. If the query
+    is successful, the results are saved to the specified file path.
+
+    :param query: The SQL query to execute in ADQL format.
+    :type query: str
+    :param user: The user object containing session cookies for authentication.
+    :type user: User
+    :param savepath: The path where the results should be saved.
+    :type savepath: str
+    :param cert_key: The certificate key for verifying server connections (optional).
+    :type cert_key: str
+    :param verbose: If greater than 0, enables verbose output for logging.
+    :type verbose: int
+    :raises ValueError: If the server responds with a status code other than 200.
+    :raises IOError: If there is an error writing the results to the specified file.
+    """
     response = requests.get(
         "https://easotf.esac.esa.int/tap-server/tap/sync?REQUEST=doQuery&LANG=ADQL&FORMAT=csv&QUERY="
         + query.replace(" ", "+"),
@@ -303,6 +429,27 @@ def sync_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
 
 
 def async_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
+    """Execute an asynchronous SQL query against the EUCLID TAP server and save the results to a file.
+
+    This function sends an asynchronous query request to the EUCLID OTF TAP server,
+    waits for the query to complete, and retrieves the results in CSV format. The results
+    are then saved to the specified file path.
+
+    :param query: The SQL query to execute in ADQL format.
+    :type query: str
+    :param user: The user object containing session cookies for authentication.
+    :type user: User
+    :param savepath: The path where the results should be saved.
+    :type savepath: str
+    :param cert_key: The certificate key for verifying server connections (optional).
+    :type cert_key: str
+    :param verbose: If greater than 0, enables verbose output for logging.
+    :type verbose: int
+    :return: A pandas DataFrame containing the query results.
+    :rtype: pandas.DataFrame
+    :raises ValueError: If the job status is unknown or if any request fails.
+    :raises IOError: If there is an error writing the results to the specified file.
+    """
     with requests.Session() as session:
         session.cookies = user.cookies
 
@@ -370,12 +517,35 @@ def async_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
 
         df = pd.read_csv(StringIO(post_sess_res))
         df.to_csv(savepath, index=False)
+        return df
 
 
 # =========================================================================== #
 
 
 def download_table(query_table, user, savepath, sync=True, verbose=VERBOSE):
+    """Download a specified table from the EUCLID TAP server and save it as a CSV file.
+
+    This function checks if the user is logged in, constructs an appropriate query, and
+    attempts to download the specified table either synchronously or asynchronously.
+    If the query table is 'mosaic', it filters the results to include only EUCLID related
+    data products.
+
+    :param query_table: The name of the table to download (e.g., 'mosaic', 'stack', etc.).
+    :type query_table: str
+    :param user: The user object containing session cookies for authentication.
+    :type user: User
+    :param savepath: The path to the directory where the CSV file will be saved.
+    :type savepath: str or Path
+    :param sync: If True, use synchronous query mode; otherwise, use asynchronous.
+    :type sync: bool
+    :param verbose: If greater than 0, enables verbose output for logging.
+    :type verbose: int
+    :raises ValueError: If the savepath is not a directory or if the user is not logged in.
+    :raises IOError: If there is an error reading the downloaded CSV file.
+    :return: A pandas DataFrame containing the downloaded table data, potentially filtered.
+    :rtype: pandas.DataFrame
+    """
     savepath = Path(savepath)
     if not savepath.is_dir():
         raise ValueError(
@@ -406,6 +576,7 @@ def download_table(query_table, user, savepath, sync=True, verbose=VERBOSE):
         msgs.info(f"Downloading table `{query_table}` with an asyncronous query.")
 
     # only for mosaic, only select Euclid product
+    #  mosaic includes many many many more things from other surveys
     if query_table == "mosaic":
         return (
             pd.read_csv(savepath)
@@ -420,6 +591,22 @@ def download_table(query_table, user, savepath, sync=True, verbose=VERBOSE):
 
 
 def parse_catalogue(tbl_in, inplace=False, force=False):
+    """Parse a catalogue DataFrame to add and rename columns for easier access.
+
+    This function processes an input DataFrame, adding necessary columns for
+    cutout access URLs and image access URLs, and renames existing columns
+    to conform to standard naming conventions. It can operate in place or
+    return a modified copy of the input DataFrame.
+
+    :param tbl_in: The input DataFrame containing the catalogue data.
+    :type tbl_in: pandas.DataFrame
+    :param inplace: If True, modify the input DataFrame directly; otherwise, return a new copy.
+    :type inplace: bool
+    :param force: If True, force the addition of new columns even if they already exist.
+    :type force: bool
+    :return: The modified DataFrame with added and renamed columns.
+    :rtype: pandas.DataFrame
+    """
     if inplace:
         tbl = tbl_in
     else:
@@ -483,6 +670,30 @@ def parse_catalogue(tbl_in, inplace=False, force=False):
 def load_catalogue(
     fname="", tbl_in=None, query_table="mosaic", user=None, use_local_tbl=False
 ):
+    """Load a catalogue from a specified file or query the EUCLID TAP server.
+
+    This function attempts to load a catalogue either from a specified CSV file
+    or by querying the EUCLID TAP server. If both a filename and a DataFrame
+    are provided, the function will ignore the DataFrame and re-download the
+    catalogue.
+
+    :param fname: The path to the CSV file from which to load the catalogue.
+    :type fname: str
+    :param tbl_in: An optional DataFrame containing the catalogue data.
+    :type tbl_in: pandas.DataFrame or None
+    :param query_table: The name of the table to query if downloading is required.
+    :type query_table: str
+    :param user: The user object containing session cookies for authentication.
+                 If None, a new user object will be created.
+    :type user: User or None
+    :param use_local_tbl: If True, load the catalogue from the local CSV file
+                          if it exists; otherwise, download the table.
+    :type use_local_tbl: bool
+    :raises ValueError: If both a file name and a DataFrame are provided.
+    :raises IOError: If there is an error reading the CSV file or downloading the table.
+    :return: A tuple containing the loaded DataFrame and the user object.
+    :rtype: (pandas.DataFrame, User)
+    """
     if user is None:
         user = User()
 
@@ -533,6 +744,24 @@ def build_access_url(path, filename, obsid=None, tileidx=None):
 
 
 def build_url(access_url, ra, dec, side, search_type="CIRCLE"):
+    """Construct a complete URL with search parameters.
+
+    This function appends search parameters, including the position and size,
+    to the access URL for cutout images.
+
+    :param access_url: The base access URL to which the search parameters will be added.
+    :type access_url: str
+    :param ra: The right ascension coordinate for the search.
+    :type ra: float
+    :param dec: The declination coordinate for the search.
+    :type dec: float
+    :param side: The size of the search area (in the same units as the coordinate system).
+    :type side: float
+    :param search_type: The shape of the search area, can be either 'CIRCLE' or other types.
+    :type search_type: str
+    :return: A string containing the complete URL with search parameters.
+    :rtype: str
+    """
     # this adds the search parameter
     search = f"POS={search_type},{ra},{dec},{side}"
     return f"{access_url.strip()}&{search.strip()}"

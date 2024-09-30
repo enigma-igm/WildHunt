@@ -3,6 +3,7 @@
 import multiprocessing as mp
 import os
 from http.client import IncompleteRead
+from pathlib import Path
 from urllib.error import HTTPError
 
 import numpy as np
@@ -15,7 +16,10 @@ from wildhunt import pypmsgs, utils
 from wildhunt.surveys import imagingsurvey
 
 msgs = pypmsgs.Messages()
-local_path = os.environ.get("WILDHUNT_LOCALPATH")
+if os.environ.get("WILDHUNT_LOCALPATH") is None:
+    LOCAL_PATH = str(Path.home())
+else:
+    LOCAL_PATH = os.environ.get("WILDHUNT_LOCALPATH")
 
 
 class Euclid(imagingsurvey.ImagingSurvey):
@@ -127,6 +131,7 @@ class Euclid(imagingsurvey.ImagingSurvey):
 
     def retrieve_image_url_list(
         self,
+        cat_outpath=LOCAL_PATH,
         batch_number=0,
         catalogue="mosaic",
         product_type="mosaic",
@@ -172,7 +177,7 @@ class Euclid(imagingsurvey.ImagingSurvey):
         ]
 
         cat_data_prod = eu.prepare_sas_catalogue(
-            local_path,
+            cat_outpath,
             catalogue,
             self.user,
             product_type,
