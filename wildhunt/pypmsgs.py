@@ -3,13 +3,13 @@ This code was adopted from PypeIt and the copyright belongs to the PypeIt
 developer.
 https://github.com/pypeit/PypeIt
 '''
-import sys
 import getpass
 import inspect
+import sys
 
-import scipy
-import numpy
 import astropy
+import numpy
+import scipy
 
 
 class PypError(Exception):
@@ -223,6 +223,10 @@ class Messages:
         """
         premsg = self._start + self._blue_CL + '[INPUT]   ::' + self._end + ' '
         return premsg
+    
+    def close(self):
+        # FIXME: According to a comment there is a log to be closed
+        pass
 
     @staticmethod
     def newline():

@@ -57,7 +57,15 @@ class Euclid(imagingsurvey.ImagingSurvey):
         self.user = user
         super(Euclid, self).__init__(bands, fov, name, verbosity)
 
-    def download_images(self, ra, dec, image_folder_path, n_jobs=1):
+    def download_images(
+        self,
+        ra,
+        dec,
+        image_folder_path,
+        catalogue="mosaic",
+        product_type="mosaic",
+        n_jobs=1,
+    ):
         """Download images from the online image server for Euclid.
 
         :param ra: Right ascension of the sources in decimal degrees.
@@ -84,8 +92,9 @@ class Euclid(imagingsurvey.ImagingSurvey):
             self.batch_setup()
 
             for i in range(self.nbatch):
-                self.retrieve_image_url_list(product_type="stacked", batch_number=i)
-
+                self.retrieve_image_url_list(
+                    catalogue=catalogue, product_type=product_type, batch_number=i
+                )
                 self.check_for_existing_images_before_download()
 
                 if self.n_jobs > 1:
@@ -117,14 +126,20 @@ class Euclid(imagingsurvey.ImagingSurvey):
             self.nbatch = int(np.ceil(np.size(self.ra) / self.batch_size))
 
     def retrieve_image_url_list(
-        self, batch_number=0, catalogue="ivoa_obscore", product_type="stacked"
+        self,
+        batch_number=0,
+        catalogue="mosaic",
+        product_type="mosaic",
+        from_table=False,
     ):
         """Retrieve the list of image URLs from the online image server.
 
         :param batch_number: Number of the batch to retrieve the urls for.
         :type batch_number: int
-        :param Catalogue: Catalogue from to download images from. Defaults to ivoa_obscore ("ivoa_obscore").
+        :param catalogue: Catalogue from to download images from. Defaults to mosaic ("mosaic").
         :param product_type: Euclid product type [stacked, calib]
+        :param from_table: [Not implemented yet!] Whether to query the online archive for each source,
+        or pre-download a table with all the files to use as source file for image positions and urls.
         :return: None
         """
         # ============================================ #
@@ -142,10 +157,7 @@ class Euclid(imagingsurvey.ImagingSurvey):
 
         # There is also a DpdVisCalibratedQuadFrame that is unknown to me at the moment
         # TODO: Figure this out
-        product_type_dict = {
-            "calib": ["DpdVisCalibratedFrame", "DpdNirCalibratedFrame"],
-            "stacked": ["DpdVisStackedFrame", "DpdNirStackedFrame"],
-        }
+        product_type_dict = eu.product_type_dict
 
         # Retrieve bulk file table
         # url_ps1filename = 'http://ps1images.stsci.edu/cgi-bin/ps1filenames.py'
@@ -159,28 +171,14 @@ class Euclid(imagingsurvey.ImagingSurvey):
             + self.batch_size
         ]
 
-        # use eu.get_download_df to get the equivalent of PanSTARRS.py here
-        cat = eu.load_catalogue(
-            fname=local_path + "/ivoa_frames.csv",
-            query_table=catalogue,
-            user=self.user,
-            overwrite=False,
-        )[0]
-
-        # select only the products that you want
-        # prepare_catalogue just does some renaming to make sure that
-        # different tables can be handles with the same code
-        eu.prepare_catalogue(cat, inplace=True)
-        cat_data_prod = cat.query(
-            f"product_type == '{product_type_dict[product_type][0]}' "
-            + f"or product_type == '{product_type_dict[product_type][1]}'"
-        ).reset_index()
-
-        if cat_data_prod.empty:
-            msgs.error(
-                f"No data product of type {product_type} found. Are you using the correct table?"
-            )
-            raise ValueError
+        cat_data_prod = eu.prepare_sas_catalogue(
+            local_path,
+            catalogue,
+            self.user,
+            product_type,
+            product_type_dict,
+            use_local_tbl=False,
+        )
 
         # Need to split this in band as otherwise there is no way to know
         #  whether the N closest images are all in VIS or a NIR band.
@@ -198,7 +196,11 @@ class Euclid(imagingsurvey.ImagingSurvey):
                 _b,
             )
 
-            df = pd.concat([df, partial], ignore_index=True) if df is not None else partial
+            df = (
+                pd.concat([df, partial], ignore_index=True)
+                if df is not None
+                else partial
+            )
 
         # sort by RA - needed because I am querying separately
         #  VIS and NIR
@@ -255,11 +257,11 @@ class Euclid(imagingsurvey.ImagingSurvey):
         try:
             r = requests.get(url, cookies=self.user.cookies)
             if len(r.content) == 0:
+                msgs.warn(f"Image at url {url} was empty, skipped!")
                 return
 
-            open(self.image_folder_path + "/" + image_name + ".fits", "wb").write(
-                r.content
-            )
+            with open(self.image_folder_path + "/" + image_name + ".fits", "wb") as f:
+                f.write(r.content)
 
             if self.verbosity > 0:
                 msgs.info(
