@@ -7,6 +7,7 @@ from astropy import units
 
 from wildhunt import catalog, pypmsgs
 from wildhunt import euclid_utils as eu
+
 msgs = pypmsgs.Messages()
 
 
@@ -32,7 +33,7 @@ def example_download_cutouts():
     msgs.info(f"Took {time.time() - t0:.1f}s to download the requested cutouts.")
 
 
-def example_download_full_images():
+def example_download_all_images():
 
     # For testing purposes only the coordinates are duplicated.
     ra = [149.7848750, 149.784875] * units.deg
@@ -54,7 +55,7 @@ def example_download_full_images():
     user = eu.User()
     user.sasotf_login()
 
-    eu.download_full_image(ra, dec, user,
+    eu.download_all_images(ra, dec, user,
                            cat_outpath,
                            img_outpath,
                            img_type=img_type)
@@ -63,4 +64,4 @@ if __name__ == "__main__":
 
     example_download_cutouts()
 
-    example_download_full_images()
+    example_download_all_images()

@@ -410,14 +410,20 @@ def sync_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
     if verbose > 0:
         msgs.info(f"Response code: {response.status_code}")
 
-    if response.status_code == 200:
+    if response.status_code == 200 and savepath is not None:
         if verbose:
             msgs.info(f"Successfully retrieved table, writing to {savepath}.")
 
+        content = response.content.decode("utf-8")
         with open(savepath, "w") as f:
             if verbose:
                 msgs.info(f"Saving table to {savepath}")
-            f.write(response.content.decode("utf-8"))
+            f.write(content)
+
+        return content
+    elif response.status_code == 200 and savepath is None:
+        content = response.content.decode("utf-8")
+        return content
     else:
         msgs.error(
             f"Something went wrong. Query returned status code {response.status_code}"
@@ -590,6 +596,56 @@ def download_table(query_table, user, savepath, sync=True, verbose=VERBOSE):
 # =========================================================================== #
 
 
+def _build_cutout_access_url(path, filename, obsid=None, tileidx=None):
+    assert not (
+        obsid is not None and tileidx is not None
+    ), "Either `obsid` or `tileindex` must be None"
+    # this builds the first part of the url
+    # get collection from path itself
+    collection = path.split("/")[-2]
+    base = "https://easotf.esac.esa.int/sas-cutout/cutout"
+    if obsid is None:
+        params = f"filepath={path}/{filename}&collection={collection}&obsid={tileidx}"
+    else:
+        params = f"filepath={path}/{filename}&collection=MER&tileindex={obsid}"
+    return f"{base}?{params}"
+
+
+# =========================================================================== #
+
+
+def build_cutout_access_url(tbl):
+    # unifies the access url for both the mer tiles and everything else
+    access_urls = []
+    if "observation_id" in tbl.columns:
+        for _p, _f, _o in zip(
+            tbl["file_path"], tbl["file_name"], tbl["observation_id"]
+        ):
+            access_urls.append(
+                _build_cutout_access_url(_p.strip(), _f.strip(), obsid=_o)
+            )
+    else:
+        for _p, _f, _o in zip(tbl["file_path"], tbl["file_name"], tbl["tile_index"]):
+            access_urls.append(
+                _build_cutout_access_url(_p.strip(), _f.strip(), obsid=_o)
+            )
+
+    tbl["cutout_access_url"] = access_urls
+
+
+# =========================================================================== #
+
+
+def build_image_access_url(tbl):
+    tbl["image_access_url"] = [
+        f"https://easotf.esac.esa.int/sas-dd/data?file_name={_fn}&release=sedm&RETRIEVAL_TYPE=FILE"
+        for _fn in tbl["file_name"]
+    ]
+
+
+# =========================================================================== #
+
+
 def parse_catalogue(tbl_in, inplace=False, force=False):
     """Parse a catalogue DataFrame to add and rename columns for easier access.
 
@@ -615,28 +671,12 @@ def parse_catalogue(tbl_in, inplace=False, force=False):
     if "cutout_access_url" not in tbl.columns or force:
         msgs.info("Added `cutout_access_url` column.")
         # names are the same for both stack and calib, which is what we'll want to use most of the time
-        access_urls = []
-        # mosaic and calib/stack use a different identifier to download the images
-        if "observation_id" in tbl.columns:
-            for _p, _f, _o in zip(
-                tbl["file_path"], tbl["file_name"], tbl["observation_id"]
-            ):
-                access_urls.append(build_access_url(_p.strip(), _f.strip(), obsid=_o))
-        else:
-            for _p, _f, _o in zip(
-                tbl["file_path"], tbl["file_name"], tbl["tile_index"]
-            ):
-                access_urls.append(build_access_url(_p.strip(), _f.strip(), obsid=_o))
-
-        tbl["cutout_access_url"] = access_urls
+        build_cutout_access_url(tbl)
 
     # TODO: (Future us!) if this gets very slow (unlikely), merge the two loops
     if "image_access_url" not in tbl.columns or force:
         msgs.info("Added `image_access_url` column.")
-        tbl["image_access_url"] = [
-            f"https://easotf.esac.esa.int/sas-dd/data?file_name={_fn}&release=sedm&RETRIEVAL_TYPE=FILE"
-            for _fn in tbl["file_name"]
-        ]
+        build_image_access_url(tbl)
 
     # needed for ivoa_score
     if "s_ra" in tbl.columns:
@@ -720,24 +760,6 @@ def load_catalogue(
         )
 
     return tbl, user
-
-
-# =========================================================================== #
-
-
-def build_access_url(path, filename, obsid=None, tileidx=None):
-    assert not (
-        obsid is not None and tileidx is not None
-    ), "Either `obsid` or `tileindex` must be None"
-    # this builds the first part of the url
-    # get collection from path itself
-    collection = path.split("/")[-2]
-    base = "https://easotf.esac.esa.int/sas-cutout/cutout"
-    if obsid is None:
-        params = f"filepath={path}/{filename}&collection={collection}&obsid={tileidx}"
-    else:
-        params = f"filepath={path}/{filename}&collection=MER&tileindex={obsid}"
-    return f"{base}?{params}"
 
 
 # =========================================================================== #
@@ -934,6 +956,75 @@ def download_cutouts(obj_ra, obj_dec, img_urls, folder, user=None, verbose=VERBO
 
 # =========================================================================== #
 # Functions for persistence check
+# =========================================================================== #
+
+
+def download_parsistence_input_tbl_single_obj(ra, dec, user):
+    query = (
+        "SELECT observation_stack.instrument_name, observation_stack.observation_id, "
+        "observation_stack.pointing_id, observation_stack.frame_seq, observation_stack.filter_name, "
+        "observation_stack.file_name, observation_stack.ra, observation_stack.dec, "
+        "observation_stack.calibrated_frame_oid, observation_stack.file_path "
+        "FROM sedm.calibrated_frame AS observation_stack WHERE (instrument_name='NISP') "
+        "AND ((observation_stack.fov IS NOT NULL AND "
+        f"INTERSECTS(CIRCLE('ICRS',{ra},{dec},0.001388888888888889),observation_stack.fov)=1)) "
+        "ORDER BY observation_id ASC"
+    )
+
+    tbl = pd.read_csv(StringIO(sync_query(query=query, user=user, savepath=None)))
+    return tbl
+
+
+# =========================================================================== #
+
+
+def download_parsistence_input(ras, decs, user):
+    # less efficient but this will never be the bottleneck
+    tbls = {}
+
+    for ra, dec in zip(ras, decs):
+        tbls[f"{ra}_{dec}"] = download_parsistence_input_tbl_single_obj(ra, dec, user)
+
+    merged_tbl = pd.concat(tbls.values()).drop_duplicates(
+        "calibrated_frame_oid", ignore_index=True
+    )
+
+    build_image_access_url(merged_tbl)
+
+    return merged_tbl.drop("file_path", axis=1), tbls
+
+
+# =========================================================================== #
+
+
+def persistance_pipeline(
+    ras,
+    decs,
+    user,
+    input_full_img_dir,
+    output_cutout_dir,
+    output_persistence_check_dir,
+    verbose=False,
+    **kwargs,
+):
+    download_table, dict_input_tbl = download_parsistence_input(ras, decs, user)
+
+    download_images_from_sas(
+        download_table, user, input_full_img_dir, None, verbose=verbose
+    )
+
+    for ra, dec in zip(ras, decs):
+        check_persistence(
+            ra,
+            dec,
+            dict_input_tbl[f"{ra}_{dec}"],
+            input_full_img_dir,
+            output_cutout_dir,
+            output_persistence_check_dir,
+            **kwargs,
+        )
+
+
 # =========================================================================== #
 
 
@@ -1285,6 +1376,11 @@ def prepare_sas_catalogue(
 
 # sourced from: https://github.com/tqdm/tqdm/#hooks-and-callbacks, requests version
 def download_with_progress_bar(url, user, out_fname):
+    if out_fname.exists():
+        # TODO: How does this work with corrupted files?
+        msgs.info(f"File {out_fname} already exists, using cached version.")
+        return
+
     response = requests.get(url, cookies=user.cookies, stream=True)
     with tqdm.wrapattr(
         open(out_fname, "wb"),
@@ -1300,8 +1396,58 @@ def download_with_progress_bar(url, user, out_fname):
 # =========================================================================== #
 
 
+def download_without_progress_bar(url, user, out_fname):
+    if out_fname.exists():
+        # TODO: How does this work with corrupted files?
+        msgs.info(f"File {out_fname} already exists, using cached version.")
+        return
+
+    response = requests.get(url, cookies=user.cookies, stream=True)
+    if response.status_code == 200:
+        with open(out_fname, "wb") as fout:
+            fout.write(response.content)
+    else:
+        msgs.warn(f"Download of {out_fname} failed.")
+
+
+# =========================================================================== #
+
+
+def download_images_from_sas(
+    df,
+    user,
+    img_outpath,
+    img_outname,
+    verbose=True,
+    donwload_function=download_with_progress_bar,
+):
+    for _, row in tqdm(df.iterrows()):
+        if img_outname is None:
+            current_img_outname = row["file_name"]
+        else:
+            current_img_outname = img_outname + "_{_}"
+
+        try:
+            donwload_function(
+                row["image_access_url"], user, img_outpath / current_img_outname
+            )
+
+            if verbose > 0:
+                msgs.info(
+                    f"Download of {current_img_outname} to {img_outpath} completed"
+                )
+
+        except (IncompleteRead, HTTPError, AttributeError, ValueError) as err:
+            msgs.warn(f"Download error encountered: {err}")
+            if verbose > 0:
+                msgs.warn(f"Download of {current_img_outname} unsuccessful")
+
+
+# =========================================================================== #
+
+
 @units.quantity_input()
-def download_full_image(
+def download_all_images(
     ra: units.deg,
     dec: units.deg,
     user,
@@ -1310,6 +1456,7 @@ def download_full_image(
     img_outname=None,
     img_type="calib",
     verbose=False,
+    tile_cat=None,
 ):
     """Download a full EUCLID image given an url. Note that in this case the
     `img_type` indicates both the table to query and the data product used,
@@ -1329,14 +1476,15 @@ def download_full_image(
         raise ValueError("`img_type` should be either 'mosaic' or 'calib'")
 
     # download new tile catalogue and process it
-    tile_cat = prepare_sas_catalogue(
-        cat_outpath,
-        img_type,
-        user,
-        img_type,
-        product_type_dict,
-        use_local_tbl=False,
-    )
+    if tile_cat is None:
+        tile_cat = prepare_sas_catalogue(
+            cat_outpath,
+            img_type,
+            user,
+            img_type,
+            product_type_dict,
+            use_local_tbl=False,
+        )
 
     # download all images - the logic behind this is to group by identifier
     #  to minimize the number of images to download
@@ -1360,22 +1508,7 @@ def download_full_image(
     df_urls = df.drop_duplicates(unique_identifier, ignore_index=True)
 
     # actually download the images
-    for _, row in df_urls.iterrows():
-        if img_outname is None:
-            img_outname = row["file_name"]
-
-        try:
-            download_with_progress_bar(
-                row["image_access_url"], user, img_outpath / img_outname
-            )
-
-            if verbose > 0:
-                msgs.info(f"Download of {img_outname} to {img_outpath} completed")
-
-        except (IncompleteRead, HTTPError, AttributeError, ValueError) as err:
-            msgs.warn(f"Download error encountered: {err}")
-            if verbose > 0:
-                msgs.warn(f"Download of {img_outname} unsuccessful")
+    download_images_from_sas(df_urls, user, img_outpath, img_outname, verbose=verbose)
 
     # and save the catalogue just in case it is needed for anything
     df_urls.to_csv(img_outpath / "Euclid_urls_vetted.csv")
