@@ -1564,6 +1564,8 @@ def persistance_pipeline(
     """
     download_table, dict_input_tbl = download_parsistence_input(ras, decs, user)
 
+    # TODO: add a small message to include how many images one needs to download
+
     download_images_from_sas(
         download_table,
         user,

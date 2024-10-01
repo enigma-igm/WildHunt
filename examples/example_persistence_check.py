@@ -1,17 +1,38 @@
+from pathlib import Path
 
 import pandas as pd
 
-from wildhunt import euclid_utils as wheuclid
+from wildhunt import euclid_utils as eu
 
+user = eu.User()
+user.sasotf_login()
 
-if __name__ == '__main__':
+manual = False
 
-    ra = 174.61753
-    dec = 72.4415851
-    calib_df = pd.read_csv('../examples/data/20240925_persistence_testing.csv')
-    img_dir = '/Users/jtschindler/Downloads/'
-    cutout_dir = '../examples/cutouts/'
-    output_dir = '.'
+prefix = Path.home()
 
-    wheuclid.check_persistence(ra, dec, calib_df, img_dir, cutout_dir, '.')
+if __name__ == "__main__":
+    if manual:
+        # if one has all the input to the function available
+        ra = 174.61753
+        dec = 72.4415851
+        calib_df = pd.read_csv("../examples/data/20240925_persistence_testing.csv")
+        img_dir = "/Users/jtschindler/Downloads/"
+        cutout_dir = "../examples/cutouts/"
+        output_dir = "."
 
+        eu.check_persistence(ra, dec, calib_df, img_dir, cutout_dir, ".")
+    else:
+        # complete pipeline:
+        # from the coordinate downloads the necessary images,
+        # sets up the folders and produces the plots
+        eu.persistance_pipeline(
+            [174.61753],
+            [72.4415851],
+            user,
+            prefix / "persistence_check" / "images/",
+            prefix / "persistence_check" / "cutout/",
+            prefix / "persistence_check" / "output",
+            # download_function=eu.download_esa_datalab,
+            # Comment ^ this in if running on the esa datalab
+        )
