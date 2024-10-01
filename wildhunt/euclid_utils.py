@@ -1229,6 +1229,7 @@ def download_with_progress_bar(url, user, out_fname):
     """
     if out_fname.exists():
         # TODO: How does this work with corrupted files?
+        # answer: it does not work, there should be some kind of logic to check this
         msgs.info(f"File {out_fname} already exists, using cached version.")
         return
 
@@ -1264,6 +1265,7 @@ def download_without_progress_bar(url, user, out_fname):
     """
     if out_fname.exists():
         # TODO: How does this work with corrupted files?
+        # answer: it does not work, there should be some kind of logic to check this
         msgs.info(f"File {out_fname} already exists, using cached version.")
         return
 
@@ -1449,7 +1451,7 @@ def download_all_images(
 # =========================================================================== #
 
 
-def download_parsistence_input_tbl_single_obj(ra, dec, user):
+def download_persistence_input_tbl_single_obj(ra, dec, user):
     """Fetch and return the persistence input table for a single astronomical object.
 
     This function constructs a SQL query to retrieve data from the
@@ -1486,12 +1488,12 @@ def download_parsistence_input_tbl_single_obj(ra, dec, user):
 # =========================================================================== #
 
 
-def download_parsistence_input(ras, decs, user):
+def download_persistence_input(ras, decs, user):
     """Download and merge persistence input tables for multiple astronomical objects.
 
     This function iterates over arrays of right ascension (RA) and declination (DEC)
     coordinates, retrieving persistence input data for each object by calling the
-    `download_parsistence_input_tbl_single_obj` function. The resulting DataFrames are
+    `download_persistence_input_tbl_single_obj` function. The resulting DataFrames are
     merged into a single DataFrame, ensuring that duplicates are removed based on the
     'calibrated_frame_oid'. The function also generates image access URLs for the merged
     table and returns the combined DataFrame along with a dictionary of individual tables.
@@ -1510,7 +1512,7 @@ def download_parsistence_input(ras, decs, user):
     tbls = {}
 
     for ra, dec in zip(ras, decs):
-        tbls[f"{ra}_{dec}"] = download_parsistence_input_tbl_single_obj(ra, dec, user)
+        tbls[f"{ra}_{dec}"] = download_persistence_input_tbl_single_obj(ra, dec, user)
 
     merged_tbl = pd.concat(tbls.values()).drop_duplicates(
         "calibrated_frame_oid", ignore_index=True
@@ -1562,9 +1564,9 @@ def persistance_pipeline(
     :param kwargs: Additional keyword arguments for flexibility in processing.
     :return: None; performs image downloading and persistence checking without returning values.
     """
-    download_table, dict_input_tbl = download_parsistence_input(ras, decs, user)
+    download_table, dict_input_tbl = download_persistence_input(ras, decs, user)
 
-    # TODO: add a small message to include how many images one needs to download
+    msgs.info(f"Starting download of {download_table[0].shape[0]} images!")
 
     download_images_from_sas(
         download_table,
