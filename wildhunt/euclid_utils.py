@@ -66,7 +66,7 @@ VERBOSE = 0
 
 
 product_type_dict = {
-    "calib": ["DpdVisCalibratedFrame", "DpdNirCalibratedFrame"],
+    "calib": ["DpdVisCalibratedQuadFrame", "DpdNirCalibratedFrame"],
     "stacked": ["DpdVisStackedFrame", "DpdNirStackedFrame"],
     "mosaic": ["DpdMerBksMosaic", "DpdMerBksMosaic"],  # same for VIS and NIR
 }
@@ -623,9 +623,9 @@ def _build_cutout_access_url(path, filename, obsid=None, tileidx=None):
     collection = path.split("/")[-2]
     base = "https://easotf.esac.esa.int/sas-cutout/cutout"
     if obsid is None:
-        params = f"filepath={path}/{filename}&collection={collection}&obsid={tileidx}"
+        params = f"filepath={path}/{filename}&collection=MER&tileindex={tileidx}"
     else:
-        params = f"filepath={path}/{filename}&collection=MER&tileindex={obsid}"
+        params = f"filepath={path}/{filename}&collection={collection}&obsid={obsid}"
     return f"{base}?{params}"
 
 
@@ -876,9 +876,7 @@ def get_closest_image_url_local_tbl(
              to the target coordinates in arcseconds.
     :rtype: tuple (pandas.DataFrame, astropy.units.Quantity)
     """
-    # TODO: add possibility to use the query here
     # this takes the closes images to the target
-    # TODO: Are these unique? Dithering bothers in this case
     target_coord = SkyCoord(ra, dec, frame="icrs")
     cat_coord = SkyCoord(
         cat[ra_cat].to_numpy() * ra.unit,
@@ -887,7 +885,7 @@ def get_closest_image_url_local_tbl(
     )
     dist = target_coord.separation(cat_coord).to(units.arcsec)
     if len(dist) == 0:
-        return [], -1.0
+        return pd.DataFrame(data={"cutout_access_url": []}), None
 
     # probably too much
     # TODO: Is there a better way to determine the distance?
@@ -896,19 +894,17 @@ def get_closest_image_url_local_tbl(
             f"Images in band {band} are all farther than 1 deg "
             f"for the object at ra, dec: {ra.value:.4f}, {dec.value:.4f}."
         )
-        return [], dist.min()
+        return pd.DataFrame(data={"cutout_access_url": []}), dist.min()
 
-    # now this is not ideal but at the moment I really don't
-    #  see other simple options
-    # images are selected based on the closest match.
-    #  if needed, the code can download an arbitrary number of images, but
-    #  names need to be adjusted accordingly, and this is NOT handled at
-    #  the moment.
-    inds = np.where(dist < np.unique(np.sort(dist))[1])[0]
+    # Add distance as column and sort df by distance
+    # TODO: Check that this works for mosaic and stack
+    # probably not, I bet I'll need to change the key for the query for MER
+    cat["dist"] = dist.value
+    sorted_cat = cat.sort_values("dist", ignore_index=True)
 
-    return cat.iloc[inds], dist[inds]
-    # return the full dataframe, pick out later
-    #  whatever is needed
+    # get the first observation_id, return the catalogue
+    out = sorted_cat.query(f"observation_id == {sorted_cat['observation_id'][0]}")
+    return out, out["dist"].values
 
 
 # =========================================================================== #
@@ -1034,7 +1030,13 @@ def get_download_urls(
     :rtype: list of str
     """
     side = side.to(units.deg).value
-    image_urls = get_closest_image_url(ra, dec, cat, band)[0]["cutout_access_url"]
+    image_urls = get_closest_image_url(ra, dec, cat, band)
+
+    if not isinstance(image_urls[0], pd.DataFrame):
+        image_urls = []
+    else:
+        image_urls = image_urls[0]["cutout_access_url"]
+
     return [
         build_url(url, ra.value, dec.value, side, search_type) for url in image_urls
     ]
@@ -1338,7 +1340,7 @@ def download_images_from_sas(
 
         try:
             download_function(
-                row["image_access_url"], user, img_outpath / current_img_outname
+                row["cutout_access_url"], user, img_outpath / current_img_outname
             )
 
             if verbose > 0:
@@ -1451,7 +1453,7 @@ def download_all_images(
 # =========================================================================== #
 
 
-def download_persistence_input_tbl_single_obj(ra, dec, user):
+def download_persistence_input_tbl_single_obj(ra, dec, user, fov=30 / 3600.0):
     """Fetch and return the persistence input table for a single astronomical object.
 
     This function constructs a SQL query to retrieve data from the
@@ -1482,6 +1484,12 @@ def download_persistence_input_tbl_single_obj(ra, dec, user):
     )
 
     tbl = pd.read_csv(StringIO(sync_query(query=query, user=user, savepath=None)))
+
+    build_cutout_access_url(tbl)
+    tbl["cutout_access_url"] = [
+        build_url(url, ra, dec, fov, "CIRCLE")
+        for url in tbl["cutout_access_url"].values
+    ]
     return tbl
 
 
@@ -1564,12 +1572,12 @@ def persistance_pipeline(
     :param kwargs: Additional keyword arguments for flexibility in processing.
     :return: None; performs image downloading and persistence checking without returning values.
     """
-    download_table, dict_input_tbl = download_persistence_input(ras, decs, user)
+    downloaded_table, dict_input_tbl = download_persistence_input(ras, decs, user)
 
-    msgs.info(f"Starting download of {download_table[0].shape[0]} images!")
+    msgs.info(f"Starting download of {downloaded_table.shape[0]} images!")
 
     download_images_from_sas(
-        download_table,
+        downloaded_table,
         user,
         output_full_img_dir,
         None,
@@ -1809,8 +1817,12 @@ def check_persistence(
         #  Cycle through extension to find the correct extension with the source
         hdul = fits.open(file_path)
 
-        photfnu = hdul[0].header["PHOTFNU"]
-        photrelex = hdul[0].header["PHRELEX"]
+        try:
+            photfnu = hdul[0].header["PHOTFNU"]
+            photrelex = hdul[0].header["PHRELEX"]
+        except KeyError:
+            photfnu = None
+            photrelex = None
 
         for hdu in [h for h in hdul if "SCI" in h.name]:
             header = hdu.header
@@ -1880,14 +1892,20 @@ def check_persistence(
 
                     # Calculation according to
                     # https://apceuclidccweb-pp.in2p3.fr/Documentation/NIR/NIR_AbsolutePhotometry/develop/0.5.0/md_README.html
-
-                    flux = (
-                        raw_flux / 87.2248 * photfnu * photrelex * photreldt
-                    )  # flux in micro Jy
-                    flux_err = raw_flux_err / 87.2248 * photfnu * photrelex * photreldt
-                    snr = flux / flux_err
-
+                    snr = raw_flux / raw_flux_err
                     abmag = -2.5 * np.log10(raw_flux) + zp_ab
+
+                    if photfnu is not None and photrelex is not None:
+                        flux = (
+                            raw_flux / 87.2248 * photfnu * photrelex * photreldt
+                        )  # flux in micro Jy
+                        flux_err = (
+                            raw_flux_err / 87.2248 * photfnu * photrelex * photreldt
+                        )
+                    else:
+                        # only needed for cutouts
+                        flux = 10 ** (-((abmag - 8.9) / 2.5)) * 1e6
+                        flux_err = flux / snr
 
                     result_df.loc[idx, "raw_aper_sum_{:.1f}".format(radius)] = raw_flux
                     result_df.loc[idx, "flux_aper_{:.1f}".format(radius)] = flux
