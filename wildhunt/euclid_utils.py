@@ -252,8 +252,7 @@ class User:
         with requests.Session() as session:
             session.cookies = cookies
 
-            # possibly this is not needed?
-            # TODO: Investigate
+            # These are all needed for the different services that we use
             session.post(
                 "https://easotf.esac.esa.int/tap-server/login",
                 data=self.get_user_data(),
@@ -1148,6 +1147,296 @@ def download_cutouts(obj_ra, obj_dec, img_urls, folder, user=None, verbose=VERBO
 
 
 # =========================================================================== #
+
+
+def prepare_sas_catalogue(
+    cat_path,
+    sas_catalogue,
+    user,
+    product_type,
+    product_type_dict,
+    use_local_tbl=False,  # default in any case, better make it explicit
+):
+    """Load and filter a SAS catalogue based on specified product types.
+
+    This function retrieves a catalogue from the specified SAS source, optionally
+    using a local table for efficiency. It then filters the catalogue to include
+    only those data products matching the specified product type(s). The function
+    also renames columns as needed for consistent handling across different tables.
+
+    :param cat_path: The path to the catalogue file to be loaded.
+    :type cat_path: str or pathlib.Path
+    :param sas_catalogue: The name of the SAS catalogue to query.
+    :type sas_catalogue: str
+    :param user: The user object for authentication to access the catalogue.
+    :type user: User
+    :param product_type: The type of product to filter in the catalogue.
+    :type product_type: str
+    :param product_type_dict: A dictionary mapping product types to their corresponding values.
+    :type product_type_dict: dict
+    :param use_local_tbl: If True, utilize a local table for loading the catalogue instead
+                          of querying the SAS; defaults to False.
+    :type use_local_tbl: bool
+    :return: A DataFrame containing the filtered catalogue data products of the specified type.
+    :rtype: pandas.DataFrame
+    :raises ValueError: If no data product of the specified type is found in the catalogue.
+    """
+    cat = load_catalogue(
+        fname=cat_path,
+        query_table=sas_catalogue,
+        user=user,
+        use_local_tbl=use_local_tbl,
+    )[0]
+
+    # select only the products that you want
+    # parse_catalogue just does some renaming to make sure that
+    # different tables can be handles with the same code
+    parse_catalogue(cat, inplace=True)
+
+    cat_data_prod = cat.query(
+        f"product_type == '{product_type_dict[product_type][0]}' "
+        + f"or product_type == '{product_type_dict[product_type][1]}'"
+    ).reset_index()
+
+    if cat_data_prod.empty:
+        msgs.error(
+            f"No data product of type {product_type} found. Are you using the correct table?"
+        )
+        raise ValueError
+    else:
+        return cat_data_prod
+
+
+# =========================================================================== #
+
+
+# sourced from: https://github.com/tqdm/tqdm/#hooks-and-callbacks, requests version
+def download_with_progress_bar(url, user, out_fname):
+    """Download a file from the given URL and display a progress bar during the download.
+
+    This function retrieves a file from a specified URL using the given user credentials
+    and saves it to the specified output file path. If the file already exists, it skips
+    the download and uses the cached version instead. The download process is displayed
+    with a progress bar for better visualization of the download status.
+
+    :param url: The URL from which to download the file.
+    :type url: str
+    :param user: The user object for authentication; this is used to manage cookies for the request.
+    :type user: User
+    :param out_fname: The path where the downloaded file will be saved.
+    :type out_fname: pathlib.Path
+    :return: None; downloads the file and saves it to the specified location.
+    """
+    if out_fname.exists():
+        # TODO: How does this work with corrupted files?
+        msgs.info(f"File {out_fname} already exists, using cached version.")
+        return
+
+    response = requests.get(url, cookies=user.cookies, stream=True)
+    with tqdm.wrapattr(
+        open(out_fname, "wb"),
+        "write",
+        miniters=1,
+        desc=msgs.info(f"Downloading {url.split('=')[1].split('&')[0]}"),
+        total=int(response.headers.get("content-length", 0)),
+    ) as fout:
+        for chunk in response.iter_content(chunk_size=4096):
+            fout.write(chunk)
+
+
+# =========================================================================== #
+
+
+def download_without_progress_bar(url, user, out_fname):
+    """Download a file from the given URL without displaying a progress bar.
+
+    This function retrieves a file from the specified URL using the provided user credentials
+    and saves it to the intended output file path. If the file already exists, it uses the cached
+    version and skips the download. If the download attempt is unsuccessful, it issues a warning.
+
+    :param url: The URL from which to download the file.
+    :type url: str
+    :param user: The user object for authentication; this is used to manage cookies for the request.
+    :type user: User
+    :param out_fname: The path where the downloaded file will be saved.
+    :type out_fname: pathlib.Path
+    :return: None; attempts to download the file and save it to the specified location.
+    """
+    if out_fname.exists():
+        # TODO: How does this work with corrupted files?
+        msgs.info(f"File {out_fname} already exists, using cached version.")
+        return
+
+    response = requests.get(url, cookies=user.cookies, stream=True)
+    if response.status_code == 200:
+        with open(out_fname, "wb") as fout:
+            fout.write(response.content)
+    else:
+        msgs.warn(f"Download of {out_fname} failed.")
+
+
+# =========================================================================== #
+
+
+def download_esa_datalab(url, user, out_fname):
+    # same interface, but the parameters required are slightly different
+    #  so some parsing is required
+    raise NotImplementedError
+
+
+# =========================================================================== #
+
+
+def download_images_from_sas(
+    df,
+    user,
+    img_outpath,
+    img_outname,
+    verbose=True,
+    download_function=download_with_progress_bar,
+):
+    """Download images from the SAS using information from the provided DataFrame.
+
+    This function iterates through a DataFrame containing image information and
+    downloads images from the specified SAS (Science Archive Service) URLs.
+    The function allows the user to specify an output path and file name for the
+    downloaded images, with options for verbosity and progress tracking during
+    the download process.
+
+    :param df: The DataFrame containing image details, including the access URLs and
+               filenames for the images to be downloaded.
+    :type df: pandas.DataFrame
+    :param user: The user object for authentication to access the SAS.
+    :type user: User
+    :param img_outpath: The directory path where the downloaded images will be saved.
+    :type img_outpath: str or pathlib.Path
+    :param img_outname: The base name for the downloaded images; if None, the filenames
+                        from the DataFrame will be used.
+    :type img_outname: str or None
+    :param verbose: If True, enable verbose logging for download progress. Defaults to True.
+    :type verbose: bool
+    :param donwload_function: The function to use for downloading images (default is
+                             `download_with_progress_bar`).
+    :type donwload_function: callable
+    :return: None; downloads images by saving them to the specified output path.
+    """
+    for _, row in tqdm(df.iterrows()):
+        if img_outname is None:
+            current_img_outname = row["file_name"]
+        else:
+            current_img_outname = img_outname + "_{_}"
+
+        try:
+            download_function(
+                row["image_access_url"], user, img_outpath / current_img_outname
+            )
+
+            if verbose > 0:
+                msgs.info(
+                    f"Download of {current_img_outname} to {img_outpath} completed"
+                )
+
+        except (IncompleteRead, HTTPError, AttributeError, ValueError) as err:
+            msgs.warn(f"Download error encountered: {err}")
+            if verbose > 0:
+                msgs.warn(f"Download of {current_img_outname} unsuccessful")
+
+
+# =========================================================================== #
+
+
+@units.quantity_input()
+def download_all_images(
+    ra: units.deg,
+    dec: units.deg,
+    user,
+    cat_outpath,
+    img_outpath,
+    img_outname=None,
+    img_type="calib",
+    verbose=False,
+    tile_cat=None,
+):
+    """Download all images related to a specified set of coordinates from the SAS.
+
+    This function retrieves and downloads images associated with the provided
+    right ascension (RA) and declination (DEC) coordinates. The `img_type` parameter
+    specifies both the table to query and the data product used in the download
+    process. If a tile catalogue is not provided, it is created based on the
+    specified `img_type`. The images are grouped by identifier to optimize
+    the download process.
+
+    :param ra: An array of right ascension values for the target locations.
+    :type ra: astropy.units.Quantity (degrees)
+    :param dec: An array of declination values for the target locations.
+    :type dec: astropy.units.Quantity (degrees)
+    :param user: The user object for authentication to access the SAS.
+    :type user: User
+    :param cat_outpath: The directory path where the catalogue will be saved.
+    :type cat_outpath: str or pathlib.Path
+    :param img_outpath: The directory path where the downloaded images will be saved.
+    :type img_outpath: str or pathlib.Path
+    :param img_outname: (Optional) The base name for the downloaded images; if None,
+                        the filenames from the DataFrame will be used.
+    :type img_outname: str or None
+    :param img_type: The type of image to download; should be either 'mosaic' or 'calib'.
+    :type img_type: str
+    :param verbose: If True, enable verbose logging for download progress. Defaults to False.
+    :type verbose: bool
+    :param tile_cat: (Optional) A previously prepared tile catalogue; if None, a new
+                     catalogue will be created.
+    :type tile_cat: pandas.DataFrame or None
+    :return: None; performs the download and saves the relevant catalogue.
+    :raises ValueError: If `img_type` is neither 'mosaic' nor 'calib'.
+    """
+
+    cat_outpath = Path(cat_outpath)
+    img_outpath = Path(img_outpath)
+
+    # Restric image type
+    if img_type not in ["mosaic", "calib"]:
+        raise ValueError("`img_type` should be either 'mosaic' or 'calib'")
+
+    # download new tile catalogue and process it
+    if tile_cat is None:
+        tile_cat = prepare_sas_catalogue(
+            cat_outpath,
+            img_type,
+            user,
+            img_type,
+            product_type_dict,
+            use_local_tbl=False,
+        )
+
+    # download all images - the logic behind this is to group by identifier
+    #  to minimize the number of images to download
+    df = None
+
+    for ra_, dec_ in zip(ra, dec):
+        partial = get_closest_image_url(
+            ra_,
+            dec_,
+            tile_cat,
+            "[VIS, Y, J, H]",
+            query_sas_otf=False,
+        )[0]
+
+        df = partial if df is None else pd.concat([df, partial], ignore_index=True)
+
+    # this gets all 4 bands at the same time
+    unique_identifier = (
+        "mosaic_product_oid" if img_type == "mosaic" else "calibrated_frame_oid"
+    )
+    df_urls = df.drop_duplicates(unique_identifier, ignore_index=True)
+
+    # actually download the images
+    download_images_from_sas(df_urls, user, img_outpath, img_outname, verbose=verbose)
+
+    # and save the catalogue just in case it is needed for anything
+    df_urls.to_csv(img_outpath / "Euclid_urls_vetted.csv")
+
+
+# =========================================================================== #
 # Functions for persistence check
 # =========================================================================== #
 
@@ -1235,6 +1524,7 @@ def persistance_pipeline(
     output_cutout_dir,
     output_persistence_check_dir,
     verbose=False,
+    download_function=download_with_progress_bar,
     **kwargs,
 ):
     """Execute the persistence pipeline for multiple astronomical objects.
@@ -1267,7 +1557,12 @@ def persistance_pipeline(
     download_table, dict_input_tbl = download_parsistence_input(ras, decs, user)
 
     download_images_from_sas(
-        download_table, user, output_full_img_dir, None, verbose=verbose
+        download_table,
+        user,
+        output_full_img_dir,
+        None,
+        verbose=verbose,
+        download_function=download_function,
     )
 
     for ra, dec in zip(ras, decs):
@@ -1421,7 +1716,9 @@ def plot_persistence_cutouts(
 
     # Save the plot
     plt.tight_layout()
-    print(ra, dec)
+    if VERBOSE:
+        msgs.info(f"Current ra, dec: {ra}, {dec}")
+
     source_name = whut.coord_to_name([ra], [dec], epoch="J")[0]
     plt.savefig(
         os.path.join(
@@ -1512,8 +1809,8 @@ def check_persistence(
 
             # If source in extension, then
             if 0 < x < header["NAXIS1"] and 0 < y < header["NAXIS2"]:
-                print("Coordinate is within the image")
-                print("Extension: ", hdu.name)
+                msgs.info("Coordinate is within the image")
+                msgs.info(f"Extension: {hdu.name}")
 
                 result_df.loc[idx, "img_extension"] = hdu.name
 
@@ -1538,7 +1835,7 @@ def check_persistence(
                 gain = img.header["GAIN"]
                 photreldt = img.header["PHRELDT"]
 
-                print("ZPAB: ", zp_ab, band)
+                msgs.info(f"ZPAB: {zp_ab}, {band}")
 
                 nanomag_correction = np.power(10, 0.4 * (22.5 - zp_ab)) * gain
 
@@ -1602,281 +1899,3 @@ def check_persistence(
 # Have a dictionary of filepath that links to the correct cutout files for the persistence check
 
 # =========================================================================== #
-
-
-def prepare_sas_catalogue(
-    cat_path,
-    sas_catalogue,
-    user,
-    product_type,
-    product_type_dict,
-    use_local_tbl=False,  # default in any case, better make it explicit
-):
-    """Load and filter a SAS catalogue based on specified product types.
-
-    This function retrieves a catalogue from the specified SAS source, optionally
-    using a local table for efficiency. It then filters the catalogue to include
-    only those data products matching the specified product type(s). The function
-    also renames columns as needed for consistent handling across different tables.
-
-    :param cat_path: The path to the catalogue file to be loaded.
-    :type cat_path: str or pathlib.Path
-    :param sas_catalogue: The name of the SAS catalogue to query.
-    :type sas_catalogue: str
-    :param user: The user object for authentication to access the catalogue.
-    :type user: User
-    :param product_type: The type of product to filter in the catalogue.
-    :type product_type: str
-    :param product_type_dict: A dictionary mapping product types to their corresponding values.
-    :type product_type_dict: dict
-    :param use_local_tbl: If True, utilize a local table for loading the catalogue instead
-                          of querying the SAS; defaults to False.
-    :type use_local_tbl: bool
-    :return: A DataFrame containing the filtered catalogue data products of the specified type.
-    :rtype: pandas.DataFrame
-    :raises ValueError: If no data product of the specified type is found in the catalogue.
-    """
-    cat = load_catalogue(
-        fname=cat_path,
-        query_table=sas_catalogue,
-        user=user,
-        use_local_tbl=use_local_tbl,
-    )[0]
-
-    # select only the products that you want
-    # parse_catalogue just does some renaming to make sure that
-    # different tables can be handles with the same code
-    parse_catalogue(cat, inplace=True)
-
-    cat_data_prod = cat.query(
-        f"product_type == '{product_type_dict[product_type][0]}' "
-        + f"or product_type == '{product_type_dict[product_type][1]}'"
-    ).reset_index()
-
-    if cat_data_prod.empty:
-        msgs.error(
-            f"No data product of type {product_type} found. Are you using the correct table?"
-        )
-        raise ValueError
-    else:
-        return cat_data_prod
-
-
-# =========================================================================== #
-
-
-# sourced from: https://github.com/tqdm/tqdm/#hooks-and-callbacks, requests version
-def download_with_progress_bar(url, user, out_fname):
-    """Download a file from the given URL and display a progress bar during the download.
-
-    This function retrieves a file from a specified URL using the given user credentials
-    and saves it to the specified output file path. If the file already exists, it skips
-    the download and uses the cached version instead. The download process is displayed
-    with a progress bar for better visualization of the download status.
-
-    :param url: The URL from which to download the file.
-    :type url: str
-    :param user: The user object for authentication; this is used to manage cookies for the request.
-    :type user: User
-    :param out_fname: The path where the downloaded file will be saved.
-    :type out_fname: pathlib.Path
-    :return: None; downloads the file and saves it to the specified location.
-    """
-    if out_fname.exists():
-        # TODO: How does this work with corrupted files?
-        msgs.info(f"File {out_fname} already exists, using cached version.")
-        return
-
-    response = requests.get(url, cookies=user.cookies, stream=True)
-    with tqdm.wrapattr(
-        open(out_fname, "wb"),
-        "write",
-        miniters=1,
-        desc=msgs.info(f"Downloading {url.split('=')[1].split('&')[0]}"),
-        total=int(response.headers.get("content-length", 0)),
-    ) as fout:
-        for chunk in response.iter_content(chunk_size=4096):
-            fout.write(chunk)
-
-
-# =========================================================================== #
-
-
-def download_without_progress_bar(url, user, out_fname):
-    """Download a file from the given URL without displaying a progress bar.
-
-    This function retrieves a file from the specified URL using the provided user credentials
-    and saves it to the intended output file path. If the file already exists, it uses the cached
-    version and skips the download. If the download attempt is unsuccessful, it issues a warning.
-
-    :param url: The URL from which to download the file.
-    :type url: str
-    :param user: The user object for authentication; this is used to manage cookies for the request.
-    :type user: User
-    :param out_fname: The path where the downloaded file will be saved.
-    :type out_fname: pathlib.Path
-    :return: None; attempts to download the file and save it to the specified location.
-    """
-    if out_fname.exists():
-        # TODO: How does this work with corrupted files?
-        msgs.info(f"File {out_fname} already exists, using cached version.")
-        return
-
-    response = requests.get(url, cookies=user.cookies, stream=True)
-    if response.status_code == 200:
-        with open(out_fname, "wb") as fout:
-            fout.write(response.content)
-    else:
-        msgs.warn(f"Download of {out_fname} failed.")
-
-
-# =========================================================================== #
-
-
-def download_images_from_sas(
-    df,
-    user,
-    img_outpath,
-    img_outname,
-    verbose=True,
-    donwload_function=download_with_progress_bar,
-):
-    """Download images from the SAS using information from the provided DataFrame.
-
-    This function iterates through a DataFrame containing image information and
-    downloads images from the specified SAS (Science Archive Service) URLs.
-    The function allows the user to specify an output path and file name for the
-    downloaded images, with options for verbosity and progress tracking during
-    the download process.
-
-    :param df: The DataFrame containing image details, including the access URLs and
-               filenames for the images to be downloaded.
-    :type df: pandas.DataFrame
-    :param user: The user object for authentication to access the SAS.
-    :type user: User
-    :param img_outpath: The directory path where the downloaded images will be saved.
-    :type img_outpath: str or pathlib.Path
-    :param img_outname: The base name for the downloaded images; if None, the filenames
-                        from the DataFrame will be used.
-    :type img_outname: str or None
-    :param verbose: If True, enable verbose logging for download progress. Defaults to True.
-    :type verbose: bool
-    :param donwload_function: The function to use for downloading images (default is
-                             `download_with_progress_bar`).
-    :type donwload_function: callable
-    :return: None; downloads images by saving them to the specified output path.
-    """
-    for _, row in tqdm(df.iterrows()):
-        if img_outname is None:
-            current_img_outname = row["file_name"]
-        else:
-            current_img_outname = img_outname + "_{_}"
-
-        try:
-            donwload_function(
-                row["image_access_url"], user, img_outpath / current_img_outname
-            )
-
-            if verbose > 0:
-                msgs.info(
-                    f"Download of {current_img_outname} to {img_outpath} completed"
-                )
-
-        except (IncompleteRead, HTTPError, AttributeError, ValueError) as err:
-            msgs.warn(f"Download error encountered: {err}")
-            if verbose > 0:
-                msgs.warn(f"Download of {current_img_outname} unsuccessful")
-
-
-# =========================================================================== #
-
-
-@units.quantity_input()
-def download_all_images(
-    ra: units.deg,
-    dec: units.deg,
-    user,
-    cat_outpath,
-    img_outpath,
-    img_outname=None,
-    img_type="calib",
-    verbose=False,
-    tile_cat=None,
-):
-    """Download all images related to a specified set of coordinates from the SAS.
-
-    This function retrieves and downloads images associated with the provided
-    right ascension (RA) and declination (DEC) coordinates. The `img_type` parameter
-    specifies both the table to query and the data product used in the download
-    process. If a tile catalogue is not provided, it is created based on the
-    specified `img_type`. The images are grouped by identifier to optimize
-    the download process.
-
-    :param ra: An array of right ascension values for the target locations.
-    :type ra: astropy.units.Quantity (degrees)
-    :param dec: An array of declination values for the target locations.
-    :type dec: astropy.units.Quantity (degrees)
-    :param user: The user object for authentication to access the SAS.
-    :type user: User
-    :param cat_outpath: The directory path where the catalogue will be saved.
-    :type cat_outpath: str or pathlib.Path
-    :param img_outpath: The directory path where the downloaded images will be saved.
-    :type img_outpath: str or pathlib.Path
-    :param img_outname: (Optional) The base name for the downloaded images; if None,
-                        the filenames from the DataFrame will be used.
-    :type img_outname: str or None
-    :param img_type: The type of image to download; should be either 'mosaic' or 'calib'.
-    :type img_type: str
-    :param verbose: If True, enable verbose logging for download progress. Defaults to False.
-    :type verbose: bool
-    :param tile_cat: (Optional) A previously prepared tile catalogue; if None, a new
-                     catalogue will be created.
-    :type tile_cat: pandas.DataFrame or None
-    :return: None; performs the download and saves the relevant catalogue.
-    :raises ValueError: If `img_type` is neither 'mosaic' nor 'calib'.
-    """
-
-    cat_outpath = Path(cat_outpath)
-    img_outpath = Path(img_outpath)
-
-    # Restric image type
-    if img_type not in ["mosaic", "calib"]:
-        raise ValueError("`img_type` should be either 'mosaic' or 'calib'")
-
-    # download new tile catalogue and process it
-    if tile_cat is None:
-        tile_cat = prepare_sas_catalogue(
-            cat_outpath,
-            img_type,
-            user,
-            img_type,
-            product_type_dict,
-            use_local_tbl=False,
-        )
-
-    # download all images - the logic behind this is to group by identifier
-    #  to minimize the number of images to download
-    df = None
-
-    for ra_, dec_ in zip(ra, dec):
-        partial = get_closest_image_url(
-            ra_,
-            dec_,
-            tile_cat,
-            "[VIS, Y, J, H]",
-            query_sas_otf=False,
-        )[0]
-
-        df = partial if df is None else pd.concat([df, partial], ignore_index=True)
-
-    # this gets all 4 bands at the same time
-    unique_identifier = (
-        "mosaic_product_oid" if img_type == "mosaic" else "calibrated_frame_oid"
-    )
-    df_urls = df.drop_duplicates(unique_identifier, ignore_index=True)
-
-    # actually download the images
-    download_images_from_sas(df_urls, user, img_outpath, img_outname, verbose=verbose)
-
-    # and save the catalogue just in case it is needed for anything
-    df_urls.to_csv(img_outpath / "Euclid_urls_vetted.csv")

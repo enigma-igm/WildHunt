@@ -2,23 +2,15 @@
 
 import os
 import string
-import pandas as pd
-
-import astropy.units as u
-from astropy.coordinates import SkyCoord
-
 from urllib.request import urlopen
 
-from astroquery.vizier import Vizier
+import astropy.units as u
+import pandas as pd
+from astropy.coordinates import SkyCoord
 from astroquery.irsa import Irsa
-from astroquery.vsa import Vsa
 from astroquery.ukidss import Ukidss
-
-# ToDo: Implement a better solution
-try:
-    from dl import queryClient as qc
-except:
-    print('No Internet!')
+from astroquery.vizier import Vizier
+from astroquery.vsa import Vsa
 
 from wildhunt import pypmsgs
 
@@ -361,7 +353,8 @@ def query_region_datalab(ra, dec, radius, datalab_dict,
     :return: Returns the dataframe with the returned matches
     :rtype:  pandas.core.frame.DataFrame
     """
-
+    from dl import queryClient as qc
+    
     radius_deg = radius / 3600.
 
     minimum_distance = minimum_distance / 3600.
@@ -438,9 +431,9 @@ def query_region_ps1(ra, dec, radius, survey='dr2', catalog='mean',
                                                                dec,
                                                                radius)
     else:
+        # FIXME: This might be a bug, ask JT
         url = urlbase + '{}/{}?ra={}&dec={}&radius={}&' + \
-              add_criteria + 'format=csv'.format(survey, catalog, ra, dec,
-                                                 radius)
+              add_criteria + 'format=csv'.format()
     if verbosity > 0:
         msgs.info('Opening {}'.format(url))
 
