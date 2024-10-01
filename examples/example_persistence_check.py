@@ -26,13 +26,21 @@ if __name__ == "__main__":
         # complete pipeline:
         # from the coordinate downloads the necessary images,
         # sets up the folders and produces the plots
+        img_folder = prefix / "persistence_check" / "images"
+        cutout_folder = prefix / "persistence_check" / "cutout"
+        output_folder = prefix / "persistence_check" / "output"
+
+        for dir_ in [img_folder, cutout_folder, output_folder]:
+            if not dir_.exists():
+                dir_.mkdir(parents=True, exist_ok=True)
+
         eu.persistance_pipeline(
             [174.61753],
             [72.4415851],
             user,
-            prefix / "persistence_check" / "images/",
-            prefix / "persistence_check" / "cutout/",
-            prefix / "persistence_check" / "output",
+            img_folder,
+            cutout_folder,
+            output_folder,
             # download_function=eu.download_esa_datalab,
             # Comment ^ this in if running on the esa datalab
         )
