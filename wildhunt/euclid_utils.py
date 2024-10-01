@@ -1281,7 +1281,15 @@ def download_without_progress_bar(url, user, out_fname):
 def download_esa_datalab(url, user, out_fname):
     # same interface, but the parameters required are slightly different
     #  so some parsing is required
-    raise NotImplementedError
+    from astroquery.esa.euclid.core import Euclid
+
+    # would be useseful a simple Euclid.is_logged_in
+    # Anyway:
+    if not Euclid._EuclidClass__eucliddata._TapPlus__isLoggedIn:
+        Euclid.login(user=user.username)
+
+    target_file_name = url.split("file_name=")[-1].split("&")[0]
+    Euclid.get_product(file_name=target_file_name, output_file=out_fname)
 
 
 # =========================================================================== #
