@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from wildhunt import euclid_utils as eu
+from wildhunt.utilities import euclid_utils as eu
 
 user = eu.User()
 user.sasotf_login()

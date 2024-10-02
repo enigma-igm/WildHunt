@@ -7,34 +7,27 @@ Main module for downloading and manipulating image data.
 
 import glob
 import math
-
-import numpy as np
-
 import string
-from astropy import wcs, stats
+
 import astropy.units as u
-from astropy.io import fits
-from astropy.wcs import WCS
-from astropy.nddata.utils import Cutout2D
-from astropy.coordinates import SkyCoord, ICRS
-from astropy.wcs.utils import proj_plane_pixel_scales
-from astropy.visualization import ZScaleInterval
-
-from matplotlib.patches import Circle, Ellipse, Rectangle
-from matplotlib.colors import LogNorm
-from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
-
-from reproject.mosaicking import find_optimal_celestial_wcs
-from reproject import reproject_interp
-
-from photutils import aperture_photometry, SkyCircularAperture,\
-    SkyCircularAnnulus
-
 import matplotlib.pyplot as plt
+import numpy as np
+from astropy import stats, wcs
+from astropy.coordinates import ICRS, SkyCoord
+from astropy.io import fits
+from astropy.nddata.utils import Cutout2D
+from astropy.visualization import ZScaleInterval
+from astropy.wcs import WCS
+from astropy.wcs.utils import proj_plane_pixel_scales
+from matplotlib.colors import LogNorm
+from matplotlib.patches import Circle, Ellipse, Rectangle
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+from photutils import SkyCircularAnnulus, SkyCircularAperture, aperture_photometry
+from reproject import reproject_interp
+from reproject.mosaicking import find_optimal_celestial_wcs
 
-from wildhunt import utils
-from wildhunt import pypmsgs
-from wildhunt import catalog
+from wildhunt import catalog, pypmsgs
+from wildhunt.utilities import general_utils
 
 msgs = pypmsgs.Messages()
 
@@ -139,7 +132,7 @@ def make_mult_png_fig(ra, dec, surveys, bands,
                               forced_sn_list, scalebar, n_sigma,
                               color_map_name)
 
-    coord_name = utils.coord_to_name(np.array([ra]),
+    coord_name = general_utils.coord_to_name(np.array([ra]),
                                      np.array([dec]),
                                      epoch="J")
 
@@ -539,7 +532,7 @@ class Image(object):
                 mean, median, sigma = stats.sigma_clipped_stats(
                     self.data, mask=np.logical_not(
                         np.isfinite(self.data) & (self.data != 0.0)),
-                    sigma=3.0, cenfunc='median', stdfunc=utils.nan_mad_std,
+                    sigma=3.0, cenfunc='median', stdfunc=general_utils.nan_mad_std,
                     maxiters=10)
 
                 upp_lim = median + n_sigma * sigma
@@ -688,7 +681,7 @@ class Image(object):
                     mean, median, sigma = stats.sigma_clipped_stats(
                         self.data, mask=np.logical_not(
                             np.isfinite(self.data) & (self.data != 0.0)),
-                        sigma=3.0, cenfunc='median', stdfunc=utils.nan_mad_std,
+                        sigma=3.0, cenfunc='median', stdfunc=general_utils.nan_mad_std,
                         maxiters=10)
 
                     upp_lim = median + n_sigma * sigma
@@ -1133,7 +1126,7 @@ class Image(object):
 
         # Save cutout image to cutout_dir
         if save:
-            source_name = utils.coord_to_name(np.array([ra]),
+            source_name = general_utils.coord_to_name(np.array([ra]),
                                               np.array([dec]),
                                               epoch="J")[0]
 
@@ -1444,7 +1437,7 @@ class SurveyImage(Image):
         self.fov = min_fov
         self.verbosity = verbosity
 
-        self.source_name = utils.coord_to_name(np.array([ra]),
+        self.source_name = general_utils.coord_to_name(np.array([ra]),
                                                np.array([dec]),
                                                epoch="J")[0]
 

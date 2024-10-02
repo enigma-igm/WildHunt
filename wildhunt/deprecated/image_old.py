@@ -6,37 +6,29 @@ Main module for downloading and manipulating image data.
 """
 
 import glob
-import os
-
 import multiprocessing
+import os
 from multiprocessing import Process, Queue
 
-import numpy as np
-
-import pandas as pd
-
-from astropy.table import Table, vstack
-from astropy import wcs, stats
 import astropy.units as u
-from astropy.io import fits
-from astropy.wcs import WCS
-from astropy.nddata.utils import Cutout2D
-from astropy.coordinates import SkyCoord, ICRS
-from astropy.wcs.utils import proj_plane_pixel_scales
-
-from matplotlib.colors import LogNorm
-from mpl_toolkits.axes_grid1.anchored_artists import (AnchoredSizeBar)
-
-from reproject.mosaicking import find_optimal_celestial_wcs
-from reproject import reproject_interp
-
-from photutils import aperture_photometry, SkyCircularAperture, SkyCircularAnnulus
-
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from astropy import stats, wcs
+from astropy.coordinates import ICRS, SkyCoord
+from astropy.io import fits
+from astropy.nddata.utils import Cutout2D
+from astropy.table import Table, vstack
+from astropy.wcs import WCS
+from astropy.wcs.utils import proj_plane_pixel_scales
+from matplotlib.colors import LogNorm
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+from photutils import SkyCircularAnnulus, SkyCircularAperture, aperture_photometry
+from reproject import reproject_interp
+from reproject.mosaicking import find_optimal_celestial_wcs
 
-from wildhunt import utils
-from wildhunt import pypmsgs
-from wildhunt import catalog
+from wildhunt import catalog, pypmsgs
+from wildhunt.utilities import general_utils
 
 msgs = pypmsgs.Messages()
 
@@ -135,7 +127,7 @@ def get_aperture_photometry(ra, dec, survey_dicts, image_folder_path='cutouts', 
     '''
 
     # open an astropy table to store the data
-    source_name = utils.coord_to_name(ra, dec, epoch=epoch)[0]
+    source_name = general_utils.coord_to_name(ra, dec, epoch=epoch)[0]
     photo_table = Table()
     photo_table['Name'] = [source_name]
     photo_table['RA'] = [ra]
@@ -263,7 +255,7 @@ class Image(object):
 
     def __init__(self, ra, dec, survey, band, image_folder_path, fov=120,
                  data=None, header=None):
-        self.source_name = utils.coord_to_name(np.array([ra]),
+        self.source_name = general_utils.coord_to_name(np.array([ra]),
                                                np.array([dec]),
                                                epoch="J")[0]
         self.survey = survey

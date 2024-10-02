@@ -11,9 +11,10 @@ import pandas as pd
 import requests
 from astropy import units
 
-from wildhunt import euclid_utils as eu
-from wildhunt import pypmsgs, utils
+from wildhunt import pypmsgs
 from wildhunt.surveys import imagingsurvey
+from wildhunt.utilities import euclid_utils as eu
+from wildhunt.utilities import general_utils
 
 msgs = pypmsgs.Messages()
 if os.environ.get("WILDHUNT_LOCALPATH") is None:
@@ -219,7 +220,7 @@ class Euclid(imagingsurvey.ImagingSurvey):
             band = group_key
 
             for idx in group_df.index:
-                obj_name = utils.coord_to_name(
+                obj_name = general_utils.coord_to_name(
                     group_df.loc[idx, "ra"], group_df.loc[idx, "dec"]
                 )[0]
 

@@ -7,13 +7,11 @@ telescope.
 """
 import os
 
-import pandas as pd
-
 import astropy.units as u
+import pandas as pd
 from astropy.coordinates import SkyCoord
 
-from wildhunt.utils import coord_to_name, degree_to_hms
-
+from wildhunt.utilities.general_utils import coord_to_name, degree_to_hms
 
 
 def instrument_observations_setup(telescope, instrument, table, ra_column_name, dec_column_name, target_column_name,

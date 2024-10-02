@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 
 import os
-import requests
-import pandas as pd
-import numpy as np
 from io import StringIO
+
+import numpy as np
+import pandas as pd
+import requests
 from astropy.table import Table
 
-from wildhunt import utils, pypmsgs
+from wildhunt import pypmsgs
 from wildhunt.surveys import imagingsurvey
+from wildhunt.utilities import general_utils
 
 msgs = pypmsgs.Messages()
 
@@ -142,7 +144,7 @@ class Panstarrs(imagingsurvey.ImagingSurvey):
 
                 filename = group_df.loc[idx, 'filename']
 
-                obj_name = utils.coord_to_name(group_df.loc[idx, 'ra'],
+                obj_name = general_utils.coord_to_name(group_df.loc[idx, 'ra'],
                                                group_df.loc[idx, 'dec'])[0]
 
                 # Create image name

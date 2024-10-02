@@ -17,9 +17,10 @@ from astropy.table import Table
 
 from wildhunt import catalog_queries as whcq
 from wildhunt import image as whim
-from wildhunt import pypmsgs, utils
+from wildhunt import pypmsgs
 from wildhunt.surveys import catalog_defaults as whcd
 from wildhunt.surveys import euclid, legacysurvey, lotss, panstarrs, unwise, vsa_wsa
+from wildhunt.utilities import general_utils
 
 msgs = pypmsgs.Messages()
 
@@ -199,8 +200,8 @@ class Catalog(object):
             if filesize > self.partition_limit:
 
                 partition_file = True
-                readable_filesize = utils.sizeof_fmt(filesize)
-                readable_partition_limit = utils.sizeof_fmt(
+                readable_filesize = general_utils.sizeof_fmt(filesize)
+                readable_partition_limit = general_utils.sizeof_fmt(
                     self.partition_limit)
                 msgs.warn('You supplied a single file in excess'
                           ' of {}.'.format(readable_partition_limit))
