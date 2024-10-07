@@ -206,6 +206,72 @@ def parse_sas_catalogue(tbl_in, inplace=False, force=False):
 
 
 # =========================================================================== #
+
+
+def init_sas_catalogue(
+    user,
+    query_table,
+    cat_fname,
+    product_type,
+    tbl_in=None,
+    product_type_dict=product_type_dict,
+    use_local_tbl=False,  # default in any case, better make it explicit
+    sync_query=True,
+):
+    """Load and filter a SAS catalogue based on specified product types.
+
+    This function retrieves a catalogue from the specified SAS source, optionally
+    using a local table for efficiency. It then filters the catalogue to include
+    only those data products matching the specified product type(s). The function
+    also renames columns as needed for consistent handling across different tables.
+
+    :param cat_path: The path to the catalogue file to be loaded.
+    :type cat_path: str or pathlib.Path
+    :param sas_catalogue: The name of the SAS catalogue to query.
+    :type sas_catalogue: str
+    :param user: The user object for authentication to access the catalogue.
+    :type user: User
+    :param product_type: The type of product to filter in the catalogue.
+    :type product_type: str
+    :param product_type_dict: A dictionary mapping product types to their corresponding values.
+    :type product_type_dict: dict
+    :param use_local_tbl: If True, utilize a local table for loading the catalogue instead
+                          of querying the SAS; defaults to False.
+    :type use_local_tbl: bool
+    :return: A DataFrame containing the filtered catalogue data products of the specified type.
+    :rtype: pandas.DataFrame
+    :raises ValueError: If no data product of the specified type is found in the catalogue.
+    """
+    print(user)
+    cat = load_full_table_from_sas(
+        user,
+        query_table=query_table,
+        fname=cat_fname,
+        tbl_in=tbl_in,
+        use_local_tbl=use_local_tbl,
+        sync_query=sync_query,
+    )[0]
+
+    # select only the products that you want
+    # parse_sas_catalogue just does some renaming to make sure that
+    # different tables can be handles with the same code
+    parse_sas_catalogue(cat, inplace=True)
+
+    cat_data_prod = cat.query(
+        f"product_type == '{product_type_dict[product_type][0]}' "
+        + f"or product_type == '{product_type_dict[product_type][1]}'"
+    ).reset_index()
+
+    if cat_data_prod.empty:
+        msgs.error(
+            f"No data product of type {product_type} found. Are you using the correct table?"
+        )
+        raise ValueError
+    else:
+        return cat_data_prod
+
+
+# =========================================================================== #
 # ============================= Cutout functions ============================ #
 # =========================================================================== #
 
@@ -264,13 +330,14 @@ def build_cutout_access_url(
         )
 
     search = f"POS={search_type},{ra},{dec},{fov}"
-    return f"{base}?{params}?{search}"
+
+    return f"{base}?{params}&{search}"
 
 
 # =========================================================================== #
 
 
-def build_cutout_access_urls(tbl, ra, dec, fov, search_type="CIRCLE"):
+def build_cutout_access_urls(tbl, search_type="CIRCLE"):
     """Generate cutout access URLs for files in the given DataFrame.
 
     This function iterates through the provided DataFrame, constructing cutout access
@@ -290,6 +357,10 @@ def build_cutout_access_urls(tbl, ra, dec, fov, search_type="CIRCLE"):
     """
     # unifies the access url for both the mer tiles and everything else
     access_urls = []
+
+    # For now, use placeholders for ra, dec and FOV
+    # This is a mess to deal with in any case
+    ra, dec, fov = "RAph", "DECph", "FOVph"
 
     # MER wants the TILEINDEX instead of OBSID, switch the column here
     if "observation_id" in tbl.columns:
@@ -322,6 +393,18 @@ def build_cutout_access_urls(tbl, ra, dec, fov, search_type="CIRCLE"):
             )
 
     tbl["cutout_access_url"] = access_urls
+
+
+# =========================================================================== #
+
+
+def complete_cutout_access_urls(closest_images, ra, dec, fov):
+    # closest images is a dataframe, loop over all the rows to
+    #  update the cutout access url.
+    for index, row in closest_images.iterrows():
+        closest_images.loc[index, "cutout_access_url"] = row[
+            "cutout_access_url"
+        ].replace("RAph,DECph,FOVph", f"{ra},{dec},{fov}")
 
 
 # =========================================================================== #
@@ -469,12 +552,15 @@ def get_closest_image_using_local_tbl(
 
     # Add distance as column and sort df by distance
     # TODO: Check that this works for mosaic and stack
-    # probably not, I bet I'll need to change the key for the query for MER
+    # fixed for MER, still need to check for stack
     cat["dist"] = dist.value
     sorted_cat = cat.sort_values("dist", ignore_index=True)
 
     # get the first observation_id, return the catalogue
-    out = sorted_cat.query(f"observation_id == {sorted_cat['observation_id'][0]}")
+    unique_identifier = (
+        "observation_id" if "observation_id" in sorted_cat.columns else "tile_index"
+    )
+    out = sorted_cat.query(f"{unique_identifier} == {sorted_cat[unique_identifier][0]}")
     return out, out["dist"].values
 
 
@@ -521,7 +607,7 @@ def get_closest_image_using_sas_otf(
 
 
 @units.quantity_input()
-def get_download_urls_of_closest_images(
+def get_download_urls_of_closest_cutout(
     ra: units.deg,
     dec: units.deg,
     fov: units.arcsec,
@@ -567,9 +653,8 @@ def get_download_urls_of_closest_images(
         dec_cat=dec_cat,
     )[0]
 
-    return build_cutout_access_urls(
-        closest_images, ra.value, dec.value, fov, search_type
-    )
+    complete_cutout_access_urls(closest_images, ra.value, dec.value, fov)
+    return closest_images
 
 
 # =========================================================================== #
@@ -614,7 +699,7 @@ def generate_wildhunt_download_df(
 
     urls_, filter_, ras, decs = [], [], [], []
     for _ra, _dec in zip(ra_arr, dec_arr):
-        urls = get_download_urls_of_closest_images(
+        urls = get_download_urls_of_closest_cutout(
             _ra,
             _dec,
             fov,
@@ -628,7 +713,7 @@ def generate_wildhunt_download_df(
         bands = [requested_band] * len(urls)
 
         # build columns for the dataframe
-        urls_.append(urls)
+        urls_.append(urls["cutout_access_url"].values)
         filter_.append(bands)
         ras.append([_ra.value] * len(urls))
         decs.append([_dec.value] * len(urls))
@@ -689,68 +774,6 @@ def download_cutouts(obj_ra, obj_dec, img_urls, cutout_outpath, user):
 # =========================================================================== #
 
 
-# TODO: Clean up from here
-def prepare_sas_catalogue(
-    cat_path,
-    sas_catalogue,
-    user,
-    product_type,
-    product_type_dict,
-    use_local_tbl=False,  # default in any case, better make it explicit
-):
-    """Load and filter a SAS catalogue based on specified product types.
-
-    This function retrieves a catalogue from the specified SAS source, optionally
-    using a local table for efficiency. It then filters the catalogue to include
-    only those data products matching the specified product type(s). The function
-    also renames columns as needed for consistent handling across different tables.
-
-    :param cat_path: The path to the catalogue file to be loaded.
-    :type cat_path: str or pathlib.Path
-    :param sas_catalogue: The name of the SAS catalogue to query.
-    :type sas_catalogue: str
-    :param user: The user object for authentication to access the catalogue.
-    :type user: User
-    :param product_type: The type of product to filter in the catalogue.
-    :type product_type: str
-    :param product_type_dict: A dictionary mapping product types to their corresponding values.
-    :type product_type_dict: dict
-    :param use_local_tbl: If True, utilize a local table for loading the catalogue instead
-                          of querying the SAS; defaults to False.
-    :type use_local_tbl: bool
-    :return: A DataFrame containing the filtered catalogue data products of the specified type.
-    :rtype: pandas.DataFrame
-    :raises ValueError: If no data product of the specified type is found in the catalogue.
-    """
-    cat = load_catalogue(
-        fname=cat_path,
-        query_table=sas_catalogue,
-        user=user,
-        use_local_tbl=use_local_tbl,
-    )[0]
-
-    # select only the products that you want
-    # parse_sas_catalogue just does some renaming to make sure that
-    # different tables can be handles with the same code
-    parse_sas_catalogue(cat, inplace=True)
-
-    cat_data_prod = cat.query(
-        f"product_type == '{product_type_dict[product_type][0]}' "
-        + f"or product_type == '{product_type_dict[product_type][1]}'"
-    ).reset_index()
-
-    if cat_data_prod.empty:
-        msgs.error(
-            f"No data product of type {product_type} found. Are you using the correct table?"
-        )
-        raise ValueError
-    else:
-        return cat_data_prod
-
-
-# =========================================================================== #
-
-
 @units.quantity_input()
 def download_all_images(
     ra: units.deg,
@@ -760,7 +783,11 @@ def download_all_images(
     img_outpath,
     img_outname=None,
     img_type="calib",
-    tile_cat=None,
+    cat=None,
+    use_local_tbl=False,
+    search_function=get_closest_image_using_local_tbl,
+    ra_cat="ra",
+    dec_cat="dec",
 ):
     """Download all images related to a specified set of coordinates from the SAS.
 
@@ -800,14 +827,17 @@ def download_all_images(
 
     # Restric image type
     if img_type not in ["mosaic", "calib"]:
-        raise ValueError("`img_type` should be either 'mosaic' or 'calib'")
+        raise ValueError("`img_type` should be either `mosaic` or `calib`")
 
-    # download new tile catalogue and process it
-    if tile_cat is None:
-        tile_cat = prepare_sas_catalogue(
-            cat_outpath,
-            img_type,
+    # download new tile catalogue and process it if the user does not
+    #  provide a tile catalogue or instructs us to use a local table
+    # I assume that if someone tells to use the local table, then
+    #  said local table exists
+    if (not use_local_tbl) or (cat is None):
+        cat = init_sas_catalogue(
             user,
+            img_type,
+            cat_outpath,
             img_type,
             product_type_dict,
             use_local_tbl=False,
@@ -817,13 +847,16 @@ def download_all_images(
     #  to minimize the number of images to download
     df = None
 
+    # This will probably not work, I might need to iterate over the bands to get
+    #  the correct result
     for ra_, dec_ in zip(ra, dec):
-        partial = get_closest_image_url(
+        partial = search_function(
             ra_,
             dec_,
-            tile_cat,
-            "[VIS, Y, J, H]",
-            query_sas_otf=False,
+            cat,
+            ["VIS", "Y", "J", "H"],
+            ra_cat=ra_cat,
+            dec_cat=dec_cat,
         )[0]
 
         df = partial if df is None else pd.concat([df, partial], ignore_index=True)
@@ -835,7 +868,13 @@ def download_all_images(
     df_urls = df.drop_duplicates(unique_identifier, ignore_index=True)
 
     # actually download the images
-    download_images_from_sas(df_urls, user, img_outpath, img_outname)
+    download_images_from_sas(
+        df_urls,
+        user,
+        img_outpath,
+        img_outname,
+        url_column="image_access_url",
+    )
 
     # and save the catalogue just in case it is needed for anything
     df_urls.to_csv(img_outpath / "Euclid_urls_vetted.csv")
@@ -844,10 +883,10 @@ def download_all_images(
 # =========================================================================== #
 
 
-# TODO: This should use units as well
-def persistance_pipeline(
-    ras,
-    decs,
+@units.quantity_input()
+def full_persistence_cascade(
+    ra: units.deg,
+    dec: units.deg,
     user,
     output_full_img_dir,
     output_cutout_dir,
@@ -882,9 +921,11 @@ def persistance_pipeline(
     :param kwargs: Additional keyword arguments for flexibility in processing.
     :return: None; performs image downloading and persistence checking without returning values.
     """
-    downloaded_table, dict_input_tbl = whpu.generate_persistence_input_df(
-        ras, decs, user
-    )
+    # convert ra and dec in quantities, we know what are their units by now
+    # TODO: Add a conversion to deg to be safe here...
+    ra, dec = ra.value, dec.value
+
+    downloaded_table, dict_input_tbl = whpu.generate_persistence_input_df(ra, dec, user)
 
     msgs.info(f"Starting download of {downloaded_table.shape[0]} images!")
 
@@ -896,7 +937,7 @@ def persistance_pipeline(
         download_function=download_function,
     )
 
-    for ra, dec in zip(ras, decs):
+    for ra, dec in zip(ra, dec):
         whpu.check_persistence(
             ra,
             dec,

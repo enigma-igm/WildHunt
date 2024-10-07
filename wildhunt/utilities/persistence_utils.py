@@ -17,7 +17,8 @@ from astropy.wcs import WCS
 
 from wildhunt import image as whimg
 from wildhunt import pypmsgs
-from wildhunt import utils as whut
+from wildhunt.utilities import euclid_utils as eu
+from wildhunt.utilities import general_utils as whut
 from wildhunt.utilities import query_utils as whqu
 
 msgs = pypmsgs.Messages()
@@ -33,6 +34,7 @@ ProtocolError = requests.urllib3.exceptions.ProtocolError
 VERBOSE = 0
 
 # =========================================================================== #
+
 
 # TODO: Remove the query from this
 # TODO: Add a parameter to the query for the search radius
@@ -55,25 +57,44 @@ def download_persistence_input_tbl_single_obj(ra, dec, user, fov=30 / 3600.0):
     :return: A DataFrame containing the persistence input details for the target object.
     :rtype: pandas.DataFrame
     """
-    query = (
+
+    query_calib = (
         "SELECT observation_stack.instrument_name, observation_stack.observation_id, "
         "observation_stack.pointing_id, observation_stack.frame_seq, observation_stack.filter_name, "
         "observation_stack.file_name, observation_stack.ra, observation_stack.dec, "
         "observation_stack.calibrated_frame_oid, observation_stack.file_path "
         "FROM sedm.calibrated_frame AS observation_stack WHERE (instrument_name='NISP') "
         "AND ((observation_stack.fov IS NOT NULL AND "
-        f"INTERSECTS(CIRCLE('ICRS',{ra},{dec},0.001388888888888889),observation_stack.fov)=1)) "
+        f"INTERSECTS(CIRCLE('ICRS',{ra},{dec},{fov}),observation_stack.fov)=1)) "
         "ORDER BY observation_id ASC"
     )
 
-    tbl = pd.read_csv(StringIO(whqu.sync_query(query=query, user=user, savepath=None)))
+    query_mosaic = (
+        "SELECT mosaic_product.file_name, mosaic_product.mosaic_product_oid, mosaic_product.tile_index, "
+        "mosaic_product.instrument_name, mosaic_product.filter_name, mosaic_product.category, "
+        "mosaic_product.second_type, mosaic_product.ra, mosaic_product.dec, mosaic_product.technique, "
+        "mosaic_product.file_path FROM sedm.mosaic_product WHERE ((mosaic_product.fov IS NOT NULL AND "
+        f"INTERSECTS(CIRCLE('ICRS',{ra},{dec},{fov}), "
+        "mosaic_product.fov)=1)) ORDER BY mosaic_product.tile_index ASC"
+    )
 
-    build_cutout_access_url(tbl)
-    tbl["cutout_access_url"] = [
-        build_url(url, ra, dec, fov, "CIRCLE")
-        for url in tbl["cutout_access_url"].values
-    ]
-    return tbl
+    query_dict = {"calib": query_calib, "mosaic": query_mosaic}
+    output_dict = {}
+
+    for img_type, query in query_dict.items():
+        tbl = pd.read_csv(
+            StringIO(whqu.sync_query(query=query, user=user, savepath=None))
+        )
+
+        # make access url with placeholder
+        eu.build_cutout_access_urls(tbl)
+
+        # update the placeholders
+        eu.complete_cutout_access_urls(tbl, ra, dec, fov)
+
+        output_dict[img_type] = tbl
+
+    return output_dict
 
 
 # =========================================================================== #
@@ -103,13 +124,21 @@ def generate_persistence_input_df(ras, decs, user):
     tbls = {}
 
     for ra, dec in zip(ras, decs):
-        tbls[f"{ra}_{dec}"] = download_persistence_input_tbl_single_obj(ra, dec, user)
+        # for now get only the calibrated images. If we then need the mosaic too, we just
+        #  handle it here
+        tbl_dict = download_persistence_input_tbl_single_obj(ra, dec, user)
 
+        calib_input = tbl_dict["calib"]
+        mosaic_input = tbl_dict["mosaic"]
+
+        tbls[f"{ra}_{dec}"] = calib_input
+
+    # note! For mostic we need to drop the duplicates using tile_idx, most likely
     merged_tbl = pd.concat(tbls.values()).drop_duplicates(
         "calibrated_frame_oid", ignore_index=True
     )
 
-    build_image_access_url(merged_tbl)
+    eu.build_image_access_urls(merged_tbl)
 
     return merged_tbl.drop("file_path", axis=1), tbls
 

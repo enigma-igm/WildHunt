@@ -13,6 +13,7 @@ from astropy import units
 
 from wildhunt import pypmsgs
 from wildhunt.surveys import imagingsurvey
+from wildhunt.user import User
 from wildhunt.utilities import euclid_utils as eu
 from wildhunt.utilities import general_utils
 
@@ -56,7 +57,7 @@ class Euclid(imagingsurvey.ImagingSurvey):
         self.dec = None
         self.nbatch = 1
 
-        user = eu.User()
+        user = User()
         user.sasotf_login()
 
         self.user = user
@@ -177,12 +178,11 @@ class Euclid(imagingsurvey.ImagingSurvey):
             + self.batch_size
         ]
 
-        cat_data_prod = eu.prepare_sas_catalogue(
-            cat_outpath,
-            catalogue,
+        cat_data_prod = eu.init_sas_catalogue(
             self.user,
+            catalogue,
+            cat_outpath,
             product_type,
-            product_type_dict,
             use_local_tbl=False,
         )
 
@@ -194,7 +194,7 @@ class Euclid(imagingsurvey.ImagingSurvey):
 
         for b in bands:
             _b = b if b == "VIS" else "NIR_" + b
-            partial = eu.get_download_df(
+            partial = eu.generate_wildhunt_download_df(
                 ra_batch * units.deg,
                 dec_batch * units.deg,
                 img_size * units.arcsec,

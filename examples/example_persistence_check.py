@@ -1,10 +1,12 @@
 from pathlib import Path
 
 import pandas as pd
+from astropy import units
 
+from wildhunt.user import User
 from wildhunt.utilities import euclid_utils as eu
 
-user = eu.User()
+user = User()
 user.sasotf_login()
 
 manual = False
@@ -34,9 +36,9 @@ if __name__ == "__main__":
             if not dir_.exists():
                 dir_.mkdir(parents=True, exist_ok=True)
 
-        eu.persistance_pipeline(
-            [174.61753],
-            [72.4415851],
+        eu.full_persistence_cascade(
+            [174.61753] * units.deg,
+            [72.4415851] * units.deg,
             user,
             img_folder,
             cutout_folder,

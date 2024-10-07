@@ -45,6 +45,7 @@ def download_with_progress_bar(url, user, out_fname, check_for_existing=True):
 
     This function retrieves a file from a specified URL using the given user credentials
     and saves it to the specified output file path. If the file already exists, it skips
+    
     the download and uses the cached version instead. The download process is displayed
     with a progress bar for better visualization of the download status.
 
