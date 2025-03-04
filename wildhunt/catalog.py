@@ -356,8 +356,8 @@ class Catalog(object):
             # distance
             cat_idx = source.query('{}_distance > {}'.format(
                 column_prefix, match_distance)).index
-            source.loc[cat_idx, 'match_index'] = np.NaN
-            source.loc[cat_idx, '{}_distance'.format(column_prefix)] = np.NaN
+            source.loc[cat_idx, 'match_index'] = np.nan
+            source.loc[cat_idx, '{}_distance'.format(column_prefix)] = np.nan
 
             # Merge catalog catalogs on merge index
             if columns == 'all':

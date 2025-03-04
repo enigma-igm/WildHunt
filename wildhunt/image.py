@@ -27,8 +27,8 @@ from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 from reproject.mosaicking import find_optimal_celestial_wcs
 from reproject import reproject_interp
 
-from photutils import aperture_photometry, SkyCircularAperture,\
-    SkyCircularAnnulus
+from photutils.aperture import (SkyCircularAperture, SkyCircularAnnulus,
+                                aperture_photometry)
 
 import matplotlib.pyplot as plt
 
