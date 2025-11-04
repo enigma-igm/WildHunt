@@ -1320,8 +1320,8 @@ class Image(object):
                 mag = 22.5 - 2.5 * np.log10(flux)
                 mag_err = (2.5 / np.log(10)) / snr
             else:
-                mag = np.NaN
-                mag_err = np.NaN
+                mag = np.nan
+                mag_err = np.nan
 
             flux_list.append(flux)
             flux_err_list.append(flux_err)
