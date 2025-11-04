@@ -8,9 +8,9 @@ import pandas as pd
 import requests
 
 from wildhunt import pypmsgs
+from wildhunt.config import EUCLID_ENV
 
 msgs = pypmsgs.Messages()
-
 
 # TODO: Use raise_for_status instead of manually handling the request error
 
@@ -33,7 +33,7 @@ VERBOSE = 0
 def get_phase(jobID, session):
     """Retrieve the processing phase of a running job using its job ID.
 
-    This function sends a GET request to the EUCLID OTF TAP server to obtain
+    This function sends a GET request to the EUCLID SAS TAP server to obtain
     the current phase of the specified asynchronous job. The request uses the
     provided session's cookies for authentication.
 
@@ -45,7 +45,7 @@ def get_phase(jobID, session):
     :rtype: str
     """
     return requests.get(
-        f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/phase",
+        f"https://eas{EUCLID_ENV}.esac.esa.int/tap-server/tap/async/{jobID}/phase",
         cookies=session.cookies,
     ).content.decode()
 
@@ -56,7 +56,7 @@ def get_phase(jobID, session):
 def async_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
     """Execute an asynchronous SQL query against the EUCLID TAP server and save the results to a file.
 
-    This function sends an asynchronous query request to the EUCLID OTF TAP server,
+    This function sends an asynchronous query request to the EUCLID SAS TAP server,
     waits for the query to complete, and retrieves the results in CSV format. The results
     are then saved to the specified file path.
 
@@ -79,7 +79,7 @@ def async_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
         session.cookies = user.cookies
 
         post_sess = session.post(
-            "https://easotf.esac.esa.int/tap-server/tap/async",
+            f"https://eas{EUCLID_ENV}.esac.esa.int/tap-server/tap/async",
             data={
                 "data": "PHASE=run&REQUEST=doQuery",
                 "QUERY": query,
@@ -104,7 +104,7 @@ def async_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
                 msgs.info("Sending RUN phase.")
 
             session.post(
-                f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/phase",
+                f"https://eas{EUCLID_ENV}.esac.esa.int/tap-server/tap/async/{jobID}/phase",
                 data={"phase": "RUN"},
                 cookies=session.cookies,
             )
@@ -132,7 +132,7 @@ def async_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
 
         # get the actual output
         post_sess_res = requests.get(
-            f"https://easotf.esac.esa.int/tap-server/tap/async/{jobID}/results/result",
+            f"https://eas{EUCLID_ENV}.esac.esa.int/tap-server/tap/async/{jobID}/results/result",
             cookies=session.cookies,
         ).content.decode()
 
@@ -151,7 +151,7 @@ def async_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
 def sync_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
     """Execute a synchronous SQL query against the EUCLID TAP server and save the results to a file.
 
-    This function sends a GET request to the EUCLID OTF TAP server to execute
+    This function sends a GET request to the EUCLID SAS TAP server to execute
     the provided SQL query and retrieves the results in CSV format. If the query
     is successful, the results are saved to the specified file path.
 
@@ -169,7 +169,7 @@ def sync_query(query, user, savepath, cert_key=CERT_KEY, verbose=VERBOSE):
     :raises IOError: If there is an error writing the results to the specified file.
     """
     response = requests.get(
-        "https://easotf.esac.esa.int/tap-server/tap/sync?REQUEST=doQuery&LANG=ADQL&FORMAT=csv&QUERY="
+        f"https://eas{EUCLID_ENV}.esac.esa.int/tap-server/tap/sync?REQUEST=doQuery&LANG=ADQL&FORMAT=csv&QUERY="
         + query.replace(" ", "+"),
         verify=cert_key,
         cookies=user.cookies,

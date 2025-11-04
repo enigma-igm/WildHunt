@@ -7,6 +7,7 @@ from pathlib import Path
 import requests
 
 from wildhunt import pypmsgs
+from wildhunt.config import EUCLID_ENV
 from wildhunt.utilities.general_utils import b64d, b64e
 
 msgs = pypmsgs.Messages()
@@ -31,7 +32,7 @@ VERBOSE = 0
 
 
 class User(object):
-    """Basic user class to handle login for accessing the EUCLID OTF archive.
+    """Basic user class to handle login for accessing the EUCLID SAS archives.
 
     The password is encoded in Base64 to prevent accidental printing to screen.
     User data can be loaded from a configuration file.
@@ -50,7 +51,7 @@ class User(object):
         self,
         username=None,
         password=None,
-        filepath=LOCAL_PATH / "sas_otf_user_data.cfg",
+        filepath=LOCAL_PATH / "sas_login_user_data.cfg",
         encoded=True,
     ):
         """Initialize the User object, loading user data from the configuration file if it exists.
@@ -80,9 +81,12 @@ class User(object):
         self.logged_in = False
         self.cookies = None
 
+        # sets the euclid environment for the user
+        self.euclid_env = EUCLID_ENV
+
     # ======================================================================= #
 
-    def load_user_data(self, filepath=LOCAL_PATH / "sas_otf_user_data.cfg"):
+    def load_user_data(self, filepath=LOCAL_PATH / "sas_login_user_data.cfg"):
         """Load user data from the specified configuration file.
 
         :param filepath: Path to the configuration file.
@@ -135,7 +139,7 @@ class User(object):
     # ======================================================================= #
 
     def store_user_data(
-        self, path=LOCAL_PATH, fname="sas_otf_user_data.cfg", overwrite=False
+        self, path=LOCAL_PATH, fname="sas_login_user_data.cfg", overwrite=False
     ):
         """Store the user data to a configuration file.
 
@@ -162,14 +166,22 @@ class User(object):
 
     # ======================================================================= #
 
-    def sasotf_login(self, cert_key=CERT_KEY):
-        """Log in to the EUCLID OTF archive using the stored user credentials.
+    def sas_login(self, cert_key=CERT_KEY):
+        """Log in to the chosen EUCLID SAS archive using the stored user credentials.
 
-        This function sends login requests to multiple services of the EUCLID OTF server.
+        This function sends login requests to multiple services of the chosen EUCLID
+        SAS server, in particular:
+        - TAP server for querying data
+        - SAS cutout service for downloading image cutouts
+        - SAS data delivery service for downloading data products
 
         :param cert_key: Certificate key for verifying the server connection.
         :type cert_key: str
         """
+        if EUCLID_ENV != self.euclid_env:
+            msgs.info(f"Updating EUCLID_ENV from {self.euclid_env} to {EUCLID_ENV}.")
+            self.euclid_env = EUCLID_ENV
+
         if self.login_data is None:
             self.set_user_data()
 
@@ -179,19 +191,19 @@ class User(object):
 
             # These are all needed for the different services that we use
             session.post(
-                "https://easotf.esac.esa.int/tap-server/login",
+                f"https://eas{self.euclid_env}.esac.esa.int/tap-server/login",
                 data=self.get_user_data(),
                 verify=cert_key,
             )
 
             session.post(
-                "https://easotf.esac.esa.int/sas-cutout/login",
+                f"https://eas{self.euclid_env}.esac.esa.int/sas-cutout/login",
                 data=self.get_user_data(),
                 verify=cert_key,
             )
 
             session.post(
-                "https://easotf.esac.esa.int/sas-dd/login",
+                f"https://eas{self.euclid_env}.esac.esa.int/sas-dd/login",
                 data=self.get_user_data(),
                 verify=cert_key,
             )
@@ -201,14 +213,14 @@ class User(object):
 
         self.logged_in = True
         self.cookies = cookies
-        msgs.info("Log in to the Euclid OTF archive successful!")
+        msgs.info(f"Log in to the Euclid {self.euclid_env} archive successful!")
 
     # ======================================================================= #
 
     def _check_for_login(self):
         if not self.logged_in:
             msgs.info("User not logged in, trying log in.")
-            self.sasotf_login()
+            self.sas_login()
 
     # ======================================================================= #
 

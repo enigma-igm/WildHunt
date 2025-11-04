@@ -22,7 +22,11 @@ from astropy.wcs.utils import proj_plane_pixel_scales
 from matplotlib.colors import LogNorm
 from matplotlib.patches import Circle, Ellipse, Rectangle
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
-from photutils import SkyCircularAnnulus, SkyCircularAperture, aperture_photometry
+from photutils.aperture import (
+    SkyCircularAnnulus,
+    SkyCircularAperture,
+    aperture_photometry,
+)
 from reproject import reproject_interp
 from reproject.mosaicking import find_optimal_celestial_wcs
 

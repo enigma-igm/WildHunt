@@ -7,7 +7,7 @@ from wildhunt.user import User
 from wildhunt.utilities import euclid_utils as eu
 
 user = User()
-user.sasotf_login()
+user.sas_login()
 
 manual = False
 

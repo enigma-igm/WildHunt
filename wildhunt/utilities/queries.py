@@ -30,7 +30,7 @@ def query_full_table(name):
     """
     name = name.lower()
 
-    if name not in ["ivoa_obscore", "stack", "calib", "mosaic"]:
+    if name not in ["ivoa_obscore", "stacked", "calib", "mosaic"]:
         raise ValueError(
             "[Error] Valid options are `'ivoa_obscore', 'stack', 'calib', 'mosaic'`"
         )
@@ -39,7 +39,7 @@ def query_full_table(name):
         out = """SELECT s_ra, s_dec, t_exptime, obs_id, obs_collection, cutout_access_url,
                dataproduct_subtype, dataproduct_type, filter, instrument_name
                FROM ivoa.obscore WHERE t_exptime > 0"""
-    elif name == "stack":
+    elif name == "stacked":
         out = """SELECT ra, dec, duration AS t_exp, file_name, file_path, filter_name,
                instrument_name, observation_id, observation_stack_oid, product_type,
                release_name FROM sedm.observation_stack"""

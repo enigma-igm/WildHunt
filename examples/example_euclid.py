@@ -6,8 +6,9 @@ import time
 from astropy import units
 
 from wildhunt import catalog, pypmsgs
+from wildhunt.config import set_euclid_env
 from wildhunt.user import User
-from wildhunt.utilities import euclid_utils as eu
+from wildhunt.utilities import euclid_utils as weu
 
 msgs = pypmsgs.Messages()
 
@@ -48,15 +49,18 @@ def example_download_all_images():
 
     # Currently the following image types are implemented
     # - 'calib' for calibrated images
+    # - 'stacked' for stacked images
     # - 'mosaic' for MER mosaics
-    img_type = "mosaic"
+    img_type = "stacked"
     user = User()
-    user.sasotf_login()
+    user.sas_login()
 
-    eu.download_all_images(ra, dec, user, cat_outpath, img_outpath, img_type=img_type)
+    weu.download_all_images(ra, dec, user, cat_outpath, img_outpath, img_type=img_type)
 
 
 if __name__ == "__main__":
-    example_download_cutouts()
+    # set the correct euclid environment
+    set_euclid_env("OTF")
 
+    # example_download_cutouts()
     example_download_all_images()

@@ -58,7 +58,7 @@ class Euclid(imagingsurvey.ImagingSurvey):
         self.nbatch = 1
 
         user = User()
-        user.sasotf_login()
+        user.sas_login()
 
         self.user = user
         super(Euclid, self).__init__(bands, fov, name, verbosity)

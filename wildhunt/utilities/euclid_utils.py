@@ -13,6 +13,7 @@ from astropy.coordinates import SkyCoord
 from tqdm import tqdm
 
 from wildhunt import pypmsgs
+from wildhunt.config import EUCLID_ENV
 from wildhunt.utilities import download_utils as whdu
 from wildhunt.utilities import persistence_utils as whpu
 
@@ -77,7 +78,7 @@ product_type_dict = {
 }
 
 # =========================================================================== #
-# ==================== SAS OTF's table related functions ==================== #
+# ================== SAS Archive's table related functions ================== #
 # =========================================================================== #
 
 
@@ -242,7 +243,6 @@ def init_sas_catalogue(
     :rtype: pandas.DataFrame
     :raises ValueError: If no data product of the specified type is found in the catalogue.
     """
-    print(user)
     cat = load_full_table_from_sas(
         user,
         query_table=query_table,
@@ -305,15 +305,15 @@ def build_cutout_access_url(
     :return: The constructed cutout access URL.
     :rtype: str
     """
-    assert not (
-        obsid is not None and tileidx is not None
-    ), "Either `obsid` or `tileindex` must be None"
+    assert not (obsid is not None and tileidx is not None), (
+        "Either `obsid` or `tileindex` must be None"
+    )
 
     # the url to be send the request to is always in the form of (where {} indicates a variable:
-    #  https://easotf.esac.esa.int/sas-cutout/cutout?
+    #  fhttps://eas{EUCLID_ENV}.esac.esa.int/sas-cutout/cutout?
     #  filepath={filepath}/{filename}&collection={collection}&obsid={obsid}
     #  &POS=CIRCLE,187.89,29.54,0.0333333333333333
-    base = "https://easotf.esac.esa.int/sas-cutout/cutout"
+    base = f"https://eas{EUCLID_ENV}.esac.esa.int/sas-cutout/cutout"
 
     # get collection from path itself
     collection = path.split("/")[-2]
@@ -426,7 +426,7 @@ def build_image_access_urls(tbl):
     :return: None; modifies the input DataFrame in place by adding a column for
              image access URLs.
     """
-    base = "https://easotf.esac.esa.int/sas-dd/data"
+    base = f"https://eas{EUCLID_ENV}.esac.esa.int/sas-dd/data"
 
     tbl["image_access_url"] = [
         f"{base}?file_name={_fn}&release=sedm&RETRIEVAL_TYPE=FILE"
@@ -502,7 +502,7 @@ def get_closest_image_using_local_tbl(
     dec_cat="dec",
 ):
     """Retrieve the closest image URLs based on given coordinates from a catalogue.
-    Should provide the same output as the OTF, but using a single query, or a local table.
+    Should provide the same output as the archive, but using a single query, or a local table.
     Useful if there is not available internet connection, for example.
 
     This function identifies the closest images to the specified right ascension (RA)
@@ -568,7 +568,7 @@ def get_closest_image_using_local_tbl(
 
 
 @units.quantity_input()
-def get_closest_image_using_sas_otf(
+def get_closest_image_using_sas(
     ra: units.deg,
     dec: units.deg,
     cat,
@@ -576,12 +576,11 @@ def get_closest_image_using_sas_otf(
     ra_cat="ra",
     dec_cat="dec",
 ):
-    """Fetch the closest image URLs from the SAS OTF service based on given coordinates.
+    """Fetch the closest image URLs from the chosen SAS service based on given coordinates.
 
-    This function is intended to retrieve the closest image URLs from the
-    SAS (Science Archive Service) On-The-Fly (OTF) service for a specified
-    right ascension (RA) and declination (DEC) coordinate. However, the
-    implementation is not currently provided, resulting in a NotImplementedError.
+    This function is intended to retrieve the closest image URLs from one of the
+    SASs (Science Archive Services) service for a specified right ascension (RA)
+    and declination (Dec) pair. Currently not implemented.
 
     :param ra: The right ascension of the target location.
     :type ra: astropy.units.Quantity (degrees)
@@ -826,8 +825,8 @@ def download_all_images(
     img_outpath = Path(img_outpath)
 
     # Restric image type
-    if img_type not in ["mosaic", "calib"]:
-        raise ValueError("`img_type` should be either `mosaic` or `calib`")
+    if img_type not in ["mosaic", "calib", "stacked"]:
+        raise ValueError("`img_type` should be either `mosaic`, `calib` or `stacked`.")
 
     # download new tile catalogue and process it if the user does not
     #  provide a tile catalogue or instructs us to use a local table
@@ -862,9 +861,15 @@ def download_all_images(
         df = partial if df is None else pd.concat([df, partial], ignore_index=True)
 
     # this gets all 4 bands at the same time
-    unique_identifier = (
-        "mosaic_product_oid" if img_type == "mosaic" else "calibrated_frame_oid"
-    )
+    if img_type == "mosaic":
+        unique_identifier = "mosaic_product_oid"
+    elif img_type == "stacked":
+        unique_identifier = "observation_stack_oid"
+    elif img_type == "calib":
+        unique_identifier = "calibrated_frame_oid"
+    else:
+        raise ValueError("`img_type` should be either `mosaic`, `calib` or `stacked`.")
+
     df_urls = df.drop_duplicates(unique_identifier, ignore_index=True)
 
     # actually download the images
