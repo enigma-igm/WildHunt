@@ -138,7 +138,7 @@ def generate_persistence_input_df(ras, decs, user):
         "calibrated_frame_oid", ignore_index=True
     )
 
-    eu.build_image_access_urls(merged_tbl)
+    eu.build_data_product_access_urls(merged_tbl)
 
     return merged_tbl.drop("file_path", axis=1), tbls
 

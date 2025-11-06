@@ -2,6 +2,7 @@
 import logging
 import os
 from http.client import IncompleteRead
+from io import StringIO
 from pathlib import Path
 from urllib.error import HTTPError
 
@@ -16,6 +17,8 @@ from wildhunt import pypmsgs
 from wildhunt.config import EUCLID_ENV
 from wildhunt.utilities import download_utils as whdu
 from wildhunt.utilities import persistence_utils as whpu
+from wildhunt.utilities import queries as whq
+from wildhunt.utilities import query_utils as whqu
 
 # =========================================================================== #
 
@@ -118,7 +121,7 @@ def load_full_table_from_sas(
 
     if fname != "" and tbl_in is not None:
         msgs.warn(
-            "Received both a table object and a path."
+            "Received both a table object and a path. "
             f"Ignoring input table object and redownloading to {fname}."
         )
 
@@ -170,15 +173,31 @@ def parse_sas_catalogue(tbl_in, inplace=False, force=False):
     else:
         tbl = tbl_in.copy()
 
+    if "file_name_list" in tbl.columns:
+        cat_file_names = []
+        for cat_file_name in tbl["file_name_list"]:
+            cat_file_name = cat_file_name.split(",")[1]
+            cat_file_names.append(cat_file_name)
+        
+        tbl["file_name"] = np.array(cat_file_names)
+
+    if "tile_index_list" in tbl.columns:
+        cat_tile_indexes = []
+        for cat_tile_index in tbl["tile_index_list"]:
+            cat_tile_index = int(cat_tile_index.strip("\\{\\}"))
+            cat_tile_indexes.append(cat_tile_index)
+
+        tbl["tile_index"] = np.array(cat_tile_indexes)
+
     if "cutout_access_url" not in tbl.columns or force:
         msgs.info("Added `cutout_access_url` column.")
         # names are the same for both stack and calib, which is what we'll want to use most of the time
         build_cutout_access_urls(tbl)
 
     # TODO: (Future us!) if this gets very slow (unlikely), merge the two loops
-    if "image_access_url" not in tbl.columns or force:
-        msgs.info("Added `image_access_url` column.")
-        build_image_access_urls(tbl)
+    if "data_product_access_url" not in tbl.columns or force:
+        msgs.info("Added `data_product_access_url` column.")
+        build_data_product_access_urls(tbl)
 
     # needed for ivoa_score
     if "s_ra" in tbl.columns:
@@ -412,7 +431,7 @@ def complete_cutout_access_urls(closest_images, ra, dec, fov):
 # =========================================================================== #
 
 
-def build_image_access_urls(tbl):
+def build_data_product_access_urls(tbl):
     """Create image access URLs for files listed in the DataFrame.
 
     This function generates image access URLs for each file name in the provided
@@ -428,7 +447,7 @@ def build_image_access_urls(tbl):
     """
     base = f"https://eas{EUCLID_ENV}.esac.esa.int/sas-dd/data"
 
-    tbl["image_access_url"] = [
+    tbl["data_product_access_url"] = [
         f"{base}?file_name={_fn}&release=sedm&RETRIEVAL_TYPE=FILE"
         for _fn in tbl["file_name"]
     ]
@@ -437,7 +456,7 @@ def build_image_access_urls(tbl):
 # =========================================================================== #
 
 
-def download_images_from_sas(
+def download_data_from_sas(
     df,
     user,
     img_outpath,
@@ -488,7 +507,7 @@ def download_images_from_sas(
 
 # =========================================================================== #
 # =============== Sorting functions: get closest images and ================= #
-# =============== generate the cutout url for local tables  ================= #
+# =========== generate the cutout url for local and sas tables  ============= #
 # =========================================================================== #
 
 
@@ -498,8 +517,11 @@ def get_closest_image_using_local_tbl(
     dec: units.deg,
     cat,
     band,
+    search_function,
     ra_cat="ra",
     dec_cat="dec",
+    user=None,  # Dummy argument
+    data_product_type=None,  # Dummy argument
 ):
     """Retrieve the closest image URLs based on given coordinates from a catalogue.
     Should provide the same output as the archive, but using a single query, or a local table.
@@ -568,13 +590,54 @@ def get_closest_image_using_local_tbl(
 
 
 @units.quantity_input()
-def get_closest_image_using_sas(
+def get_closest_catalogue_using_local_tbl(
+    ra: units.deg,
+    dec: units.deg,
+    cat,  # Dummy arguments here
+    band,  # Dummy arguments here
+    ra_cat=None,  # Dummy arguments here
+    dec_cat=None,  # Dummy arguments here
+    user=None,
+    data_product_type=None,  # Dummy argument
+):
+    """Fetch the closest catalogue URLs from a local table based on given coordinates.
+
+    This function is intended to retrieve the closest catalogue URLs from a local
+    table for a specified right ascension (RA) and declination (Dec) pair.
+    Currently not implemented.
+
+    :param ra: The right ascension of the target location.
+    :type ra: astropy.units.Quantity (degrees)
+    :param dec: The declination of the target location.
+    :type dec: astropy.units.Quantity (degrees)
+    :param cat: The catalogue DataFrame containing images and their coordinates.
+    :type cat: pandas.DataFrame
+    :param band: The band of observation to filter images.
+    :type band: str
+    :param ra_cat: The name of the column in `cat` containing RA coordinates.
+                   Defaults to 'ra'.
+    :type ra_cat: str
+    :param dec_cat: The name of the column in `cat` containing DEC coordinates.
+                    Defaults to 'dec'.
+    :type dec_cat: str
+    :raises NotImplementedError: This function has not been implemented yet.
+    """
+    raise NotImplementedError
+
+
+# =========================================================================== #
+
+
+@units.quantity_input()
+def get_closest_data_product_using_sas(
     ra: units.deg,
     dec: units.deg,
     cat,
     band,
+    data_product_type,
     ra_cat="ra",
     dec_cat="dec",
+    user=None,  # Dummy argument
 ):
     """Fetch the closest image URLs from the chosen SAS service based on given coordinates.
 
@@ -598,8 +661,45 @@ def get_closest_image_using_sas(
     :type dec_cat: str
     :raises NotImplementedError: This function has not been implemented yet.
     """
-    # FIXME!
-    raise NotImplementedError
+    if user is None:
+        msgs.error("User must be provided to query the SAS.")
+        raise ValueError
+
+    # TODO: Pass the search radius a parameter
+    search_radius = 1 * units.arcsecond
+
+    # search function is either
+    if data_product_type[0] == "img":
+        search_function_ = whq.query_sas_image_tbl_by_coord
+    elif data_product_type[0] == "cat":
+        search_function_ = whq.query_sas_catalogue_tbl_by_coord
+    else:
+        raise ValueError(
+            f"Data product type {data_product_type[0]} not recognized. "
+            "Must be either 'img' or 'cat'."
+        )
+
+    query = search_function_(
+        data_product_type[1],
+        ra,
+        dec,
+        search_radius,
+    )
+
+    # TODO: Propagte the verbosity?
+    # TODO: if there is both R1 and R2, get only R2
+    query_res = StringIO(
+        whqu.sync_query(
+            query,
+            user,
+            None,
+            cert_key=CERT_KEY,
+            verbose=0,
+        )
+    )
+    query_res = pd.read_csv(query_res, sep=",")
+    
+    return parse_sas_catalogue(query_res), None
 
 
 # =========================================================================== #
@@ -774,33 +874,33 @@ def download_cutouts(obj_ra, obj_dec, img_urls, cutout_outpath, user):
 
 
 @units.quantity_input()
-def download_all_images(
-    ra: units.deg,
-    dec: units.deg,
+def download_data_for_all_bands(
+    target_ra: units.deg,
+    target_dec: units.deg,
     user,
-    cat_outpath,
-    img_outpath,
-    img_outname=None,
-    img_type="calib",
-    cat=None,
+    queried_cat_outpath,
+    downloaded_data_outpath,
+    search_function,
+    data_product_type,
+    downloaded_data_outname=None,
+    input_cat=None,
     use_local_tbl=False,
-    search_function=get_closest_image_using_local_tbl,
     ra_cat="ra",
     dec_cat="dec",
 ):
     """Download all images related to a specified set of coordinates from the SAS.
 
     This function retrieves and downloads images associated with the provided
-    right ascension (RA) and declination (DEC) coordinates. The `img_type` parameter
+    right ascension (RA) and declination (DEC) coordinates. The `data_product_type` parameter
     specifies both the table to query and the data product used in the download
     process. If a tile catalogue is not provided, it is created based on the
-    specified `img_type`. The images are grouped by identifier to optimize
+    specified `data_product_type`. The images are grouped by identifier to optimize
     the download process.
 
-    :param ra: An array of right ascension values for the target locations.
-    :type ra: astropy.units.Quantity (degrees)
-    :param dec: An array of declination values for the target locations.
-    :type dec: astropy.units.Quantity (degrees)
+    :param target_ra: An array of right ascension values for the target locations.
+    :type target_ra: astropy.units.Quantity (degrees)
+    :param target_dec: An array of declination values for the target locations.
+    :type target_dec: astropy.units.Quantity (degrees)
     :param user: The user object for authentication to access the SAS.
     :type user: User
     :param cat_outpath: The directory path where the catalogue will be saved.
@@ -810,79 +910,82 @@ def download_all_images(
     :param img_outname: (Optional) The base name for the downloaded images; if None,
                         the filenames from the DataFrame will be used.
     :type img_outname: str or None
-    :param img_type: The type of image to download; should be either 'mosaic' or 'calib'.
-    :type img_type: str
+    :param data_product_type: The type of image to download; should be either 'mosaic' or 'calib'.
+    :type data_product_type: str
     :param verbose: If True, enable verbose logging for download progress. Defaults to False.
     :type verbose: bool
     :param tile_cat: (Optional) A previously prepared tile catalogue; if None, a new
                      catalogue will be created.
     :type tile_cat: pandas.DataFrame or None
     :return: None; performs the download and saves the relevant catalogue.
-    :raises ValueError: If `img_type` is neither 'mosaic' nor 'calib'.
+    :raises ValueError: If `data_product_type` is neither 'mosaic' nor 'calib'.
     """
 
-    cat_outpath = Path(cat_outpath)
-    img_outpath = Path(img_outpath)
+    queried_cat_outpath = Path(queried_cat_outpath)
+    downloaded_data_outpath = Path(downloaded_data_outpath)
 
     # Restric image type
-    if img_type not in ["mosaic", "calib", "stacked"]:
-        raise ValueError("`img_type` should be either `mosaic`, `calib` or `stacked`.")
+    if data_product_type[1] not in ["mosaic", "calib", "stacked"]:
+        raise ValueError(
+            "`data_product_type` should be either `mosaic`, `calib` or `stacked`."
+        )
 
     # download new tile catalogue and process it if the user does not
     #  provide a tile catalogue or instructs us to use a local table
     # I assume that if someone tells to use the local table, then
     #  said local table exists
-    if (not use_local_tbl) or (cat is None):
-        cat = init_sas_catalogue(
+    if use_local_tbl and input_cat is None:
+        raise ValueError("If `use_local_tbl` is True, `input_cat` must be provided.")
+
+    if (
+        (not use_local_tbl)
+        or (input_cat is None)
+        or "local_tbl" in search_function.__name__
+    ):
+        msgs.info("Initializing needed SAS catalogues to retrieve data access url.")
+        input_cat = init_sas_catalogue(
             user,
-            img_type,
-            cat_outpath,
-            img_type,
+            data_product_type[1],
+            queried_cat_outpath,
+            data_product_type[1],
             product_type_dict,
             use_local_tbl=False,
         )
 
-    # download all images - the logic behind this is to group by identifier
-    #  to minimize the number of images to download
+    # download all data - the logic behind this is to group by identifier
+    #  to minimize the number of data to download
     df = None
 
-    # This will probably not work, I might need to iterate over the bands to get
-    #  the correct result
-    for ra_, dec_ in zip(ra, dec):
+    # This just gets all 4 bands at the same time, and should probably be refactored
+    #  to first split by band and then search for the closes data product, if I
+    #  really want to work band by band
+    for ra_, dec_ in zip(target_ra, target_dec):
         partial = search_function(
             ra_,
             dec_,
-            cat,
+            input_cat,
             ["VIS", "Y", "J", "H"],
             ra_cat=ra_cat,
             dec_cat=dec_cat,
+            user=user,
+            data_product_type=data_product_type,
         )[0]
 
         df = partial if df is None else pd.concat([df, partial], ignore_index=True)
 
-    # this gets all 4 bands at the same time
-    if img_type == "mosaic":
-        unique_identifier = "mosaic_product_oid"
-    elif img_type == "stacked":
-        unique_identifier = "observation_stack_oid"
-    elif img_type == "calib":
-        unique_identifier = "calibrated_frame_oid"
-    else:
-        raise ValueError("`img_type` should be either `mosaic`, `calib` or `stacked`.")
-
-    df_urls = df.drop_duplicates(unique_identifier, ignore_index=True)
+    df_urls = df.drop_duplicates("data_product_access_url", ignore_index=True)
 
     # actually download the images
-    download_images_from_sas(
+    download_data_from_sas(
         df_urls,
         user,
-        img_outpath,
-        img_outname,
-        url_column="image_access_url",
+        downloaded_data_outpath,
+        downloaded_data_outname,
+        url_column="data_product_access_url",
     )
 
     # and save the catalogue just in case it is needed for anything
-    df_urls.to_csv(img_outpath / "Euclid_urls_vetted.csv")
+    df_urls.to_csv(downloaded_data_outpath / "Euclid_urls_vetted.csv")
 
 
 # =========================================================================== #
@@ -934,7 +1037,7 @@ def full_persistence_cascade(
 
     msgs.info(f"Starting download of {downloaded_table.shape[0]} images!")
 
-    download_images_from_sas(
+    download_data_from_sas(
         downloaded_table,
         user,
         output_full_img_dir,

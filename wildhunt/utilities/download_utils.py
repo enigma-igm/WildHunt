@@ -7,7 +7,7 @@ import requests
 from tqdm import tqdm
 
 from wildhunt import pypmsgs
-from wildhunt.utilities import queries
+from wildhunt.utilities import queries as whq
 from wildhunt.utilities import query_utils as whqu
 
 # =========================================================================== #
@@ -173,7 +173,7 @@ def download_full_table_from_sas(
     user._check_for_login()
 
     # minimal useful information (I think)
-    query = queries.query_full_table(query_table)
+    query = whq.query_full_sas_image_tbl(query_table)
 
     # attach which table I am querying to the savepath to generate name
     savepath = savepath / f"{query_table}.csv"
