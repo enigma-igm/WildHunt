@@ -133,4 +133,3 @@ dmypy.json
 *.fits
 deprecated/
 code.code-workspace
-uv.lock
