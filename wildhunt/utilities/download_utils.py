@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 import os
+import tarfile
 from pathlib import Path
 
 import pandas as pd
 import requests
 from tqdm import tqdm
-
 from wildhunt import pypmsgs
 from wildhunt.utilities import queries as whq
 from wildhunt.utilities import query_utils as whqu
@@ -38,14 +38,47 @@ VERBOSE = 0
 # =========================================================================== #
 
 
+def _check_for_existance(check_for_existing, out_fname, compressed_archive):
+    # helper function to avoid code duplication
+
+    if check_for_existing and out_fname.exists():
+        # TODO: How does this work with corrupted files?
+        # answer: it does not work, there should be some kind of logic to check this
+        msgs.info(f"File {out_fname} already exists, using cached version.")
+        return True
+
+    if check_for_existing and compressed_archive is not None:
+        # extra layer in case there is a compressed archive that already holds some of the files
+        # Note that this is fairly slow already for smallish files so caching this the first time
+        #  I call this
+        tar_content_members = None
+        if tar_content_members is None:
+            with tarfile.open(compressed_archive, "r:bz2") as tar:
+                tar_content_members = {m.name: m for m in tar.getmembers()}
+
+        if out_fname.name in tar_content_members:
+            return True
+
+    return False
+
+
+# =========================================================================== #
+
+
 # sourced from: https://github.com/tqdm/tqdm/#hooks-and-callbacks, requests version
 # TODO: Add a check for empty content, somehow
-def download_with_progress_bar(url, user, out_fname, check_for_existing=True):
+def download_with_progress_bar(
+    url,
+    user,
+    out_fname,
+    check_for_existing=True,
+    compressed_archive=None,
+):
     """Download a file from the given URL and display a progress bar during the download.
 
     This function retrieves a file from a specified URL using the given user credentials
     and saves it to the specified output file path. If the file already exists, it skips
-    
+
     the download and uses the cached version instead. The download process is displayed
     with a progress bar for better visualization of the download status.
 
@@ -57,13 +90,12 @@ def download_with_progress_bar(url, user, out_fname, check_for_existing=True):
     :type out_fname: pathlib.Path
     :return: None; downloads the file and saves it to the specified location.
     """
-    if check_for_existing and out_fname.exists():
-        # TODO: How does this work with corrupted files?
-        # answer: it does not work, there should be some kind of logic to check this
-        msgs.info(f"File {out_fname} already exists, using cached version.")
+    if _check_for_existance(check_for_existing, out_fname, compressed_archive):
         return
 
+    # if the file does not exist, download it
     response = requests.get(url, cookies=user.cookies, stream=True)
+
     with tqdm.wrapattr(
         open(out_fname, "wb"),
         "write",
@@ -74,11 +106,21 @@ def download_with_progress_bar(url, user, out_fname, check_for_existing=True):
         for chunk in response.iter_content(chunk_size=4096):
             fout.write(chunk)
 
+        # should figure out how to check if the download was successful
+        #  by comparing the file size with content-length (?)
+        # TODO: check for empty content, somehow
+
 
 # =========================================================================== #
 
 
-def download_without_progress_bar(url, user, out_fname, check_for_existing=True):
+def download_without_progress_bar(
+    url,
+    user,
+    out_fname,
+    check_for_existing=True,
+    compressed_archive=None,
+):
     """Download a file from the given URL without displaying a progress bar.
 
     This function retrieves a file from the specified URL using the provided user credentials
@@ -93,12 +135,10 @@ def download_without_progress_bar(url, user, out_fname, check_for_existing=True)
     :type out_fname: pathlib.Path
     :return: None; attempts to download the file and save it to the specified location.
     """
-    if check_for_existing and out_fname.exists():
-        # TODO: How does this work with corrupted files?
-        # answer: it does not work, there should be some kind of logic to check this
-        msgs.info(f"File {out_fname} already exists, using cached version.")
+    if _check_for_existance(check_for_existing, out_fname, compressed_archive):
         return
 
+    # as before, if file does not exist, download it
     response = requests.get(url, cookies=user.cookies, stream=True)
 
     # if there is actual content in the image I downloaded

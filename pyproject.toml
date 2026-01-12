@@ -3,9 +3,8 @@ name = "wildhunt"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
-    "astro-datalab>=2.24.0",
     "astropy>=7.0.0",
     "astroquery>=0.4.7",
     "fastparquet>=2024.11.0",

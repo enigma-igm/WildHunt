@@ -12,7 +12,6 @@ import requests
 from astropy import units
 from astropy.coordinates import SkyCoord
 from tqdm import tqdm
-
 from wildhunt import pypmsgs
 from wildhunt.config import EUCLID_ENV
 from wildhunt.utilities import download_utils as whdu
@@ -178,7 +177,7 @@ def parse_sas_catalogue(tbl_in, inplace=False, force=False):
         for cat_file_name in tbl["file_name_list"]:
             cat_file_name = cat_file_name.split(",")[1]
             cat_file_names.append(cat_file_name)
-        
+
         tbl["file_name"] = np.array(cat_file_names)
 
     if "tile_index_list" in tbl.columns:
@@ -463,6 +462,7 @@ def download_data_from_sas(
     img_outname,
     download_function=whdu.download_with_progress_bar,
     url_column="cutout_access_url",
+    compressed_archive=None,
 ):
     """Download images from the SAS using information from the provided DataFrame.
 
@@ -499,7 +499,13 @@ def download_data_from_sas(
         iter.set_description(f"Downloading {current_img_outname} to {img_outpath}.")
 
         try:
-            download_function(row[url_column], user, img_outpath / current_img_outname)
+            download_function(
+                row[url_column],
+                user,
+                img_outpath / current_img_outname,
+                compressed_archive=compressed_archive,
+            )
+            
         except (IncompleteRead, HTTPError, AttributeError, ValueError) as err:
             msgs.warn(f"Download error encountered: {err}")
             logger.info(f"Download of {current_img_outname} unsuccessful")
@@ -698,7 +704,7 @@ def get_closest_data_product_using_sas(
         )
     )
     query_res = pd.read_csv(query_res, sep=",")
-    
+
     return parse_sas_catalogue(query_res), None
 
 
