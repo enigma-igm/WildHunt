@@ -1,9 +1,11 @@
 #!/usr/bin/env python
+import faulthandler
 import logging
 import os
 from http.client import IncompleteRead
 from io import StringIO
 from pathlib import Path
+from time import time
 from urllib.error import HTTPError
 
 import numpy as np
@@ -463,6 +465,10 @@ def download_data_from_sas(
     download_function=whdu.download_with_progress_bar,
     url_column="cutout_access_url",
     compressed_archive=None,
+    check_for_checksum=False,
+    # Actually useless since it seems like the archive has checksums for compressed
+    #  files only but serves the uncompressed files without checksums
+    #  maybe this will get fixed at some point
 ):
     """Download images from the SAS using information from the provided DataFrame.
 
@@ -490,6 +496,10 @@ def download_data_from_sas(
     :return: None; downloads images by saving them to the specified output path.
     """
     # TODO: redirect errors to tqdm
+    if not img_outpath.exists():
+        msgs.warn(f"Output path {img_outpath} does not exist, creating it.")
+        img_outpath.mkdir(parents=True, exist_ok=True)
+
     for _, row in (iter := tqdm(df.iterrows())):
         if img_outname is None:
             current_img_outname = row["file_name"]
@@ -504,8 +514,10 @@ def download_data_from_sas(
                 user,
                 img_outpath / current_img_outname,
                 compressed_archive=compressed_archive,
+                check_for_checksum=check_for_checksum,
+                checksum=row.get("checksum", None),
             )
-            
+
         except (IncompleteRead, HTTPError, AttributeError, ValueError) as err:
             msgs.warn(f"Download error encountered: {err}")
             logger.info(f"Download of {current_img_outname} unsuccessful")
@@ -711,6 +723,65 @@ def get_closest_data_product_using_sas(
 # =========================================================================== #
 
 
+def query_sas_for_auxiliary_data(data_product_type, observation_id, user):
+    faulthandler.enable()
+    query = whq.query_sas_auxiliary_data_by_observation_id(
+        data_product_type[1],
+        observation_id,
+    )
+
+    logger.debug("Query successfully built, sending it to the archive.")
+
+    start_time = time()
+
+    query_res = StringIO(
+        whqu.sync_query(
+            query,
+            user,
+            None,
+            cert_key=CERT_KEY,
+            verbose=0,
+        )
+    )
+
+    logger.debug(f"Query completed in {time() - start_time:.2f} seconds.")
+
+    df_out = pd.read_csv(query_res, sep=",", engine="python")
+
+    logger.debug(
+        f"Query result successfully read into DataFrame with {len(df_out)} rows."
+    )
+
+    return df_out
+
+
+# =========================================================================== #
+
+
+def query_sas_for_auxiliary_data_all_at_once(data_product_type, observation_ids, user):
+    # This is fine for a few 10s of IDs, but not for 1000s
+    # otherwise you end up getting URL too long errors (414)
+    query = whq.query_sas_auxiliary_data_by_observation_ids(
+        data_product_type[1],
+        observation_ids,
+    )
+
+    query_res = StringIO(
+        whqu.sync_query(
+            query,
+            user,
+            None,
+            cert_key=CERT_KEY,
+            verbose=0,
+        )
+    )
+
+    return pd.read_csv(query_res, sep=",")
+
+
+# =========================================================================== #
+
+
 @units.quantity_input()
 def get_download_urls_of_closest_cutout(
     ra: units.deg,
@@ -893,6 +964,7 @@ def download_data_for_all_bands(
     use_local_tbl=False,
     ra_cat="ra",
     dec_cat="dec",
+    bands=["VIS", "Y", "J", "H"],
 ):
     """Download all images related to a specified set of coordinates from the SAS.
 
@@ -947,7 +1019,7 @@ def download_data_for_all_bands(
         (not use_local_tbl)
         or (input_cat is None)
         or "local_tbl" in search_function.__name__
-    ):
+    ) and "sas" not in search_function.__name__:
         msgs.info("Initializing needed SAS catalogues to retrieve data access url.")
         input_cat = init_sas_catalogue(
             user,
@@ -970,7 +1042,7 @@ def download_data_for_all_bands(
             ra_,
             dec_,
             input_cat,
-            ["VIS", "Y", "J", "H"],
+            bands,
             ra_cat=ra_cat,
             dec_cat=dec_cat,
             user=user,

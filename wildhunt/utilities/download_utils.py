@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import hashlib
 import os
 import tarfile
 from pathlib import Path
@@ -65,6 +66,25 @@ def _check_for_existance(check_for_existing, out_fname, compressed_archive):
 # =========================================================================== #
 
 
+def _check_checksum(check_for_checksum, checksum, fname):
+    # this is an md5 checksum
+    if check_for_checksum and checksum is not None:
+        # calculate md5 checksum
+        with open(fname, "rb") as f:
+            digest = hashlib.file_digest(f, "md5")
+
+        file_checksum = digest.hexdigest()
+
+        if file_checksum == checksum:
+            msgs.info(f"File {fname} already exists with good checksum, skipping.")
+            return True
+
+    return False
+
+
+# =========================================================================== #
+
+
 # sourced from: https://github.com/tqdm/tqdm/#hooks-and-callbacks, requests version
 # TODO: Add a check for empty content, somehow
 def download_with_progress_bar(
@@ -72,6 +92,8 @@ def download_with_progress_bar(
     user,
     out_fname,
     check_for_existing=True,
+    check_for_checksum=False,
+    checksum=None,
     compressed_archive=None,
 ):
     """Download a file from the given URL and display a progress bar during the download.
@@ -93,8 +115,17 @@ def download_with_progress_bar(
     if _check_for_existance(check_for_existing, out_fname, compressed_archive):
         return
 
+    if _check_checksum(check_for_checksum, checksum, out_fname):
+        return
+
     # if the file does not exist, download it
     response = requests.get(url, cookies=user.cookies, stream=True)
+    if response.status_code == 401:
+        # I keep getting logging out, maybe this helps?
+        # Should at least refresh the login and not cause problems
+        user._create_new_session()
+        user.sas_login(silence=True)
+        response = requests.get(url, cookies=user.cookies, stream=True)
 
     with tqdm.wrapattr(
         open(out_fname, "wb"),
@@ -119,6 +150,8 @@ def download_without_progress_bar(
     user,
     out_fname,
     check_for_existing=True,
+    check_for_checksum=False,
+    checksum=None,
     compressed_archive=None,
 ):
     """Download a file from the given URL without displaying a progress bar.
@@ -138,12 +171,17 @@ def download_without_progress_bar(
     if _check_for_existance(check_for_existing, out_fname, compressed_archive):
         return
 
+    if _check_checksum(check_for_checksum, checksum, out_fname):
+        return
+
     # as before, if file does not exist, download it
     response = requests.get(url, cookies=user.cookies, stream=True)
-
-    # if there is actual content in the image I downloaded
-    if len(response.content) == 0:
-        msgs.warn(f"Empty fits content for {out_fname}!")
+    if response.status_code == 401:
+        # I keep getting logging out, maybe this helps?
+        # Should at least refresh the login and not cause problems
+        user._create_new_session()
+        user.sas_login(silence=True)
+        response = requests.get(url, cookies=user.cookies, stream=True)
 
     if response.status_code == 200:
         with open(out_fname, "wb") as fout:

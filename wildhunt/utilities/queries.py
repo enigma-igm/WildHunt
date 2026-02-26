@@ -104,9 +104,147 @@ def query_sas_image_tbl_by_coord(
                 release_name FROM sedm.mosaic_product AS mp
                 WHERE (mp.environment='DR1')
                 AND (mp.category='SCIENCE')
+                AND ((filter_name='DECAM_z') OR (filter_name='HSC_z'))
                 AND (mp.fov IS NOT NULL AND INTERSECTS(CIRCLE('ICRS', {ra.value}, {dec.value}, {search_radius.to(units.deg).value}), mp.fov) = 1)
                 ORDER BY mp.tile_index ASC"""
+    return re.sub(r"\n +", " ", out)
 
+
+# =========================================================================== #
+
+
+def query_sas_auxiliary_data_by_observation_id(
+    name,
+    observation_id: int = None,
+):
+    """Generate an SQL query based on the specified type of data to retrieve.
+
+    This function returns a pre-defined SQL SELECT statement according to the
+    given `name`. The valid options are 'stacked', 'calib', and
+    'mosaic'. If an invalid option is provided, a ValueError is raised.
+
+    :param name: The type of data to query. Should be one of 'stacked', 'calib', or 'mosaic'.
+    :type name: str
+    :return: An SQL SELECT statement as a string.
+    :rtype: str
+    :raises ValueError: If the provided name is not a valid option.
+    """
+    name = name.lower()
+
+    if name not in ["stacked", "calib", "mosaic"]:
+        raise ValueError("[Error] Valid options are `'stacked', 'calib', 'mosaic'`")
+
+    if name == "stacked":
+        out = (
+            "SELECT observation_id, product_type_sas AS product_type, file_name "
+            f"FROM sedm.aux_stacked WHERE CAST(observation_id AS INT) = {observation_id}"
+        )
+    elif name == "calib":
+        out = (
+            "SELECT observation_id, product_type_sas AS product_type, file_name "
+            f"FROM sedm.aux_calibrated WHERE CAST(observation_id AS INT) = {observation_id}"
+        )
+    elif name == "mosaic":
+        # Definitely not sure about this one, I need to double check!
+        out = (
+            "SELECT tile_index, product_type_sas AS product_type, file_name "
+            f"FROM sedm.aux_mosaic WHERE CAST(tile_index AS INT) = {observation_id}"
+        )
+
+    return re.sub(r"\n +", " ", out)
+
+
+# =========================================================================== #
+
+
+def query_sas_auxiliary_data_by_coords(
+    name,
+    ra: units.deg,
+    dec: units.deg,
+    search_radius: units.deg = 0.5 * units.arcsec,
+):
+    """Generate an SQL query based on the specified type of data to retrieve.
+
+    This function returns a pre-defined SQL SELECT statement according to the
+    given `name`. The valid options are 'stacked', 'calib', and
+    'mosaic'. If an invalid option is provided, a ValueError is raised.
+
+    :param name: The type of data to query. Should be one of 'stacked', 'calib', or 'mosaic'.
+    :type name: str
+    :return: An SQL SELECT statement as a string.
+    :rtype: str
+    :raises ValueError: If the provided name is not a valid option.
+    """
+    name = name.lower()
+
+    if name not in ["stacked", "calib", "mosaic"]:
+        raise ValueError("[Error] Valid options are `'stacked', 'calib', 'mosaic'`")
+
+    if name == "stacked":
+        raise NotImplementedError("Not implemented yet.")
+        out = (
+            "SELECT observation_id, product_type_sas AS product_type, file_name, checksum "
+            f"FROM sedm.aux_stacked WHERE CAST(observation_id AS INT) = {-1}"
+        )
+    elif name == "calib":
+        raise NotImplementedError("Not implemented yet.")
+        out = (
+            "SELECT observation_id, product_type_sas AS product_type, file_name, checksum "
+            f"FROM sedm.aux_calibrated WHERE CAST(observation_id AS INT) = {-1}"
+        )
+    elif name == "mosaic":
+        out = f"""
+        SELECT tile_index, product_type_sas AS product_type, file_name, checksum 
+        FROM sedm.aux_mosaic 
+        WHERE (environment='DR1')
+        AND (product_type='dpdMerFinalCatalog')
+        AND (aux_mosaic.fov IS NOT NULL
+        AND INTERSECTS(CIRCLE('ICRS', {ra.value}, {dec.value}, {search_radius.to(units.deg).value}), aux_mosaic.fov) = 1)
+        ORDER BY tile_index ASC"""
+
+    return re.sub(r"\n +", " ", out)
+
+
+# =========================================================================== #
+
+
+def query_sas_auxiliary_data_by_observation_ids(
+    name,
+    observation_ids: int,
+):
+    """Generate an SQL query based on the specified type of data to retrieve.
+
+    This function returns a pre-defined SQL SELECT statement according to the
+    given `name`. The valid options are 'stacked', 'calib', and
+    'mosaic'. If an invalid option is provided, a ValueError is raised.
+
+    :param name: The type of data to query. Should be one of 'stacked', 'calib', or 'mosaic'.
+    :type name: str
+    :return: An SQL SELECT statement as a string.
+    :rtype: str
+    :raises ValueError: If the provided name is not a valid option.
+    """
+    name = name.lower()
+
+    if name not in ["stacked", "calib", "mosaic"]:
+        raise ValueError("[Error] Valid options are `'stacked', 'calib', 'mosaic'`")
+
+    if name == "stacked":
+        out = (
+            "SELECT observation_id, product_type_sas AS product_type, file_name, checksum "
+            f"FROM sedm.aux_stacked WHERE CAST(observation_id AS INT) in {tuple(observation_ids)}"
+        )
+    elif name == "calib":
+        out = (
+            "SELECT observation_id, product_type_sas AS product_type, file_name, checksum "
+            f"FROM sedm.aux_calibrated WHERE CAST(observation_id AS INT) in {tuple(observation_ids)}"
+        )
+    elif name == "mosaic":
+        # Definitely not sure about this one, I need to double check!
+        out = (
+            "SELECT tile_index, product_type_sas AS product_type, file_name, checksum "
+            f"FROM sedm.aux_mosaic WHERE CAST(tile_index AS INT) in {tuple(observation_ids)}"
+        )
     return re.sub(r"\n +", " ", out)
 
 

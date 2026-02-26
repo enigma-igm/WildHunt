@@ -77,12 +77,18 @@ class User(object):
                 if password is not None
                 else b64e(getpass.getpass("Enter password: "))
             )
+
         self.login_data = {"username": self.username, "password": self.password}
-        self.logged_in = False
+
+        self.session = None
         self.cookies = None
+
+        self.logged_in = False
 
         # sets the euclid environment for the user
         self.euclid_env = EUCLID_ENV
+
+        self._create_new_session()
 
     # ======================================================================= #
 
@@ -166,7 +172,7 @@ class User(object):
 
     # ======================================================================= #
 
-    def sas_login(self, cert_key=CERT_KEY):
+    def sas_login(self, cert_key=CERT_KEY, silence=False):
         """Log in to the chosen EUCLID SAS archive using the stored user credentials.
 
         This function sends login requests to multiple services of the chosen EUCLID
@@ -185,35 +191,36 @@ class User(object):
         if self.login_data is None:
             self.set_user_data()
 
-        cookies = MozillaCookieJar()
-        with requests.Session() as session:
-            session.cookies = cookies
+        login_data = self.get_user_data()
 
-            # These are all needed for the different services that we use
-            session.post(
-                f"https://eas{self.euclid_env}.esac.esa.int/tap-server/login",
-                data=self.get_user_data(),
-                verify=cert_key,
-            )
+        # set base and endpoints
+        endpoints = [
+            f"https://eas{self.euclid_env}.esac.esa.int/tap-server/login",
+            f"https://eas{self.euclid_env}.esac.esa.int/sas-cutout/login",
+            f"https://eas{self.euclid_env}.esac.esa.int/sas-dd/login",
+        ]
 
-            session.post(
-                f"https://eas{self.euclid_env}.esac.esa.int/sas-cutout/login",
-                data=self.get_user_data(),
-                verify=cert_key,
-            )
+        # login and actually check that the login is successful
+        try:
+            for endpoint in endpoints:
+                r = self.session.post(
+                    endpoint,
+                    data=login_data,
+                    verify=cert_key,
+                    timeout=10,
+                )
+                r.raise_for_status()
 
-            session.post(
-                f"https://eas{self.euclid_env}.esac.esa.int/sas-dd/login",
-                data=self.get_user_data(),
-                verify=cert_key,
-            )
-
-            # do I really need to save the cookies?
-            # cookies.save("cookies.txt", ignore_discard=True, ignore_expires=True)
+        except requests.RequestException as e:
+            self.logged_in = False
+            msgs.error(f"SAS Login request failed: {e}")
+            raise e
 
         self.logged_in = True
-        self.cookies = cookies
-        msgs.info(f"Log in to the Euclid {self.euclid_env} archive successful!")
+        self.cookies = self.session.cookies
+
+        if not silence:
+            msgs.info(f"Log in to the Euclid {self.euclid_env} archive successful!")
 
     # ======================================================================= #
 
@@ -221,6 +228,17 @@ class User(object):
         if not self.logged_in:
             msgs.info("User not logged in, trying log in.")
             self.sas_login()
+
+    # ======================================================================= #
+
+    def _create_new_session(self):
+        if self.session is not None:
+            # make it fail if there are errors or whatever
+            self.session.close()
+
+        self.session = requests.Session()
+        self.session.cookies = MozillaCookieJar()
+        self.logged_in = False
 
     # ======================================================================= #
 
