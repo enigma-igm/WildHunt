@@ -39,7 +39,7 @@ default_apertures = {'desdr1': 2.0,
                      'unwise-neo4': 6,
                      'unwise-neo5': 6,
                      'unwise-neo6': 6,
-                     'ps1': 2.0,
+                     'PS1': 2.0,
                      'skymapper': 2.0,
                      'vlass': 2.0,
                      'JWST': 1.0  # Placeholder for now
@@ -146,7 +146,8 @@ class CutoutViewCanvas(FigureCanvas):
                                            n_sigma=n_sigma,
                                            scalebar=None,
                                            color_map_name=color_map_name,
-                                          show_axes=False)
+                                           # show_axes=False
+                                          )
 
         self.draw()
 
