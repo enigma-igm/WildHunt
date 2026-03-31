@@ -5,6 +5,7 @@ https://github.com/pypeit/PypeIt
 '''
 import getpass
 import inspect
+import logging
 import sys
 
 import astropy
@@ -292,4 +293,32 @@ class Messages:
         self._yellow_BK = ''
 
 
+class MessagesLogging:
+    # TODO: Update this so that the entire package uses logging properly
+    def __init__(self, log=None, verbosity=None, colors=True):
+        self.logger = logging.getLogger("wildhunt")
 
+    def info(self, msg):
+        self.logger.info(msg)
+
+    def warn(self, msg):
+        self.logger.warning(msg)
+
+    def error(self, msg, usage=False):
+        self.logger.error(msg)
+        raise RuntimeError(msg)
+
+    def bug(self, msg):
+        self.logger.critical(msg)
+
+    def work(self, msg):
+        self.logger.info(msg)
+
+    def prindent(self, msg):
+        self.logger.info(msg)
+
+    def info_update(self, msg, last=False):
+        self.logger.info(msg)
+
+    def close(self):
+        pass

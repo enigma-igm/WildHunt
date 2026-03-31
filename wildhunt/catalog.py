@@ -14,15 +14,13 @@ import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord, match_coordinates_sky
 from astropy.table import Table
-from dl import authClient as ac
-from dl import queryClient as qc
-from dl.helpers.utils import convert
 
 from wildhunt import catalog_queries as whcq
 from wildhunt import image as whim
-from wildhunt import pypmsgs, utils
+from wildhunt import pypmsgs
 from wildhunt.surveys import catalog_defaults as whcd
 from wildhunt.surveys import euclid, legacysurvey, lotss, panstarrs, unwise, vsa_wsa
+from wildhunt.utilities import general_utils
 
 msgs = pypmsgs.Messages()
 
@@ -202,8 +200,8 @@ class Catalog(object):
             if filesize > self.partition_limit:
 
                 partition_file = True
-                readable_filesize = utils.sizeof_fmt(filesize)
-                readable_partition_limit = utils.sizeof_fmt(
+                readable_filesize = general_utils.sizeof_fmt(filesize)
+                readable_partition_limit = general_utils.sizeof_fmt(
                     self.partition_limit)
                 msgs.warn('You supplied a single file in excess'
                           ' of {}.'.format(readable_partition_limit))
@@ -359,8 +357,8 @@ class Catalog(object):
             # distance
             cat_idx = source.query('{}_distance > {}'.format(
                 column_prefix, match_distance)).index
-            source.loc[cat_idx, 'match_index'] = np.NaN
-            source.loc[cat_idx, '{}_distance'.format(column_prefix)] = np.NaN
+            source.loc[cat_idx, 'match_index'] = np.nan
+            source.loc[cat_idx, '{}_distance'.format(column_prefix)] = np.nan
 
             # Merge catalog catalogs on merge index
             if columns == 'all':
@@ -521,6 +519,9 @@ class Catalog(object):
             msgs.info('Creating WildHunt temporary directory')
 
         if service == 'datalab':
+            # move imports here to avoid issues if the package is not installed
+            from dl import authClient as ac
+            from dl import queryClient as qc
 
             response = ac.whoAmI()
             if response == 'anonymous':
@@ -675,6 +676,11 @@ class Catalog(object):
         :type match_distance: float
         :return: None
         """
+
+        # imports used only here
+        # in principle qc is not needed but better be safe than sorry
+        from dl import queryClient as qc
+        from dl.helpers.utils import convert
 
         # Convert match_distance to degrees
         match_distance = match_distance/3600.

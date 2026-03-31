@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 
-import os
-import requests
-import pandas as pd
 import multiprocessing as mp
-from urllib.error import HTTPError
+import os
 from http.client import IncompleteRead
+from urllib.error import HTTPError
 
-from wildhunt import utils
+import pandas as pd
+import requests
+
 from wildhunt import pypmsgs
+from wildhunt.utilities import general_utils
 
 msgs = pypmsgs.Messages()
 
@@ -97,7 +98,7 @@ class ImagingSurvey(object):
         self.image_folder_path = image_folder_path
 
         # Create the download table with the obj_name
-        obj_names = utils.coord_to_name(ra, dec, epoch=epoch)
+        obj_names = general_utils.coord_to_name(ra, dec, epoch=epoch)
         self.source_table = pd.DataFrame({'obj_name': obj_names,
                                           'ra': ra,
                                           'dec': dec})

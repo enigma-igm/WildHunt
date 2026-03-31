@@ -1,19 +1,16 @@
 #!/usr/bin/env python
 
 import aplpy
-import numpy as np
-
 import astropy.units as u
+import matplotlib.pyplot as plt
+import numpy as np
+from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.visualization import ZScaleInterval
-from astropy.coordinates import SkyCoord
-
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
 from matplotlib.collections import PatchCollection
+from matplotlib.patches import Rectangle
 
-
-from wildhunt import utils as utils
+from wildhunt.utilities import general_utils as general_utils
 
 # Define some colors
 red = (238/255., 102/255., 119/255.)
@@ -264,7 +261,7 @@ def make_finding_chart(ra, dec, survey, band, aperture, fov,
         im_ra = ra
         im_dec = dec
 
-    coord_name = utils.coord_to_name(np.array([im_ra]), np.array([im_dec]),
+    coord_name = general_utils.coord_to_name(np.array([im_ra]), np.array([im_dec]),
                                   epoch="J")
 
     filename = image_folder_path + '/' + coord_name[0] + "_" + survey + "_" + \

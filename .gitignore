@@ -131,3 +131,5 @@ dmypy.json
 # mac and test stuff
 .DS_store
 *.fits
+deprecated/
+code.code-workspace

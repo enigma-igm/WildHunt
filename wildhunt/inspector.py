@@ -1,26 +1,26 @@
 
-import sys
 import gc
 import math
-import numpy as np
+import sys
+
+# Suppress warnings!!! THIS IS EXTREMELY DANGEROUS!!!
+# I do it anyway :D
+import warnings
 from functools import partial
 
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
-import matplotlib
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-
-from wildhunt import utils
-from wildhunt import pypmsgs
 from wildhunt import image as it
+from wildhunt import pypmsgs
+from wildhunt.utilities import general_utils
 
-# Suppress warnings!!! THIS IS EXTREMELY DANGEROUS!!!
-# I do it anyway :D
-import warnings
 warnings.filterwarnings("ignore")
 
 # Instantiate message interface
@@ -482,7 +482,7 @@ class ImageViewGUI(QMainWindow):
 
         in_dict = self.cutout_plot_dict
 
-        coord_name = utils.coord_to_name(np.array([in_dict['ra']]),
+        coord_name = general_utils.coord_to_name(np.array([in_dict['ra']]),
                                       np.array([in_dict['dec']]),
                                       epoch='J')
 
@@ -544,7 +544,7 @@ class ImageViewGUI(QMainWindow):
 
         in_dict = self.cutout_plot_dict
 
-        coord_name = utils.coord_to_name(np.array([in_dict['ra']]),
+        coord_name = general_utils.coord_to_name(np.array([in_dict['ra']]),
                                       np.array([in_dict['dec']]),
                                       epoch='J')
         self.target_lbl.setText('Object {} out of {}'.format(
@@ -758,7 +758,7 @@ class ImageViewGUI(QMainWindow):
 
         in_dict = self.cutout_plot_dict
 
-        coord_name = utils.coord_to_name(np.array([in_dict['ra']]),
+        coord_name = general_utils.coord_to_name(np.array([in_dict['ra']]),
                                          np.array([in_dict['dec']]),
                                          epoch='J')[0]
 

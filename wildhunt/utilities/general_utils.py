@@ -1,9 +1,11 @@
+import base64
 
+import numpy as np
 from astropy import stats
 from astropy import units as u
 from astropy.coordinates import Angle
 
-import numpy as np
+# =========================================================================== #
 
 
 def nan_mad_std(data, axis=None, func=None):
@@ -29,7 +31,10 @@ def nan_mad_std(data, axis=None, func=None):
     return stats.mad_std(data, axis=axis, func=func, ignore_nan=True)
 
 
-def coord_to_name(dra, ddec, epoch='J'):
+# =========================================================================== #
+
+
+def coord_to_name(dra, ddec, epoch="J"):
     """Return an object name based on its Right Ascension and Declination.
 
     :param dra: Right Ascension of the target in decimal degrees
@@ -47,39 +52,35 @@ def coord_to_name(dra, ddec, epoch='J'):
     coord_name_list = []
 
     if type(dra) is np.float64:
-        hms_ra = Angle(dra, u.degree).to_string(u.hour, sep='',
-                                                precision=2, pad=True)
+        hms_ra = Angle(dra, u.degree).to_string(u.hour, sep="", precision=2, pad=True)
         if ddec >= 0:
-            sign = '+'
+            sign = "+"
         else:
-            sign = '-'
-        deg_dec = Angle(abs(ddec), u.degree).to_string(u.deg, sep='',
-                                                       precision=2, pad=True)
+            sign = "-"
+        deg_dec = Angle(abs(ddec), u.degree).to_string(
+            u.deg, sep="", precision=2, pad=True
+        )
 
-        coord_name_list.append('{:}{:}{:}{:}'.format(epoch,
-                                                     hms_ra,
-                                                     sign,
-                                                     deg_dec))
+        coord_name_list.append("{:}{:}{:}{:}".format(epoch, hms_ra, sign, deg_dec))
     else:
         for idx in range(len(dra)):
-
-            hms_ra = Angle(dra[idx], u.degree).to_string(u.hour, sep='',
-                                                         precision=2,
-                                                         pad=True)
+            hms_ra = Angle(dra[idx], u.degree).to_string(
+                u.hour, sep="", precision=2, pad=True
+            )
             if ddec[idx] >= 0:
-                sign = '+'
+                sign = "+"
             else:
-                sign = '-'
-            deg_dec = Angle(abs(ddec[idx]), u.degree).to_string(u.deg, sep='',
-                                                                precision=2,
-                                                                pad=True)
+                sign = "-"
+            deg_dec = Angle(abs(ddec[idx]), u.degree).to_string(
+                u.deg, sep="", precision=2, pad=True
+            )
 
-            coord_name_list.append('{:}{:}{:}{:}'.format(epoch,
-                                                         hms_ra,
-                                                         sign,
-                                                         deg_dec))
+            coord_name_list.append("{:}{:}{:}{:}".format(epoch, hms_ra, sign, deg_dec))
 
     return coord_name_list
+
+
+# =========================================================================== #
 
 
 def degree_to_hms(dra, ddec):
@@ -96,50 +97,49 @@ def degree_to_hms(dra, ddec):
     """
 
     if type(dra) in [np.float64, float, int]:
-        ra_hms = Angle(dra, u.degree).to_string(u.hour, sep=':', precision=2,
-                                                pad=True)
+        ra_hms = Angle(dra, u.degree).to_string(u.hour, sep=":", precision=2, pad=True)
         if ddec >= 0:
-            sign = '+'
+            sign = "+"
         else:
-            sign = '-'
-        dec_dms = sign + Angle(abs(ddec), u.degree).to_string(u.deg, sep=':',
-                                                              precision=2,
-                                                              pad=True)
+            sign = "-"
+        dec_dms = sign + Angle(abs(ddec), u.degree).to_string(
+            u.deg, sep=":", precision=2, pad=True
+        )
 
     elif type(dra) is np.ndarray:
         ra_hms_list = []
         dec_dms_list = []
 
         for idx in range(len(dra)):
-
-            ra_hms_idx = Angle(dra[idx], u.degree).to_string(u.hour,
-                                                             sep=':',
-                                                             precision=2,
-                                                             pad=True)
+            ra_hms_idx = Angle(dra[idx], u.degree).to_string(
+                u.hour, sep=":", precision=2, pad=True
+            )
 
             ra_hms_list.append(ra_hms_idx)
 
             if ddec[idx] >= 0:
-                sign = '+'
+                sign = "+"
             else:
-                sign = '-'
-            dec_dms_idx = sign + Angle(abs(ddec[idx]),
-                                       u.degree).to_string(u.deg, sep=':',
-                                                           precision=2,
-                                                           pad=True)
+                sign = "-"
+            dec_dms_idx = sign + Angle(abs(ddec[idx]), u.degree).to_string(
+                u.deg, sep=":", precision=2, pad=True
+            )
             dec_dms_list.append(dec_dms_idx)
 
         ra_hms = np.array(ra_hms_list)
         dec_dms = np.array(dec_dms_list)
 
     else:
-        raise ValueError('dra must be a float or numpy.ndarray')
+        raise ValueError("dra must be a float or numpy.ndarray")
 
     return ra_hms, dec_dms
 
 
-def convert_dmsdec2decdeg(dec_dms, delimiter=':'):
-    """ Convert a Declination coordinate string of the form DD:MM:SS.SS to
+# =========================================================================== #
+
+
+def convert_dmsdec2decdeg(dec_dms, delimiter=":"):
+    """Convert a Declination coordinate string of the form DD:MM:SS.SS to
     decimal degrees.
 
     :param dec_dms: Declination coordinate string of the form DD:MM:SS.SS
@@ -150,23 +150,23 @@ def convert_dmsdec2decdeg(dec_dms, delimiter=':'):
     :rtype: float
     """
 
-    if delimiter is None or delimiter == '':
+    if delimiter is None or delimiter == "":
         dec_degrees = float(dec_dms[0:3])
         dec_minutes = float(dec_dms[3:5])
         dec_seconds = float(dec_dms[5:10])
-    elif delimiter is not None and delimiter != '':
+    elif delimiter is not None and delimiter != "":
         dec_degrees = float(dec_dms.split(delimiter)[0])
         dec_minutes = float(dec_dms.split(delimiter)[1])
         dec_seconds = float(dec_dms.split(delimiter)[2])
     else:
-        raise ValueError('Delimiter must be a string or None')
+        raise ValueError("Delimiter must be a string or None")
 
-    if dec_dms[0] == '-':
+    if dec_dms[0] == "-":
         is_positive = False
     else:
         is_positive = True
 
-    dec = abs(dec_degrees) + dec_minutes/60. + dec_seconds/3600.
+    dec = abs(dec_degrees) + dec_minutes / 60.0 + dec_seconds / 3600.0
 
     if is_positive is False:
         dec = -dec
@@ -174,8 +174,11 @@ def convert_dmsdec2decdeg(dec_dms, delimiter=':'):
     return dec
 
 
-def convert_hmsra2decdeg(ra_hms, delimiter=':'):
-    """ Convert a Right Ascension coordinate string of the form HH:MM:SS.SS to
+# =========================================================================== #
+
+
+def convert_hmsra2decdeg(ra_hms, delimiter=":"):
+    """Convert a Right Ascension coordinate string of the form HH:MM:SS.SS to
     decimal degrees.
 
     :param ra_hms: Right Ascension coordinate string of the form HH:MM:SS.SS
@@ -186,22 +189,25 @@ def convert_hmsra2decdeg(ra_hms, delimiter=':'):
     :rtype: float
     """
 
-    if delimiter is None or delimiter == '':
+    if delimiter is None or delimiter == "":
         ra_hours = float(ra_hms[0:2])
         ra_minutes = float(ra_hms[2:4])
         ra_seconds = float(ra_hms[4:10])
-    elif delimiter is not None and delimiter != '':
+    elif delimiter is not None and delimiter != "":
         ra_hours = float(ra_hms[0:2])
         ra_minutes = float(ra_hms[3:5])
         ra_seconds = float(ra_hms[6:12])
     else:
-        raise ValueError('Delimiter must be a string or None')
+        raise ValueError("Delimiter must be a string or None")
 
-    return (ra_hours + ra_minutes/60. + ra_seconds/3600.) * 15.
+    return (ra_hours + ra_minutes / 60.0 + ra_seconds / 3600.0) * 15.0
+
+
+# =========================================================================== #
 
 
 def sizeof_fmt(num, suffix="B"):
-    """ Get human-readable file size.
+    """Get human-readable file size.
 
     Adopted from https://stackoverflow.com/questions/1094841/get-human-readable-version-of-file-size
 
@@ -217,3 +223,40 @@ def sizeof_fmt(num, suffix="B"):
             return f"{num:3.1f}{unit}{suffix}"
         num /= 1024.0
     return f"{num:.1f}Yi{suffix}"
+
+
+# =========================================================================== #
+
+
+def b64e(s):
+    """Encode a string to Base64 format.
+
+    This function takes a string, encodes it into bytes, and then
+    encodes those bytes into a Base64 string.
+
+    :param s: The string to encode in Base64.
+    :type s: str
+    :return: The Base64 encoded string.
+    :rtype: str
+    """
+    return base64.b64encode(s.encode()).decode()
+
+
+# =========================================================================== #
+
+
+def b64d(s):
+    """Decode a Base64 encoded string.
+
+    This function takes a Base64 encoded string, decodes it into bytes,
+    and then converts those bytes back into a regular string.
+
+    :param s: The Base64 encoded string to decode.
+    :type s: str
+    :return: The decoded string.
+    :rtype: str
+    """
+    return base64.b64decode(s).decode()
+
+
+# =========================================================================== #

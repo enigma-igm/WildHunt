@@ -1,22 +1,22 @@
 #!/usr/bin/env python
 
 
-import math
 import glob
-import aplpy
-import numpy as np
+import math
 
-from astropy.io import fits
+import aplpy
+import matplotlib.pyplot as plt
+import numpy as np
+from astropy import units as u
 from astropy import wcs
 from astropy.coordinates import SkyCoord
-from astropy import units as u
+from astropy.io import fits
 from astropy.nddata.utils import Cutout2D
 from astropy.wcs.utils import proj_plane_pixel_scales
 
-import matplotlib.pyplot as plt
-
-from wildhunt import utils, catalog
 import wildhunt as whim
+from wildhunt import catalog
+from wildhunt.utilities import general_utils
 
 
 def plot_source_images(ra, dec, survey_dicts, fov, auto_download=True,
@@ -179,7 +179,7 @@ def make_mult_png_fig(ra, dec, surveys, bands,
                   forced_mag_list, forced_magerr_list,
                   forced_sn_list, n_sigma, color_map_name, verbosity)
 
-    coord_name = utils.coord_to_name(np.array([ra]),
+    coord_name = general_utils.coord_to_name(np.array([ra]),
                                   np.array([dec]),
                                   epoch="J")
     if add_info_label is None or add_info_value is None:
@@ -280,7 +280,7 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
             forced_sn = None
 
         # Get the correct filename, accept larger fovs
-        coord_name = utils.coord_to_name(np.array([ra]), np.array([dec]),
+        coord_name = general_utils.coord_to_name(np.array([ra]), np.array([dec]),
                                       epoch="J")
 
         filename = image_folder_path + '/' + coord_name[0] + "_" + survey + "_" + \
@@ -468,7 +468,7 @@ def generate_cutout_images(ra_sources, dec_sources, survey_dicts, imgsize = 30, 
                                      survey_dict['fov'])
             survey.download_images(ra_sources, dec_sources, image_folder_path, n_jobs)
 
-    obj_names = utils.coord_to_name(ra_sources, dec_sources, epoch=epoch)
+    obj_names = general_utils.coord_to_name(ra_sources, dec_sources, epoch=epoch)
 
     for obj_name, ra, dec in zip(obj_names, ra_sources, dec_sources):
 

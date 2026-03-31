@@ -2,10 +2,9 @@
 
 import pandas as pd
 
-
 from wildhunt import pypmsgs
-from wildhunt import utils
 from wildhunt.surveys import imagingsurvey
+from wildhunt.utilities import general_utils
 
 msgs = pypmsgs.Messages()
 
@@ -98,7 +97,7 @@ class LoTSSDR2(imagingsurvey.ImagingSurvey):
             ra = self.source_table.loc[idx, 'ra']
             dec = self.source_table.loc[idx, 'dec']
             obj_name = self.source_table.loc[idx, 'obj_name']
-            ra_hms, dec_dms = utils.degree_to_hms(ra, dec)
+            ra_hms, dec_dms = general_utils.degree_to_hms(ra, dec)
 
             size = self.fov / 60.0  # Convert arcseconds to arcminutes
 

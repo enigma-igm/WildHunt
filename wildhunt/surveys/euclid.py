@@ -3,6 +3,7 @@
 import multiprocessing as mp
 import os
 from http.client import IncompleteRead
+from pathlib import Path
 from urllib.error import HTTPError
 
 import numpy as np
@@ -10,12 +11,17 @@ import pandas as pd
 import requests
 from astropy import units
 
-from wildhunt import euclid_utils as eu
-from wildhunt import pypmsgs, utils
+from wildhunt import pypmsgs
 from wildhunt.surveys import imagingsurvey
+from wildhunt.user import User
+from wildhunt.utilities import euclid_utils as eu
+from wildhunt.utilities import general_utils
 
 msgs = pypmsgs.Messages()
-local_path = os.environ.get("WILDHUNT_LOCALPATH")
+if os.environ.get("WILDHUNT_LOCALPATH") is None:
+    LOCAL_PATH = str(Path.home())
+else:
+    LOCAL_PATH = os.environ.get("WILDHUNT_LOCALPATH")
 
 
 class Euclid(imagingsurvey.ImagingSurvey):
@@ -51,8 +57,8 @@ class Euclid(imagingsurvey.ImagingSurvey):
         self.dec = None
         self.nbatch = 1
 
-        user = eu.User()
-        user.sasotf_login()
+        user = User()
+        user.sas_login()
 
         self.user = user
         super(Euclid, self).__init__(bands, fov, name, verbosity)
@@ -127,6 +133,7 @@ class Euclid(imagingsurvey.ImagingSurvey):
 
     def retrieve_image_url_list(
         self,
+        cat_outpath=LOCAL_PATH,
         batch_number=0,
         catalogue="mosaic",
         product_type="mosaic",
@@ -171,12 +178,11 @@ class Euclid(imagingsurvey.ImagingSurvey):
             + self.batch_size
         ]
 
-        cat_data_prod = eu.prepare_sas_catalogue(
-            local_path,
-            catalogue,
+        cat_data_prod = eu.init_sas_catalogue(
             self.user,
+            catalogue,
+            cat_outpath,
             product_type,
-            product_type_dict,
             use_local_tbl=False,
         )
 
@@ -188,7 +194,7 @@ class Euclid(imagingsurvey.ImagingSurvey):
 
         for b in bands:
             _b = b if b == "VIS" else "NIR_" + b
-            partial = eu.get_download_df(
+            partial = eu.generate_wildhunt_download_df(
                 ra_batch * units.deg,
                 dec_batch * units.deg,
                 img_size * units.arcsec,
@@ -214,7 +220,7 @@ class Euclid(imagingsurvey.ImagingSurvey):
             band = group_key
 
             for idx in group_df.index:
-                obj_name = utils.coord_to_name(
+                obj_name = general_utils.coord_to_name(
                     group_df.loc[idx, "ra"], group_df.loc[idx, "dec"]
                 )[0]
 

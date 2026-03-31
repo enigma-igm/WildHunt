@@ -3,7 +3,7 @@ from pathlib import Path
 
 from astropy import units
 
-from wildhunt import euclid_utils as eu
+from wildhunt.utilities import euclid_utils as eu
 
 LOCAL_PATH = Path(os.environ.get("WILDHUNT_LOCALPATH"))
 
@@ -12,7 +12,7 @@ LOCAL_PATH = Path(os.environ.get("WILDHUNT_LOCALPATH"))
 
 if __name__ == "__main__":
     # TODO: Update this after the latest changes
-    
+
     # I know this object is there, has this coords and is in a EUCLID image see link above
     # 79 - 51 is a random field, to be used for stack images
     # 149 2 is a random galaxy, to be used for calibrated images
@@ -34,8 +34,12 @@ if __name__ == "__main__":
 
     eu.parse_catalogue(cat, inplace=True)
 
-    cat_stack = cat.query("product_type == 'DpdNirStackedFrame' or product_type == 'DpdVisStackedFrame'").reset_index()
-    urls_stack = eu.get_download_urls(obj_ra, obj_dec, side, cat_stack, ['VIS', 'J', 'H'])
+    cat_stack = cat.query(
+        "product_type == 'DpdNirStackedFrame' or product_type == 'DpdVisStackedFrame'"
+    ).reset_index()
+    urls_stack = eu.get_download_urls(
+        obj_ra, obj_dec, side, cat_stack, ["VIS", "J", "H"]
+    )
 
     # We want the stack but calibrated images seem to be more abundant
     # TODO: Figure out the difference between the two!

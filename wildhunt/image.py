@@ -7,34 +7,31 @@ Main module for downloading and manipulating image data.
 
 import glob
 import math
-
-import numpy as np
-
 import string
-from astropy import wcs, stats
+
 import astropy.units as u
-from astropy.io import fits
-from astropy.wcs import WCS
-from astropy.nddata.utils import Cutout2D
-from astropy.coordinates import SkyCoord, ICRS
-from astropy.wcs.utils import proj_plane_pixel_scales
-from astropy.visualization import ZScaleInterval
-
-from matplotlib.patches import Circle, Ellipse, Rectangle
-from matplotlib.colors import LogNorm
-from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
-
-from reproject.mosaicking import find_optimal_celestial_wcs
-from reproject import reproject_interp
-
-from photutils import aperture_photometry, SkyCircularAperture,\
-    SkyCircularAnnulus
-
 import matplotlib.pyplot as plt
+import numpy as np
+from astropy import stats, wcs
+from astropy.coordinates import ICRS, SkyCoord
+from astropy.io import fits
+from astropy.nddata.utils import Cutout2D
+from astropy.visualization import ZScaleInterval
+from astropy.wcs import WCS
+from astropy.wcs.utils import proj_plane_pixel_scales
+from matplotlib.colors import LogNorm
+from matplotlib.patches import Circle, Ellipse, Rectangle
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+from photutils.aperture import (
+    SkyCircularAnnulus,
+    SkyCircularAperture,
+    aperture_photometry,
+)
+from reproject import reproject_interp
+from reproject.mosaicking import find_optimal_celestial_wcs
 
-from wildhunt import utils
-from wildhunt import pypmsgs
-from wildhunt import catalog
+from wildhunt import catalog, pypmsgs
+from wildhunt.utilities import general_utils
 
 msgs = pypmsgs.Messages()
 
@@ -139,7 +136,7 @@ def make_mult_png_fig(ra, dec, surveys, bands,
                               forced_sn_list, scalebar, n_sigma,
                               color_map_name)
 
-    coord_name = utils.coord_to_name(np.array([ra]),
+    coord_name = general_utils.coord_to_name(np.array([ra]),
                                      np.array([dec]),
                                      epoch="J")
 
@@ -539,7 +536,7 @@ class Image(object):
                 mean, median, sigma = stats.sigma_clipped_stats(
                     self.data, mask=np.logical_not(
                         np.isfinite(self.data) & (self.data != 0.0)),
-                    sigma=3.0, cenfunc='median', stdfunc=utils.nan_mad_std,
+                    sigma=3.0, cenfunc='median', stdfunc=general_utils.nan_mad_std,
                     maxiters=10)
 
                 upp_lim = median + n_sigma * sigma
@@ -688,7 +685,7 @@ class Image(object):
                     mean, median, sigma = stats.sigma_clipped_stats(
                         self.data, mask=np.logical_not(
                             np.isfinite(self.data) & (self.data != 0.0)),
-                        sigma=3.0, cenfunc='median', stdfunc=utils.nan_mad_std,
+                        sigma=3.0, cenfunc='median', stdfunc=general_utils.nan_mad_std,
                         maxiters=10)
 
                     upp_lim = median + n_sigma * sigma
@@ -1133,7 +1130,7 @@ class Image(object):
 
         # Save cutout image to cutout_dir
         if save:
-            source_name = utils.coord_to_name(np.array([ra]),
+            source_name = general_utils.coord_to_name(np.array([ra]),
                                               np.array([dec]),
                                               epoch="J")[0]
 
@@ -1300,7 +1297,18 @@ class Image(object):
 
             # Calculate the flux in nanomaggies
             flux = float(source_flux['aperture_sum_' + str(idx)])
+
+            flux_name = '{}_raw_aper_sum_{}arcsec'.format(
+                survey_band, aperture_radii[idx])
+            result_dict.update({flux_name: flux - background[idx]})
+
+            raw_flux_err = std * np.sqrt(pix_aperture[idx].area)
+            flux_err_name = '{}_raw_aper_sum_err_{}arcsec'.format(
+                survey_band, aperture_radii[idx])
+            result_dict.update({flux_err_name: raw_flux_err})
+
             flux = (flux - background[idx]) / exptime_norm * nanomag_correction
+
             # Calculate the flux error in nanomaggies
             flux_err = std * np.sqrt(pix_aperture[idx].area) / exptime_norm * \
                        nanomag_correction
@@ -1312,8 +1320,8 @@ class Image(object):
                 mag = 22.5 - 2.5 * np.log10(flux)
                 mag_err = (2.5 / np.log(10)) / snr
             else:
-                mag = np.NaN
-                mag_err = np.NaN
+                mag = np.nan
+                mag_err = np.nan
 
             flux_list.append(flux)
             flux_err_list.append(flux_err)
@@ -1433,7 +1441,7 @@ class SurveyImage(Image):
         self.fov = min_fov
         self.verbosity = verbosity
 
-        self.source_name = utils.coord_to_name(np.array([ra]),
+        self.source_name = general_utils.coord_to_name(np.array([ra]),
                                                np.array([dec]),
                                                epoch="J")[0]
 
