@@ -18,7 +18,7 @@ from astropy.wcs import WCS
 from astropy.nddata.utils import Cutout2D
 from astropy.coordinates import SkyCoord, ICRS
 from astropy.wcs.utils import proj_plane_pixel_scales
-from astropy.visualization import ZScaleInterval
+from astropy.visualization import ZScaleInterval, ImageNormalize, SqrtStretch
 
 from matplotlib.patches import Circle, Ellipse, Rectangle
 from matplotlib.colors import LogNorm
@@ -156,7 +156,8 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
                         magerr_list=None, sn_list=None,
                         forced_mag_list=None, forced_magerr_list=None,
                         forced_sn_list=None, scalebar=5 * u.arcsecond,
-                        n_sigma=3, color_map_name='viridis'):
+                        n_sigma=3, color_map_name='viridis',
+                        color_scale='sigma_clip'):
     """ Create axes components to plot one source in all specified surveys
     and bands.
 
@@ -254,7 +255,8 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
                                   sb_borderpad=0.4,
                                   corner='lower right', frameon=False,
                                   low_lim=None,
-                                  upp_lim=None, logscale=False)
+                                  upp_lim=None, logscale=False,
+                                  color_scale=color_scale)
 
         axs.get_xaxis().set_visible(False)
         axs.get_yaxis().set_visible(False)
@@ -316,6 +318,112 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
         fig.gca().set_title(survey + " " + band)
 
     return fig
+
+
+def _normalize_channel(data, n_sigma=3):
+    """ Normalize a single image channel to [0, 1] using sigma-clipped
+    statistics, for use as one channel of an RGB composite.
+
+    :param data: 2D image data array.
+    :type data: numpy.ndarray
+    :param n_sigma: Number of sigma used to set the upper display limit
+     around the sigma-clipped median.
+    :type n_sigma: int
+    :return: Normalized data array, clipped to [0, 1].
+    :rtype: numpy.ndarray
+    """
+
+    finite = np.isfinite(data) & (data != 0.0)
+
+    if not np.any(finite):
+        return np.zeros_like(data, dtype=float)
+
+    mean, median, sigma = stats.sigma_clipped_stats(
+        data, mask=np.logical_not(finite), sigma=3.0, cenfunc='median',
+        stdfunc=utils.nan_mad_std, maxiters=10)
+
+    low_lim = median - n_sigma * sigma
+    upp_lim = median + n_sigma * sigma
+
+    if upp_lim <= low_lim:
+        return np.zeros_like(data, dtype=float)
+
+    norm = (data - low_lim) / (upp_lim - low_lim)
+
+    return np.clip(norm, 0, 1)
+
+
+def _make_rgb_axes(fig, subplot, ra, dec, survey, r_band, g_band, b_band,
+                   fov, image_dir, n_sigma=3):
+    """ Create an RGB composite cutout panel from three bands of the same
+    survey and add it to the given figure subplot.
+
+    :param fig: matplotlib.figure
+        Figure to add the RGB panel to.
+    :param subplot: int
+        The subplot position code (e.g. 166), matching the convention used
+        by _make_mult_png_axes.
+    :param ra: float
+        Right Ascension of the target.
+    :param dec: float
+        Declination of the target.
+    :param survey: string
+        Survey name the three bands are drawn from.
+    :param r_band: string
+        Band used for the red channel.
+    :param g_band: string
+        Band used for the green channel.
+    :param b_band: string
+        Band used for the blue channel.
+    :param fov: float
+        Field of view of the cutout in arcseconds.
+    :param image_dir: string
+        Path to the directory where the survey images are stored.
+    :param n_sigma: int
+        Number of sigma used for the per-channel display stretch.
+    :return: The matplotlib axis the RGB panel was plotted on, or None if
+     any of the three bands could not be opened.
+    :rtype: matplotlib.axes._subplots.AxesSubplot or None
+    """
+
+    channels = []
+    img_wcs = None
+
+    for band in (r_band, g_band, b_band):
+        image = SurveyImage(ra, dec, survey, band, image_dir, min_fov=fov,
+                            instantiate_empty=True)
+
+        if image.data is None or image.header is None:
+            msgs.warn('RGB panel skipped: {} {}-band image not '
+                      'available.'.format(survey, band))
+            return None
+
+        cutout = image.get_cutout_image(ra, dec, fov)
+
+        if cutout is None:
+            msgs.warn('RGB panel skipped: {} {}-band cutout could not be '
+                      'generated.'.format(survey, band))
+            return None
+
+        if img_wcs is None:
+            img_wcs = WCS(cutout.header)
+
+        channels.append(_normalize_channel(cutout.data, n_sigma=n_sigma))
+
+    if len(set(ch.shape for ch in channels)) > 1:
+        msgs.warn('RGB panel skipped: {} {}/{}/{} cutouts have mismatched '
+                  'shapes.'.format(survey, r_band, g_band, b_band))
+        return None
+
+    rgb = np.dstack(channels)
+
+    axs = fig.add_subplot(subplot, projection=img_wcs)
+    axs.imshow(rgb, origin='lower')
+    axs.get_xaxis().set_visible(False)
+    axs.get_yaxis().set_visible(False)
+    axs.set_title('{} RGB ({}/{}/{})'.format(survey, r_band, g_band, b_band))
+
+    return axs
 
 
 class Image(object):
@@ -502,9 +610,12 @@ class Image(object):
         :param logscale: A boolean to indicate whether to use a log scale
         for the color scale.
         :type logscale: bool
-        :param color_scale: The color scale option to use for the image. The
-         default option is 'zscale'. The alternative option is 'sigma_clip',
-         which uses the n_sigma parameter to determine the color scale limits.
+        :param color_scale: The color scale option to use for the image.
+         'zscale' normalizes the data with a sqrt stretch using
+         astropy.visualization.ImageNormalize(stretch=SqrtStretch(),
+         interval=ZScaleInterval(contrast=0.5)). 'sigma_clip' (default)
+         uses the n_sigma parameter to determine linear vmin/vmax color
+         scale limits from sigma-clipped statistics.
         :type color_scale: str
         :return: matplotlib axis
         :rtype: matplotlib.axes._subplots.AxesSubplot
@@ -524,14 +635,17 @@ class Image(object):
             msgs.error('Neither figure and subplot tuple or figure axis '
                        'provided.')
 
+        norm = None
+
         if isinstance(upp_lim, float) and isinstance(low_lim, float):
             msgs.info('Using user defined color scale limits.')
         else:
 
             if color_scale == 'zscale':
-                msgs.info('Determining color scale limits by zscale.')
-                zscale = ZScaleInterval()
-                low_lim, upp_lim = zscale.get_limits(self.data)
+                msgs.info('Determining color scale limits by zscale '
+                          '(sqrt stretch).')
+                norm = ImageNormalize(self.data, stretch=SqrtStretch(),
+                                      interval=ZScaleInterval(contrast=0.5))
             elif color_scale == 'sigma_clip':
                 msgs.info('Determining color scale limits by sigma clipping.')
 
@@ -556,6 +670,11 @@ class Image(object):
             axs.imshow(mod_img_data, origin='lower',
                        cmap=color_map,
                        norm=LogNorm()
+                       )
+        elif norm is not None:
+            axs.imshow(self.data, origin='lower',
+                       norm=norm,
+                       cmap=color_map,
                        )
         else:
             axs.imshow(self.data, origin='lower',

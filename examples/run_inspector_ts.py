@@ -1,40 +1,68 @@
-import pandas as pd
-from wildhunt import inspector_ts
 import argparse
+import glob
+import os
 
+import numpy as np
+import pandas as pd
+import yaml
+
+from wildhunt import inspector_ts
+from wildhunt.utils import coord_to_name
+
+
+def relink_to_expected_names(df, ra_col, dec_col, cutout_dir, surveys, bands):
+    """Symlink cutout files named after 'euclid_designation' to the name
+    coord_to_name() derives from ra/dec, since the two naming conventions
+    disagree on the number of decimal digits used for the Dec arcseconds.
+    """
+    for _, row in df.iterrows():
+        real_name = row['euclid_designation']
+        expected_name = coord_to_name(np.array([row[ra_col]]),
+                                      np.array([row[dec_col]]), epoch='J')[0]
+        if expected_name == real_name:
+            continue
+        for survey, band in zip(surveys, bands):
+            pattern = os.path.join(cutout_dir,
+                                   f"{real_name}_{survey}_{band}*fov*.fits")
+            for f in glob.glob(pattern):
+                suffix = os.path.basename(f)[len(real_name):]
+                new_path = os.path.join(cutout_dir, expected_name + suffix)
+                if not os.path.exists(new_path):
+                    os.symlink(os.path.abspath(f), new_path)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--df_path', type=str, default='./data/Euclid_northern_sources.csv')
-    parser.add_argument('--ra', type=str, default='ra_J')
-    parser.add_argument('--dec', type=str, default='dec_J')
-    parser.add_argument('--fov', type=int, default=4)
-    parser.add_argument('--cutout_path', type=str, default='/hs/babbage/data/group-schindler/ts/data/Euclid/cutout/sedm.mosaic_product/candidates/') # change cutout_path to the path you located
-    parser.add_argument('--surveys', type=list, default=['Euclid', 'Euclid', 'Euclid', 'Euclid', 'Euclid'])
-    parser.add_argument('--bands', type=list, default=['I', 'Z', 'Y', 'J', 'H'])
-    parser.add_argument('--visual_classes', default={"VIS detection": ["no vis", "weak vis", "strong vis"], "Morphology": ["psf", "extended"], "Double source": ["only VIS", "VIS and NISP", "center + edge"], "Artifact": ["edge", "diffraction spike", "hot pixel", "masked", "other"]})
-    parser.add_argument('--verbosity', type=int, choices=[0,1,2], default=2)
-    parser.add_argument('--euclid', type=bool, choices=[True, False], default=True)
-    parser.add_argument('--saved_csv', type=str, default='Euclid_checked_candidates.csv')
-    
+    parser.add_argument('--config', type=str, default='./configs/Euclid_dr1_north.yaml',
+                         help='Path to the YAML config file with the inspector settings')
     args = parser.parse_args()
 
-    my_candidate_df = pd.read_csv(args.df_path, dtype={"oid": str})
-    
-    my_ra_column_name = args.ra
-    my_dec_column_name = args.dec
+    with open(args.config, 'r') as f:
+        cfg = yaml.safe_load(f)
 
-    fov = args.fov
+    my_candidate_df = pd.read_csv(cfg['df_path'], dtype={"oid": str})
 
-    my_cutout_dir = args.cutout_path
+    my_ra_column_name = cfg['ra']
+    my_dec_column_name = cfg['dec']
 
-    surveys = args.surveys
-    bands = args.bands
+    fov = cfg['fov']
 
-    visual_classes = args.visual_classes
+    my_cutout_dir = cfg['cutout_path']
 
-    verbosity = args.verbosity
+    surveys = cfg['surveys']
+    bands = cfg['bands']
+
+    visual_classes = cfg['visual_classes']
+
+    verbosity = cfg['verbosity']
+
+    if cfg['euclid'] and 'euclid_designation' in my_candidate_df.columns:
+        relink_to_expected_names(my_candidate_df, my_ra_column_name,
+                                 my_dec_column_name, my_cutout_dir,
+                                 surveys, bands)
+
+    rgb_bands = cfg.get('rgb_bands')
+    rgb_survey = cfg.get('rgb_survey')
 
     inspector_ts.run(my_candidate_df, my_cutout_dir, my_ra_column_name,
                   my_dec_column_name, surveys, bands,
@@ -43,4 +71,5 @@ if __name__ == '__main__':
                   # add_info_list=add_info_list,
                   minimum_fov=fov,
                   visual_classes=visual_classes, verbosity=verbosity,
-                  euclid=args.euclid, saved_csv=args.saved_csv)
+                  euclid=cfg['euclid'], saved_csv=cfg['saved_csv'],
+                  rgb_bands=rgb_bands, rgb_survey=rgb_survey)

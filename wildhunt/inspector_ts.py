@@ -1,4 +1,5 @@
 
+import ast
 import sys
 import gc
 import os
@@ -44,7 +45,7 @@ default_apertures = {'desdr1': 2.0,
                      'PS1': 2.0,
                      'skymapper': 2.0,
                      'vlass': 2.0,
-                     'Euclid': 1.0,
+                     'Euclid': 0.9,
                      'HSC': 1.0,
                      'JWST': 1.0  # Placeholder for now
                      }
@@ -75,15 +76,19 @@ class CutoutViewCanvas(FigureCanvas):
             A dictionary containing the input data for plotting
         """
 
-        self.n_col = in_dict['n_col']
+        n_col_bands = in_dict['n_col']
+        rgb_bands = in_dict.get('rgb_bands')
+
+        self.n_col = n_col_bands + 1 if rgb_bands else n_col_bands
 
         n_images = len(in_dict['surveys'])
 
-        self.n_row = int(math.ceil(n_images / self.n_col))
+        self.n_row = int(math.ceil(n_images / n_col_bands))
 
         self.fig = plt.figure(figsize=(5 * self.n_col, 5 * self.n_row),
                               dpi=80)
-        self.fig.subplots_adjust(hspace=0.4, wspace=0.5)
+        self.fig.subplots_adjust(left=0.02, right=0.98, top=0.94, bottom=0.03,
+                                 hspace=0.15, wspace=0.25)
 
         FigureCanvas.__init__(self, self.fig)
         self.setParent(parent)
@@ -118,6 +123,7 @@ class CutoutViewCanvas(FigureCanvas):
         image_path = in_dict['image_path']
         verbosity = in_dict['verbosity']
         color_map_name = in_dict['color_map_name']
+        color_scale = in_dict.get('color_scale', 'sigma_clip')
         n_sigma = in_dict['n_sigma']
 
 
@@ -153,8 +159,19 @@ class CutoutViewCanvas(FigureCanvas):
                                            n_sigma=n_sigma,
                                            scalebar=None,
                                            color_map_name=color_map_name,
+                                           color_scale=color_scale,
                                            # show_axes=False
                                           )
+
+        rgb_bands = in_dict.get('rgb_bands')
+        if rgb_bands:
+            rgb_survey = in_dict.get('rgb_survey') or surveys[0]
+            rgb_subplot = int('{}{}{}'.format(self.n_row, self.n_col,
+                                              len(bands) + 1))
+            r_band, g_band, b_band = rgb_bands
+            it._make_rgb_axes(self.fig, rgb_subplot, ra, dec, rgb_survey,
+                              r_band, g_band, b_band, fovs[0], image_path,
+                              n_sigma=n_sigma)
 
         axes = self.fig.get_axes()
         for i, ax in enumerate(axes[:len(bands)]):
@@ -191,7 +208,7 @@ class ImageViewGUI(QMainWindow):
                  auto_download=False, auto_forced_phot=False,
                  minimum_fov=60,
                  visual_classes=None, add_info_list=None, verbosity=0, euclid=False,
-                 saved_csv=None):
+                 saved_csv=None, rgb_bands=None, rgb_survey=None):
 
         QtWidgets.QMainWindow.__init__(self)
 
@@ -240,6 +257,8 @@ class ImageViewGUI(QMainWindow):
         self.dec_column_name = dec_column_name
         self.surveys = surveys
         self.bands = bands
+        self.rgb_bands = rgb_bands
+        self.rgb_survey = rgb_survey or (surveys[0] if surveys else None)
         self.psf_size = psf_size
         self.apertures = apertures
         self.mag_column_names = mag_column_names
@@ -281,7 +300,8 @@ class ImageViewGUI(QMainWindow):
         # Set up internal interactive defaults
         self.n_col = len(bands)
         self.verbosity = verbosity
-        self.color_map_name = 'viridis'
+        self.color_map_name = 'gray'
+        self.color_scale = 'zscale'
         self.n_sigma = 3
 
         # Setup non-input class variables
@@ -365,6 +385,14 @@ class ImageViewGUI(QMainWindow):
             msgs.warn('Color map name {} is not recognized by '
                       'matplotlib'.format(new_color_map_name))
 
+        new_color_scale = self.colorscale_le.text().strip()
+
+        if new_color_scale in ('sigma_clip', 'zscale'):
+            self.color_scale = new_color_scale
+        else:
+            msgs.warn('Color scale "{}" not recognized. Use "sigma_clip" '
+                      'or "zscale".'.format(new_color_scale))
+
         self.update_plot()
 
         self.update_info_box()
@@ -429,6 +457,7 @@ class ImageViewGUI(QMainWindow):
                                  'n_col': self.n_col,
                                  'verbosity': self.verbosity,
                                  'color_map_name': self.color_map_name,
+                                 'color_scale': self.color_scale,
                                  'n_sigma': self.n_sigma,
                                  'mag_list': self.mag_list,
                                  'magerr_list': self.magerr_list,
@@ -437,7 +466,9 @@ class ImageViewGUI(QMainWindow):
                                  'f_magerr_list': self.f_magerr_list,
                                  'f_sn_list': self.f_sn_list,
                                  'flux_list': self.flux_list,
-                                 'fluxerr_list': self.fluxerr_list}
+                                 'fluxerr_list': self.fluxerr_list,
+                                 'rgb_bands': self.rgb_bands,
+                                 'rgb_survey': self.rgb_survey}
 
 
     def goto_cutout(self):
@@ -449,6 +480,7 @@ class ImageViewGUI(QMainWindow):
         if new_candidate_number <= self.len_df-1 and new_candidate_number >= 0:
           self.candidate_number = new_candidate_number
 
+          self.comment_class_le.clear()
           self.update()
           # self.canvas.plot(self.cutout_plot_dict)
 
@@ -463,6 +495,7 @@ class ImageViewGUI(QMainWindow):
 
           self.candidate_number += 1
 
+          self.comment_class_le.clear()
           self.update()
           # self.canvas.plot(self.cutout_plot_dict)
         else:
@@ -477,6 +510,7 @@ class ImageViewGUI(QMainWindow):
 
           self.candidate_number -= 1
 
+          self.comment_class_le.clear()
           self.update()
           # self.canvas.plot(self.cutout_plot_dict)
         else:
@@ -486,19 +520,13 @@ class ImageViewGUI(QMainWindow):
         new_class = str(self.manual_class_le.text()).strip()
         if not new_class:
             return
-    
-        selected_classes = self.get_selected_classes()
-        current_classes = self.get_current_vis_id_classes()
-        checkbox_classes = self.get_all_checkbox_classes()
-        manual_classes = [c for c in current_classes if c not in checkbox_classes]
-    
-        if new_class not in manual_classes and new_class not in selected_classes:
+
+        manual_classes = self.get_manual_classes()
+        if new_class not in manual_classes:
             manual_classes.append(new_class)
-    
-        combined = selected_classes + [c for c in manual_classes if c not in selected_classes]
-    
-        self.set_current_vis_id(combined)
-    
+
+        self.set_current_vis_dict(self.get_checkbox_vis_dict(), manual_classes)
+
         if self.verbosity > 1:
             print("Added manual class:", new_class)
             print("Current vis_id:", self.df.loc[self.df.index[self.candidate_number], 'vis_id'])
@@ -532,14 +560,8 @@ class ImageViewGUI(QMainWindow):
         self.next_cutout()
 
     def commit_checkbox_state(self):
-        selected_classes = self.get_selected_classes()
-        current_classes = self.get_current_vis_id_classes()
-        checkbox_classes = self.get_all_checkbox_classes()
-    
-        manual_classes = [c for c in current_classes if c not in checkbox_classes]
-        combined = selected_classes + [c for c in manual_classes if c not in selected_classes]
-    
-        self.set_current_vis_id(combined)
+        self.set_current_vis_dict(self.get_checkbox_vis_dict(),
+                                  self.get_manual_classes())
 
 
     def save_data_file(self):
@@ -570,31 +592,20 @@ class ImageViewGUI(QMainWindow):
             self.candidate_number, self.len_df))
         self.coord_name_lbl = QLabel(coord_name[0])
 
-        vis_class = str(self.df.loc[idx, 'vis_id'])
-        self.visual_classification_label = QLabel('Visual classification: {'
-                                                  '}'.format(vis_class))
-
         vis_comment = str(self.df.loc[idx, 'vis_comment'])
         self.visual_comment_label = QLabel('Comment: {'
                                                   '}'.format(vis_comment))
 
         info_list = [self.target_lbl, self.coord_name_lbl,
-                  self.visual_classification_label,
                   self.visual_comment_label]
 
         if self.euclid:
             oid = self.df.loc[idx, 'oid']
             self.oid_lbl = QLabel('oid: {}'.format(oid))
             info_list.append(self.oid_lbl)
-            proba = self.df.loc[idx, 'proba']
-            self.proba_lbl = QLabel('xgboost proba: {:.4f}'.format(proba))
-            info_list.append(self.proba_lbl)
-            mag_J = self.df.loc[idx, 'mag_J']
-            self.mag_J_lbl = QLabel('mag_J: {:.3f}'.format(mag_J))
-            info_list.append(self.mag_J_lbl)
-            IoJ = self.df.loc[idx, 'IoJ']
-            self.IoJ_lbl = QLabel('IoJ: {:.3f}'.format(IoJ))
-            info_list.append(self.IoJ_lbl)
+            mag_H = self.df.loc[idx, 'mag_H']
+            self.mag_H_lbl = QLabel('mag_H: {:.3f}'.format(mag_H))
+            info_list.append(self.mag_H_lbl)
 
         for w in info_list:
 
@@ -648,39 +659,30 @@ class ImageViewGUI(QMainWindow):
             self.candidate_number, self.len_df))
         self.coord_name_lbl.setText(coord_name[0])
 
-        vis_class = str(self.df.loc[idx, 'vis_id'])
-        self.visual_classification_label.setText(
-            'Visual classification: {}'.format(vis_class)
-        )
-
         vis_comment = str(self.df.loc[idx, 'vis_comment'])
         self.visual_comment_label.setText(
             'Comment: {}'.format(vis_comment)
         )
 
-        # Restore checkbox states from vis_id
+        # Restore checkbox states from vis_id, matched per category so
+        # that identical option labels in different groups (e.g. the
+        # 'yes'/'no' options shared by 'Affects photometry' and
+        # 'Compactness') don't leak into each other.
         if hasattr(self, 'checkbox_dict'):
-            if pd.isna(self.df.loc[idx, 'vis_id']):
-                selected_classes = []
-            else:
-                selected_classes = [
-                    c.strip() for c in str(self.df.loc[idx, 'vis_id']).split(',')
-                    if c.strip()
-                ]
+            vis_dict = self.get_current_vis_dict()
 
             for parent, checkboxes in self.checkbox_dict.items():
+                selected = [c.strip() for c in
+                           vis_dict.get(parent, '').split(",") if c.strip()]
                 for checkbox in checkboxes:
-                    checkbox.setChecked(checkbox.text() in selected_classes)
+                    self.set_button_checked(checkbox,
+                                            checkbox.text() in selected)
 
         if self.euclid:
             oid = self.df.loc[idx, 'oid']
             self.oid_lbl.setText('oid: {}'.format(oid))
-            proba = self.df.loc[idx, 'proba']
-            self.proba_lbl.setText('xgboost proba: {:.3f}'.format(proba))
-            mag_J = self.df.loc[idx, 'mag_J']
-            self.mag_J_lbl.setText('mag_J: {:.1f}'.format(mag_J))
-            IoJ = self.df.loc[idx, 'IoJ']
-            self.IoJ_lbl.setText('IoJ: {:.3f}'.format(IoJ))
+            mag_H = self.df.loc[idx, 'mag_H']
+            self.mag_H_lbl.setText('mag_H: {:.1f}'.format(mag_H))
             
 
         if self.add_info_list is not None:
@@ -704,13 +706,34 @@ class ImageViewGUI(QMainWindow):
                 )
 
 
-    def get_selected_classes(self):
-        selected = []
+    def get_checkbox_vis_dict(self):
+        """ Read the currently checked/selected widgets into a
+        {category: comma-separated labels} dict.
+        """
+        vis_dict = {}
         for parent, checkboxes in self.checkbox_dict.items():
-            for checkbox in checkboxes:
-                if checkbox.isChecked():
-                    selected.append(checkbox.text())
-        return selected
+            selected = [c.text() for c in checkboxes if c.isChecked()]
+            if selected:
+                vis_dict[parent] = ",".join(selected)
+        return vis_dict
+
+    def set_button_checked(self, widget, state):
+        """ Set a checkbox/radio button's checked state.
+
+        QRadioButton refuses to go to "none checked" via a plain
+        setChecked(False) call on the currently checked button in an
+        auto-exclusive group (Qt keeps at least one radio button checked
+        once one has been set). Temporarily disabling autoExclusive
+        works around this so classifications actually reset when moving
+        to a candidate with no stored selection for that category.
+        """
+        if isinstance(widget, QRadioButton) and not state:
+            was_exclusive = widget.autoExclusive()
+            widget.setAutoExclusive(False)
+            widget.setChecked(False)
+            widget.setAutoExclusive(was_exclusive)
+        else:
+            widget.setChecked(state)
 
 
     def create_main_frame(self):
@@ -734,6 +757,11 @@ class ImageViewGUI(QMainWindow):
         self.nsigma_input.setMaxLength(3)
         self.nsigma_input.returnPressed.connect(self.update)
 
+        self.colorscale_lbl = QLabel("Color scale (sigma_clip/zscale):")
+        self.colorscale_le = QLineEdit(self.color_scale)
+        self.colorscale_le.setMaxLength(15)
+        self.colorscale_le.returnPressed.connect(self.update)
+
         self.output_lbl = QLabel("Output filename:")
         self.output_le = QLineEdit(self.output_filename)
         
@@ -748,16 +776,54 @@ class ImageViewGUI(QMainWindow):
 
         # Create the classification buttons
         class_group_layout = QVBoxLayout()
-        for parent, subclasses in self.vis_classes.items():
+        group_boxes = {}
+        for parent, spec in self.vis_classes.items():
+            if isinstance(spec, dict):
+                subclasses = spec.get('options', [])
+                exclusive = spec.get('exclusive', False)
+            else:
+                subclasses = spec
+                exclusive = False
+
             group_box = QGroupBox(parent)
             row_layout = QHBoxLayout()
             self.checkbox_dict[parent] = []
+            extended_widget = None
             for subclass in subclasses:
-                checkbox = QCheckBox(subclass)
-                row_layout.addWidget(checkbox)
-                self.checkbox_dict[parent].append(checkbox)
+                widget = QRadioButton(subclass) if exclusive else QCheckBox(subclass)
+                row_layout.addWidget(widget)
+                self.checkbox_dict[parent].append(widget)
+                if parent == 'Photometry' and subclass == 'extended':
+                    extended_widget = widget
+
+            # 'diffused' is an optional sub-selection of Photometry, only
+            # relevant (and shown) when 'extended' is selected.
+            if extended_widget is not None:
+                diffused_checkbox = QCheckBox('diffused')
+                diffused_checkbox.setVisible(False)
+                row_layout.addWidget(diffused_checkbox)
+                self.checkbox_dict[parent].append(diffused_checkbox)
+
+                def _on_extended_toggled(checked, cb=diffused_checkbox):
+                    cb.setVisible(checked)
+                    if not checked:
+                        cb.setChecked(False)
+
+                extended_widget.toggled.connect(_on_extended_toggled)
+
             row_layout.addStretch()
             group_box.setLayout(row_layout)
+            group_boxes[parent] = group_box
+
+        # Show 'Artifact' and 'Affects photometry' side by side as two
+        # columns of the same row, if both are present.
+        if 'Artifact' in group_boxes and 'Affects photometry' in group_boxes:
+            artifact_row = QHBoxLayout()
+            artifact_row.addWidget(group_boxes.pop('Artifact'))
+            artifact_row.addWidget(group_boxes.pop('Affects photometry'))
+            class_group_layout.addLayout(artifact_row)
+
+        for group_box in group_boxes.values():
             class_group_layout.addWidget(group_box)
 
         self.save_checkbox_button = QPushButton("Save classification")
@@ -808,7 +874,8 @@ class ImageViewGUI(QMainWindow):
 
         for w in [self.clipsize_lbl, self.clipsize_input,
                   self.cmap_lbl, self.cmap_le, self.nsigma_lbl,
-                  self.nsigma_input]:
+                  self.nsigma_input, self.colorscale_lbl,
+                  self.colorscale_le]:
             hbox2.addWidget(w)
             hbox2.setAlignment(w, Qt.AlignVCenter)
 
@@ -918,26 +985,61 @@ class ImageViewGUI(QMainWindow):
         """
         QMessageBox.about(self, "About", msg.strip())
 
-    def set_current_vis_id(self, classes):
+    def set_current_vis_dict(self, checkbox_vis_dict, manual_classes=None):
+        """ Store the current classification as a {category: value} dict
+        in the 'vis_id' column, e.g.
+        "{'Artifact': 'hot pixel', 'Compactness': 'yes'}".
+
+        Uses Python's dict repr (single quotes) rather than JSON, so the
+        field has no embedded double quotes for the CSV writer to escape
+        by doubling.
+
+        :param checkbox_vis_dict: {category: comma-separated labels} for
+         the checkbox/radio-button groups, as returned by
+         get_checkbox_vis_dict().
+        :param manual_classes: List of freeform manual classes, stored
+         under the 'Manual' key.
+        """
         row_idx = self.df.index[self.candidate_number]
 
-        if classes is None:
-            value = ""
-        elif isinstance(classes, str):
-            value = classes.strip()
-        else:
-            # assume iterable of labels
-            cleaned = [str(c).strip() for c in classes if str(c).strip()]
-            value = ",".join(cleaned)
+        vis_dict = dict(checkbox_vis_dict)
+        if manual_classes:
+            vis_dict['Manual'] = ",".join(manual_classes)
+
+        value = str(vis_dict) if vis_dict else ""
 
         self.df.loc[row_idx, 'vis_id'] = value
 
-    def get_current_vis_id_classes(self):
+    def get_current_vis_dict(self):
+        row_idx = self.df.index[self.candidate_number]
+        current = self.df.loc[row_idx, 'vis_id']
+        if pd.isna(current) or str(current).strip() == "":
+            return {}
+
+        try:
+            vis_dict = ast.literal_eval(current)
+            return vis_dict if isinstance(vis_dict, dict) else {}
+        except (ValueError, SyntaxError):
+            return {}
+
+    def get_manual_classes(self):
+        vis_dict = self.get_current_vis_dict()
+
+        if vis_dict:
+            manual = vis_dict.get('Manual', '')
+            return [c.strip() for c in manual.split(",") if c.strip()]
+
+        # Backward compatibility with the old flat comma-separated
+        # 'vis_id' format used before per-category classification: treat
+        # any label not matching a known checkbox/radio option as manual.
         row_idx = self.df.index[self.candidate_number]
         current = self.df.loc[row_idx, 'vis_id']
         if pd.isna(current) or str(current).strip() == "":
             return []
-        return [c.strip() for c in str(current).split(",") if c.strip()]
+
+        checkbox_classes = self.get_all_checkbox_classes()
+        return [c.strip() for c in str(current).split(",")
+               if c.strip() and c.strip() not in checkbox_classes]
 
     def get_all_checkbox_classes(self):
         all_classes = set()
@@ -1039,7 +1141,8 @@ def run(catalog, image_path, ra_column_name,
                  sn_column_names=None, forced_mag_column_names=None,
                  forced_magerr_column_names=None, forced_sn_column_names=None,
                  auto_download= False, auto_forced_phot=False,
-                 visual_classes=None, add_info_list=None, verbosity=0, euclid=False, saved_csv=None):
+                 visual_classes=None, add_info_list=None, verbosity=0, euclid=False, saved_csv=None,
+                 rgb_bands=None, rgb_survey=None):
 
     app = QApplication(sys.argv)
 
@@ -1058,8 +1161,10 @@ def run(catalog, image_path, ra_column_name,
                         add_info_list=add_info_list,
                         visual_classes=visual_classes,
                         verbosity=verbosity,
-                        euclid=euclid, 
-                        saved_csv=saved_csv)
+                        euclid=euclid,
+                        saved_csv=saved_csv,
+                        rgb_bands=rgb_bands,
+                        rgb_survey=rgb_survey)
 
     form.show()
 

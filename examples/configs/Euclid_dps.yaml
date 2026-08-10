@@ -1,0 +1,15 @@
+df_path: ./data/Euclid_northern_sources.csv
+ra: ra_J
+dec: dec_J
+fov: 4
+cutout_path: /hs/babbage/data/group-schindler/ts/data/Euclid/cutout/sedm.mosaic_product/candidates/  # change cutout_path to the path you located
+surveys: [Euclid, Euclid, Euclid, Euclid, Euclid]
+bands: [I, Z, Y, J, H]
+visual_classes:
+  VIS detection: [no vis, weak vis, strong vis]
+  Morphology: [psf, extended]
+  Double source: [only VIS, VIS and NISP, "center + edge"]
+  Artifact: [edge, diffraction spike, hot pixel, masked, other]
+verbosity: 2
+euclid: true
+saved_csv: Euclid_checked_candidates.csv
