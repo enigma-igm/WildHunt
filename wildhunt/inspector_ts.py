@@ -217,17 +217,22 @@ class ImageViewGUI(QMainWindow):
         self.df = catalog.copy()
 
         # Check if visual identification (vis_id) column exists, otherwise
-        # create a new one.
+        # create a new one. Forced to object dtype since an all-NaN (or
+        # all-empty) column would otherwise infer as float64, and newer
+        # pandas raises a TypeError when a string is later assigned into
+        # a float64 column instead of silently upcasting it.
         try:
             self.df['vis_id'] = self.df.vis_id.values
         except:
             self.df['vis_id'] = np.nan
+        self.df['vis_id'] = self.df['vis_id'].astype(object)
 
         # Check if vis_comment column exists, otherwise create one.
         try:
             self.df['vis_comment'] = self.df.vis_comment.values
         except:
             self.df['vis_comment'] = np.nan
+        self.df['vis_comment'] = self.df['vis_comment'].astype(object)
 
         self.output_filename = saved_csv if saved_csv else f'{surveys[0]}_checked_candidates.csv'
         if saved_csv is not None and os.path.exists(saved_csv):

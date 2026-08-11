@@ -31,16 +31,29 @@ def relink_to_expected_names(df, ra_col, dec_col, cutout_dir, surveys, bands):
                     os.symlink(os.path.abspath(f), new_path)
 
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='./configs/Euclid_dr1_north.yaml',
-                         help='Path to the YAML config file with the inspector settings')
+    parser.add_argument('--config',
+                        type=str,
+                        default=os.path.join(SCRIPT_DIR, 'configs',
+                                             'Euclid_dr1_north.yaml'),
+                        help='Path to the YAML config file with the inspector settings')
     args = parser.parse_args()
 
     with open(args.config, 'r') as f:
         cfg = yaml.safe_load(f)
 
-    my_candidate_df = pd.read_csv(cfg['df_path'], dtype={"oid": str})
+    # Relative paths inside the config (e.g. './data/...') are written
+    # relative to this script's directory (examples/), not the current
+    # working directory, so the tool runs the same regardless of where
+    # it's invoked from.
+    def resolve(path):
+        return path if os.path.isabs(path) else os.path.join(SCRIPT_DIR, path)
+
+    my_candidate_df = pd.read_csv(resolve(cfg['df_path']), dtype={"oid": str})
 
     my_ra_column_name = cfg['ra']
     my_dec_column_name = cfg['dec']
@@ -55,6 +68,8 @@ if __name__ == '__main__':
     visual_classes = cfg['visual_classes']
 
     verbosity = cfg['verbosity']
+
+    saved_csv = resolve(cfg['saved_csv']) if cfg.get('saved_csv') else cfg.get('saved_csv')
 
     if cfg['euclid'] and 'euclid_designation' in my_candidate_df.columns:
         relink_to_expected_names(my_candidate_df, my_ra_column_name,
@@ -71,5 +86,5 @@ if __name__ == '__main__':
                   # add_info_list=add_info_list,
                   minimum_fov=fov,
                   visual_classes=visual_classes, verbosity=verbosity,
-                  euclid=cfg['euclid'], saved_csv=cfg['saved_csv'],
+                  euclid=cfg['euclid'], saved_csv=saved_csv,
                   rgb_bands=rgb_bands, rgb_survey=rgb_survey)
