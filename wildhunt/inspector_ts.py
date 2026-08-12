@@ -354,6 +354,11 @@ class ImageViewGUI(QMainWindow):
         self.create_main_frame()
         self.create_status_bar()
 
+        # Apply per-category default selections (e.g. Photometry='single')
+        # to the first candidate, since checkbox_dict didn't exist yet
+        # when create_info_box() ran above.
+        self.update_info_box()
+
         self.setCentralWidget(self.main_widget)
 
         # TODO Implement a Finding Chart window
@@ -679,6 +684,8 @@ class ImageViewGUI(QMainWindow):
             for parent, checkboxes in self.checkbox_dict.items():
                 selected = [c.strip() for c in
                            vis_dict.get(parent, '').split(",") if c.strip()]
+                if not selected and parent in self.category_defaults:
+                    selected = [self.category_defaults[parent]]
                 for checkbox in checkboxes:
                     self.set_button_checked(checkbox,
                                             checkbox.text() in selected)
@@ -769,8 +776,6 @@ class ImageViewGUI(QMainWindow):
 
         self.output_lbl = QLabel("Output filename:")
         self.output_le = QLineEdit(self.output_filename)
-        
-        self.output_le.setMaxLength(40)
 
         self.goto_le = QLineEdit('1')
         self.goto_le.setMaxLength(4)
@@ -778,6 +783,7 @@ class ImageViewGUI(QMainWindow):
         self.save_file_button = QPushButton("Save data file")
         self.save_file_button.clicked.connect(self.save_data_file)
         self.checkbox_dict = {}
+        self.category_defaults = {}
 
         # Create the classification buttons
         class_group_layout = QVBoxLayout()
@@ -786,9 +792,14 @@ class ImageViewGUI(QMainWindow):
             if isinstance(spec, dict):
                 subclasses = spec.get('options', [])
                 exclusive = spec.get('exclusive', False)
+                default = spec.get('default')
             else:
                 subclasses = spec
                 exclusive = False
+                default = None
+
+            if default is not None:
+                self.category_defaults[parent] = default
 
             group_box = QGroupBox(parent)
             row_layout = QHBoxLayout()

@@ -11,14 +11,17 @@ visual_classes:
     options: ["yes", "no"]
     exclusive: true
   Photometry:
-    options: [offset single, companions, offset multiple, extended]
+    options: [single, offset single, companions, offset multiple, extended]
     exclusive: true
+    default: single
   Compactness:
     options: ["yes", "no"]
     exclusive: true
+    default: "yes"
   VIS detection:
     options: [no vis, weak vis, strong vis]
     exclusive: true
+    default: no vis
 verbosity: 2
 euclid: true
 saved_csv: Euclid_checked_dr1_north.csv
