@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import *
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from astropy.visualization.wcsaxes import WCSAxes
 
 from wildhunt import utils
 from wildhunt import pypmsgs
@@ -188,6 +189,10 @@ class CutoutViewCanvas(FigureCanvas):
             ax.set_title(title, fontsize=10)
 
         for ax in self.fig.get_axes():
+            if not isinstance(ax, WCSAxes):
+                # Placeholder axes (e.g. "No cutout available") have no
+                # WCS projection and can't accept a sky-frame transform.
+                continue
             ax.plot(ra, dec, 'o', markerfacecolor='none', markeredgecolor='r', markersize=12, markeredgewidth=1, transform=ax.get_transform('icrs'))
 
         self.draw()

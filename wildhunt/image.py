@@ -242,6 +242,16 @@ def _make_mult_png_axes(fig, n_row, n_col, ra, dec, surveys, bands,
         image = SurveyImage(ra, dec, survey, band, image_dir, min_fov=fov)
 
         cutout = image.get_cutout_image(ra, dec, fov)
+
+        if cutout is None:
+            axs = fig.add_subplot(int(f"{n_row}{n_col}{idx + 1}"))
+            axs.text(0.5, 0.5, 'No cutout available', ha='center',
+                     va='center', transform=axs.transAxes)
+            axs.get_xaxis().set_visible(False)
+            axs.get_yaxis().set_visible(False)
+            axs.set_title(survey + " " + band)
+            continue
+
         img_wcs = WCS(cutout.header)
 
         axs = fig.add_subplot(int(f"{n_row}{n_col}{idx + 1}"),
@@ -613,7 +623,7 @@ class Image(object):
         :param color_scale: The color scale option to use for the image.
          'zscale' normalizes the data with a sqrt stretch using
          astropy.visualization.ImageNormalize(stretch=SqrtStretch(),
-         interval=ZScaleInterval(contrast=0.5)). 'sigma_clip' (default)
+         interval=ZScaleInterval(contrast=0.25)). 'sigma_clip' (default)
          uses the n_sigma parameter to determine linear vmin/vmax color
          scale limits from sigma-clipped statistics.
         :type color_scale: str
@@ -645,7 +655,7 @@ class Image(object):
                 msgs.info('Determining color scale limits by zscale '
                           '(sqrt stretch).')
                 norm = ImageNormalize(self.data, stretch=SqrtStretch(),
-                                      interval=ZScaleInterval(contrast=0.5))
+                                      interval=ZScaleInterval(contrast=0.25))
             elif color_scale == 'sigma_clip':
                 msgs.info('Determining color scale limits by sigma clipping.')
 
