@@ -27,8 +27,17 @@ def relink_to_expected_names(df, ra_col, dec_col, cutout_dir, surveys, bands):
             for f in glob.glob(pattern):
                 suffix = os.path.basename(f)[len(real_name):]
                 new_path = os.path.join(cutout_dir, expected_name + suffix)
-                if not os.path.exists(new_path):
-                    os.symlink(os.path.abspath(f), new_path)
+                target = os.path.abspath(f)
+                if os.path.islink(new_path):
+                    # A stale link from an earlier run (e.g. pointing at a
+                    # path prefix that is no longer mounted) reads as
+                    # non-existent to os.path.exists(); refresh it.
+                    if os.path.realpath(new_path) == target:
+                        continue
+                    os.unlink(new_path)
+                elif os.path.exists(new_path):
+                    continue
+                os.symlink(target, new_path)
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

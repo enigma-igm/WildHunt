@@ -2,7 +2,7 @@ df_path: ./data/Euclid_dr1_north_sources.csv
 ra: right_ascension
 dec: declination
 fov: 4
-cutout_path: /hs/babbage/data/group-schindler/ts/data/Euclid/cutout/dr1_north/  # change cutout_path to the path you located
+cutout_path: /data/group-schindler/ts/data/Euclid/cutout/dr1_north/  # change cutout_path to the path you located
 surveys: [Euclid, Euclid, Euclid, Euclid, Euclid]
 bands: [I, Z, Y, J, H]
 visual_classes:

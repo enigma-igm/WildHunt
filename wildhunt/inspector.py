@@ -1,6 +1,8 @@
 
 import sys
 import gc
+import os
+import pandas as pd
 import math
 import numpy as np
 from functools import partial
@@ -42,6 +44,7 @@ default_apertures = {'desdr1': 2.0,
                      'PS1': 2.0,
                      'skymapper': 2.0,
                      'vlass': 2.0,
+                     'Euclid': 1.0,
                      'JWST': 1.0  # Placeholder for now
                      }
 
@@ -166,7 +169,8 @@ class ImageViewGUI(QMainWindow):
                  forced_magerr_column_names=None, forced_sn_column_names=None,
                  auto_download=False, auto_forced_phot=False,
                  minimum_fov=60,
-                 visual_classes=None, add_info_list=None, verbosity=0):
+                 visual_classes=None, add_info_list=None, verbosity=0, euclid=False,
+                 saved_csv=None):
 
         QtWidgets.QMainWindow.__init__(self)
 
@@ -187,6 +191,27 @@ class ImageViewGUI(QMainWindow):
         except:
             self.df['vis_comment'] = np.nan
 
+        self.output_filename = saved_csv if saved_csv else f'{surveys[0]}_checked_candidates.csv'
+        if saved_csv is not None and os.path.exists(saved_csv):
+            old_df = pd.read_csv(saved_csv, dtype={"oid": str})
+            if 'oid' in self.df.columns and 'oid' in old_df.columns:
+                self.df = self.df.set_index('oid')
+                old_df = old_df.set_index('oid')
+                self.df.update(old_df[['vis_id', 'vis_comment']])
+                self.df = self.df.reset_index()
+            else:
+                print("Warning: 'oid' column not found. Merging by index instead.")
+                self.df.update(old_df)
+
+            remaining = self.df[self.df['vis_id'].isna()]
+            if not remaining.empty:
+                self.candidate_number = self.df.index.get_loc(remaining.index[0])
+            else:
+                self.candidate_number = len(self.df) - 1
+                print("All objects have been inspected.")
+        else:
+            self.candidate_number = 0
+
         # ----------------------------------------------------------------------
         # Set up  class variables
         self.image_path = image_path
@@ -205,6 +230,7 @@ class ImageViewGUI(QMainWindow):
         self.auto_download = auto_download
         self.auto_forced_photometry = auto_forced_phot
         self.add_info_list = add_info_list
+        self.euclid = euclid
 
         if visual_classes is not None:
             if isinstance(visual_classes, (list,)):
@@ -238,7 +264,7 @@ class ImageViewGUI(QMainWindow):
                 self.apertures.append(default_apertures[survey])
 
         # Set up internal interactive defaults
-        self.n_col = 4
+        self.n_col = len(bands)
         self.verbosity = verbosity
         self.color_map_name = 'viridis'
         self.n_sigma = 3
@@ -256,7 +282,7 @@ class ImageViewGUI(QMainWindow):
 
         # Length of catalog file
         self.len_df = self.df.shape[0]
-        self.candidate_number = 0
+        #self.candidate_number = 0
         self.ind_array = np.arange(self.len_df)
 
         # Add the menu
@@ -470,7 +496,7 @@ class ImageViewGUI(QMainWindow):
         """
         filename = str(self.output_le.text())
 
-        self.df.to_csv(filename, index_label=False)
+        self.df.to_csv(filename, index=False)
 
         if self.verbosity > 0:
             msgs.info('File with visual classification saved to {}.'.format(
@@ -487,6 +513,7 @@ class ImageViewGUI(QMainWindow):
                                       np.array([in_dict['dec']]),
                                       epoch='J')
 
+
         self.target_lbl = QLabel('Object {} out of {}'.format(
             self.candidate_number, self.len_df))
         self.coord_name_lbl = QLabel(coord_name[0])
@@ -499,9 +526,22 @@ class ImageViewGUI(QMainWindow):
         self.visual_comment_label = QLabel('Comment: {'
                                                   '}'.format(vis_comment))
 
-        for w in [self.target_lbl, self.coord_name_lbl,
+        info_list = [self.target_lbl, self.coord_name_lbl,
                   self.visual_classification_label,
-                  self.visual_comment_label]:
+                  self.visual_comment_label]
+
+        if self.euclid:
+            oid = self.df.loc[idx, 'oid']
+            self.oid_lbl = QLabel('oid: {}'.format(oid))
+            info_list.append(self.oid_lbl)
+            proba = self.df.loc[idx, 'proba']
+            self.proba_lbl = QLabel('proba: {:.4f}'.format(proba))
+            info_list.append(self.proba_lbl)
+            mag_J = self.df.loc[idx, 'mag_J']
+            self.mag_J_lbl = QLabel('mag_J: {:.3f}'.format(mag_J))
+            info_list.append(self.mag_J_lbl)
+
+        for w in info_list:
 
             self.info_layout.addWidget(w)
 
@@ -560,6 +600,14 @@ class ImageViewGUI(QMainWindow):
         self.visual_comment_label.setText('Comment: {'
                                                  '}'.format(vis_comment))
 
+        if self.euclid:
+            oid = self.df.loc[idx, 'oid']
+            self.oid_lbl.setText('oid: {}'.format(oid))
+            proba = self.df.loc[idx, 'proba']
+            self.proba_lbl.setText('proba: {:.3f}'.format(proba))
+            mag_J = self.df.loc[idx, 'mag_J']
+            self.mag_J_lbl.setText('mag_J: {:.1f}'.format(mag_J))
+
         if self.add_info_list is not None:
 
             # Updating add_info_list values
@@ -603,7 +651,8 @@ class ImageViewGUI(QMainWindow):
         self.nsigma_input.returnPressed.connect(self.update)
 
         self.output_lbl = QLabel("Output filename:")
-        self.output_le = QLineEdit('checked_candidates.csv')
+        self.output_le = QLineEdit(self.output_filename)
+        
         self.output_le.setMaxLength(40)
 
         self.goto_le = QLineEdit('1')
@@ -861,7 +910,7 @@ def run(catalog, image_path, ra_column_name,
                  sn_column_names=None, forced_mag_column_names=None,
                  forced_magerr_column_names=None, forced_sn_column_names=None,
                  auto_download= False, auto_forced_phot=False,
-                 visual_classes=None, add_info_list=None, verbosity=0):
+                 visual_classes=None, add_info_list=None, verbosity=0, euclid=False, saved_csv=None):
 
     app = QApplication(sys.argv)
 
@@ -879,7 +928,9 @@ def run(catalog, image_path, ra_column_name,
                         minimum_fov=minimum_fov,
                         add_info_list=add_info_list,
                         visual_classes=visual_classes,
-                        verbosity=verbosity)
+                        verbosity=verbosity,
+                        euclid=euclid, 
+                        saved_csv=saved_csv)
 
     form.show()
 
