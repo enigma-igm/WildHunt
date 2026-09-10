@@ -814,10 +814,10 @@ class ImageViewGUI(QMainWindow):
                 widget = QRadioButton(subclass) if exclusive else QCheckBox(subclass)
                 row_layout.addWidget(widget)
                 self.checkbox_dict[parent].append(widget)
-                if parent == 'Photometry' and subclass == 'extended':
+                if parent == 'Morphology' and subclass == 'extended':
                     extended_widget = widget
 
-            # 'diffused' is an optional sub-selection of Photometry, only
+            # 'diffused' is an optional sub-selection of Morphology, only
             # relevant (and shown) when 'extended' is selected.
             if extended_widget is not None:
                 diffused_checkbox = QCheckBox('diffused')

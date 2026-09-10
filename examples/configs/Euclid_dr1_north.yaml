@@ -6,14 +6,18 @@ cutout_path: /data/group-schindler/ts/data/Euclid/cutout/dr1_north/  # change cu
 surveys: [Euclid, Euclid, Euclid, Euclid, Euclid]
 bands: [I, Z, Y, J, H]
 visual_classes:
-  Artifact: [edge, diffraction spike, hot pixel, masked, other]
+  Artifact: [edge, diffraction spike, hot pixel, masked, cosmic ray, other]
   Affects photometry:
     options: ["yes", "no"]
     exclusive: true
-  Photometry:
-    options: [single, offset single, companions, offset multiple, extended]
+  Companions & offset:
+    options: [single, offset single, companions, offset multiple]
     exclusive: true
     default: single
+  Morphology:
+    options: [psf, extended]
+    exclusive: true
+    default: "psf"
   Compactness:
     options: ["yes", "no"]
     exclusive: true
