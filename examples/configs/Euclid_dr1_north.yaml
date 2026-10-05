@@ -1,8 +1,8 @@
-df_path: ./data/Euclid_dr1_north_sources.csv
+df_path: ./data/Euclid_dr1_north_it2_sources.csv
 ra: right_ascension
 dec: declination
 fov: 4
-cutout_path: /data/group-schindler/ts/data/Euclid/cutout/dr1_north/  # change cutout_path to the path you located
+cutout_path: /data/group-schindler/ts/data/Euclid/cutout/dr1_north_it2/  # change cutout_path to the path you located
 surveys: [Euclid, Euclid, Euclid, Euclid, Euclid]
 bands: [I, Z, Y, J, H]
 visual_classes:
@@ -10,6 +10,7 @@ visual_classes:
   Affects photometry:
     options: ["yes", "no"]
     exclusive: true
+    default: "no"
   Companions & offset:
     options: [single, offset single, companions, offset multiple]
     exclusive: true
