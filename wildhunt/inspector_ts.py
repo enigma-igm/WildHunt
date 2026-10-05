@@ -188,7 +188,10 @@ class CutoutViewCanvas(FigureCanvas):
                 title = base_title
             ax.set_title(title, fontsize=10)
 
-        for ax in self.fig.get_axes():
+        no_marker_bands = {'I', 'Z'}
+        for i, ax in enumerate(self.fig.get_axes()):
+            if i < len(bands) and bands[i] in no_marker_bands:
+                continue
             if not isinstance(ax, WCSAxes):
                 # Placeholder axes (e.g. "No cutout available") have no
                 # WCS projection and can't accept a sky-frame transform.
